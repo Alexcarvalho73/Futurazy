@@ -12,7 +12,7 @@ try {
 const dbConfig = {
   user: 'SYS_READ',
   password: 'Hctm9pvy9#jpcta80y4',
-  connectString: '192.168.180.30:1521/homprot',
+  connectString: '192.168.180.30:1521/protheus',
   poolMin: 2,
   poolMax: 10,
   poolIncrement: 1,
