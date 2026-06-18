@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Central XML - Painel de BI</title>
+  <!-- Fonte Outfit e Inter do Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- CSS Principal -->
+  <link rel="stylesheet" href="style.css">
+  <!-- Font Awesome para ícones -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+  <!-- Layout Container -->
+  <div class="dashboard-container">
+    
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="brand">
+        <i class="fa-solid fa-chart-line logo-icon"></i>
+        <h2>Futurazy<span>BI</span></h2>
+      </div>
+      <nav class="nav-menu">
+        <a href="index.html"><i class="fa-solid fa-house"></i> Dashboard</a>
+        <a href="notas.html" class="active"><i class="fa-solid fa-file-invoice-dollar"></i> Central XML</a>
+        <a href="#" class="nav-disabled"><i class="fa-solid fa-database"></i> Conexões</a>
+        <a href="#" class="nav-disabled"><i class="fa-solid fa-gears"></i> Configurações</a>
+      </nav>
+      <div class="connection-status">
+        <div class="status-indicator online"></div>
+        <span>Oracle DB: Conectado</span>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      
+      <!-- Top Header -->
+      <header class="header">
+        <div class="header-title">
+          <h1>Central XML - Importador Protheus</h1>
+          <p>Gestão e monitoramento de Notas Fiscais pendentes de classificação</p>
+        </div>
+      </header>
+
+      <!-- Filters Section -->
+      <section class="filters-card filters-collapsed">
+        <div class="filters-header">
+          <h2><i class="fa-solid fa-chevron-down toggle-icon"></i> Filtros de Pesquisa</h2>
+          <div class="filters-actions" style="display: flex; gap: 8px;">
+            <button class="btn btn-secondary btn-sm" id="btn-clear-filters"><i class="fa-solid fa-eraser"></i> Limpar</button>
+            <button class="btn btn-primary btn-sm" id="btn-apply-filters"><i class="fa-solid fa-check"></i> Filtrar</button>
+          </div>
+        </div>
+        <div class="filters-grid">
+          <!-- Status do Documento -->
+          <div class="filter-group">
+            <label for="filter-status"><i class="fa-solid fa-tags"></i> Status do Documento</label>
+            <select id="filter-status" class="form-control">
+              <option value="todos" selected>1 - Todos</option>
+              <option value="normal">2 - NFe Normal em aberto (🔘)</option>
+              <option value="cte_cif">3 - CTe CIF em aberto (🔵)</option>
+              <option value="cte_fob">4 - CTe FOB em aberto (🔴)</option>
+              <option value="prenota">5 - NFe lançada Pré-Nota (🌐)</option>
+              <option value="compl">6 - NFe Compl em aberto (🔶)</option>
+              <option value="rejeitada">7 - NFe/CTe Rejeitados (🔴)</option>
+            </select>
+          </div>
+          <!-- Filial -->
+          <div class="filter-group">
+            <label for="filter-filial"><i class="fa-solid fa-building"></i> Filial</label>
+            <input type="text" id="filter-filial" class="form-control" placeholder="Filial...">
+          </div>
+          <!-- Fornecedor -->
+          <div class="filter-group">
+            <label for="filter-fornecedor"><i class="fa-solid fa-truck"></i> Fornecedor (Nome/CNPJ)</label>
+            <input type="text" id="filter-fornecedor" class="form-control" placeholder="Nome ou CNPJ...">
+          </div>
+          <!-- Número NF -->
+          <div class="filter-group">
+            <label for="filter-numnf"><i class="fa-solid fa-hashtag"></i> Número NF</label>
+            <input type="text" id="filter-numnf" class="form-control" placeholder="Número da Nota...">
+          </div>
+          <!-- Emissão De -->
+          <div class="filter-group">
+            <label for="filter-emissao-de"><i class="fa-regular fa-calendar"></i> Emissão De</label>
+            <input type="date" id="filter-emissao-de" class="form-control">
+          </div>
+          <!-- Emissão Até -->
+          <div class="filter-group">
+            <label for="filter-emissao-ate"><i class="fa-regular fa-calendar"></i> Emissão Até</label>
+            <input type="date" id="filter-emissao-ate" class="form-control">
+          </div>
+          <!-- Vencimento De -->
+          <div class="filter-group">
+            <label for="filter-vencimento-de"><i class="fa-regular fa-calendar"></i> Vencimento De</label>
+            <input type="date" id="filter-vencimento-de" class="form-control">
+          </div>
+          <!-- Vencimento Até -->
+          <div class="filter-group">
+            <label for="filter-vencimento-ate"><i class="fa-regular fa-calendar"></i> Vencimento Até</label>
+            <input type="date" id="filter-vencimento-ate" class="form-control">
+          </div>
+        </div>
+      </section>
+
+      <!-- Central XML Main Layout (Mestre-Detalhe) -->
+      <div class="central-xml-layout">
+        
+        <!-- MESTRE (SEÇÃO SUPERIOR): Lista de Notas Fiscais -->
+        <section class="master-panel">
+          <div class="panel-header">
+            <h2><i class="fa-solid fa-folder-open"></i> Notas Fiscais</h2>
+          </div>
+
+          <!-- Loading State Mestre -->
+          <div class="loading-overlay" id="loading-master">
+            <div class="spinner"></div>
+            <p>Carregando notas pendentes...</p>
+          </div>
+
+          <!-- Tabela de Notas (Mestre) -->
+          <div class="table-wrapper master-table-wrapper">
+            <table class="master-table">
+              <thead>
+                <tr>
+                  <th width="110">Dias Pend.</th>
+                  <th width="70" class="text-center">Status</th>
+                  <th width="120">Número NF</th>
+                  <th>Fornecedor / Emitente</th>
+                  <th width="120">Emissão</th>
+                  <th width="120">Recebimento</th>
+                  <th width="130" class="text-right">Valor XML</th>
+                </tr>
+              </thead>
+              <tbody id="master-body">
+                <!-- Inserido dinamicamente pelo app_notas.js -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Paginação -->
+          <div class="pagination-container">
+            <div class="pagination-info">
+              Exibindo <span id="pag-showing-start">0</span>-<span id="pag-showing-end">0</span> de <span id="pag-total-items">0</span> notas
+            </div>
+            <div class="pagination-controls">
+              <button class="btn btn-secondary btn-sm" id="btn-prev-page" disabled><i class="fa-solid fa-chevron-left"></i> Anterior</button>
+              <span class="page-indicator">Página <span id="current-page-num">1</span> de <span id="total-pages-num">1</span></span>
+              <button class="btn btn-secondary btn-sm" id="btn-next-page" disabled>Próxima <i class="fa-solid fa-chevron-right"></i></button>
+            </div>
+          </div>
+        </section>
+
+        <!-- DETALHE (SEÇÃO INFERIOR): Itens da Nota Selecionada -->
+        <section class="detail-panel">
+          <div class="detail-tabs">
+            <button class="tab-btn active"><i class="fa-solid fa-list-check"></i> Itens da Nota Fiscal</button>
+          </div>
+
+          <div class="detail-content">
+            <!-- Loading State Detalhe -->
+            <div class="loading-overlay" id="loading-detail">
+              <div class="spinner"></div>
+              <p>Carregando itens da nota...</p>
+            </div>
+
+            <!-- Tabela de Itens (Detalhe) -->
+            <div class="table-wrapper detail-table-wrapper" id="detail-table-container">
+              <!-- Mensagem de estado vazio antes de clicar em uma nota -->
+              <div class="empty-detail-state" id="empty-detail-message">
+                <i class="fa-solid fa-hand-pointer animate-bounce"></i>
+                <p>Selecione uma nota fiscal na lista superior para visualizar seus itens correspondentes.</p>
+              </div>
+
+              <table class="detail-table hidden" id="detail-table">
+                <thead>
+                  <tr>
+                    <th width="70" class="text-center">Status</th>
+                    <th width="70">Item</th>
+                    <th width="130">Código</th>
+                    <th>Descrição do Item</th>
+                    <th width="110" class="text-right">Qtd. XML</th>
+                    <th width="75">U.M.</th>
+                    <th width="130" class="text-right">V. Unit. XML</th>
+                    <th width="140" class="text-right">V. Total XML</th>
+                    <th width="120">Nº Pedido</th>
+                    <th width="80">Item Ped.</th>
+                  </tr>
+                </thead>
+                <tbody id="detail-body">
+                  <!-- Inserido dinamicamente pelo app_notas.js -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+      </div>
+
+    </main>
+  </div>
+
+  <script src="app_notas.js"></script>
+</body>
+</html>

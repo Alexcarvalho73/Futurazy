@@ -1,0 +1,88 @@
+$sql1 = @"
+XML_EMP, XML_FIL, FT_EMISSAO, FT_ENTRADA, FT_NFISCAL, XML_TIPODC, FT_TIPO, FT_ESPECIE, XML_DEST, XML_IEDEST, XML_NOMEDT, XML_MUNDT, XML_CHAVE, XML_EMIT, XML_NOMEMT, XML_MUNMT, XML_CODLOJ, XML_EMISSA,
+      XML_NUMNF, XML_NATOPE, 
+      TRIM(XIT_ITEM) as XIT_ITEM, 
+      TRIM(XIT_CODNFE) as XIT_CODNFE, 
+      TRIM(XIT_PEDIDO) as XIT_PEDIDO, 
+      TRIM(XIT_ITEMPC) as XIT_ITEMPC, 
+      TRIM(XIT_OK) as XIT_OK, 
+      TRIM(XIT_UMNFE) as XIT_UMNFE, 
+      XIT_PRCNFE,
+      TRIM(FT_PRODUTO) as FT_PRODUTO, 
+      TRIM(XIT_DESCRI) as XIT_DESCRI, 
+      D1_NFORI, XIT_CFNFE, FT_TES, FT_CFOP, XIT_NCM, FT_POSIPI, XIT_QTENFE, FT_QUANT, XIT_TOTNFE, FT_TOTAL, FT_DESPESA, FT_SEGURO,
+      FT_FRETE, FT_VALPEDG, XIT_CSTORI, XIT_BASICM, XIT_PICM, XIT_VALICM, XIT_PREDBC, FT_CLASFIS, FT_BASEICM, FT_ALIQICM, FT_ISENICM, FT_OUTRICM, FT_OBSICM, D1_VALICM, D1_ICMSCOM, XIT_BASRET,
+      XIT_PMVA, XIT_PICMST, XIT_VALRET, XIT_BRETAN, XIT_VRETAN, XIT_ICMSUB, XIT_PRETST, FT_BASERET, FT_MARGEM, FT_ICMSRET, FT_OBSSOL, FT_SOLTRIB, XIT_CSTIPI, XIT_BASIPI, XIT_PIPI, XIT_VALIPI, FT_CTIPI,
+      FT_BASEIPI, FT_VALIPI, FT_ISENIPI, FT_OUTRIPI, D1_VALIPI, XIT_CSTPIS, XIT_BASPIS, XIT_PPIS, XIT_VALPIS, FT_CSTPIS, FT_BASEPIS, FT_ALIQPIS, FT_VALPIS, XIT_CSTCOF, XIT_BASCOF, XIT_PCOF, XIT_VALCOF,
+      FT_CSTCOF, FT_BASECOF, FT_ALIQCOF, FT_VALCOF, FT_BASEIRR, FT_ALIQIRR, FT_VALIRR, FT_BRETCOF, FT_ARETCOF, FT_VRETCOF, FT_BRETPIS, FT_ARETPIS, FT_VRETPIS, FT_BRETCSL, FT_ARETCSL, FT_VRETCSL, XML_VRETIR,
+      XML_VRETCF, XML_VRETPS, XML_VRETCS, XIT_KEYSD1, XML_KEYF1, XML_CONFCO, XML_CONFIS, XML_DTRCTO, XML_DTENTG, COALESCE(FT.R_E_C_N_O_,0) FTRECNO
+"@
+
+$sql2 = @"
+XML_EMP, XML_FIL, FT_EMISSAO, FT_ENTRADA, FT_NFISCAL, XML_TIPODC, FT_TIPO, FT_ESPECIE, XML_DEST, XML_IEDEST, XML_NOMEDT, XML_MUNDT, XML_CHAVE, XML_EMIT, XML_NOMEMT, XML_MUNMT, XML_CODLOJ,
+      XML_EMISSA, XML_NUMNF, XML_NATOPE, 
+      TRIM(FT_ITEM) AS XIT_ITEM, 
+      ' ' AS XIT_CODNFE, 
+      ' ' AS XIT_PEDIDO, 
+      ' ' AS XIT_ITEMPC, 
+      ' ' AS XIT_OK, 
+      ' ' AS XIT_UMNFE, 
+      0 AS XIT_PRCNFE,
+      TRIM(FT_PRODUTO) as FT_PRODUTO, 
+      TRIM(XIM_PRPRED) as XIT_DESCRI, 
+      D1_NFORI, XML_NATOPE XIT_CFNFE, FT_TES, FT_CFOP, ' ' XIT_NCM,
+      FT_POSIPI, 0 AS XIT_QTENFE, FT_QUANT, XML_VLRDOC AS XIT_TOTNFE, FT_TOTAL, FT_DESPESA, FT_SEGURO, FT_FRETE, FT_VALPEDG, XIM_CST XIT_CSTORI, XIM_BASICM AS XIT_BASICM, XIM_ALQICM AS XIT_PICM,
+      XIM_VALICM AS XIT_VALICM, XIM_PICRED AS XIT_PREDBC, FT_CLASFIS, FT_BASEICM, FT_ALIQICM, FT_VALICM, FT_ISENICM, FT_OUTRICM, FT_OBSICM, D1_VALICM, D1_ICMSCOM, XIM_BRICMS AS XIT_BASRET,
+      0 AS XIT_PMVA, XIM_PICRET AS XIT_PICMST, XIM_ICMRET AS XIT_VALRET, 0 AS XIT_BRETAN, 0 AS XIT_VRETAN, 0 AS XIT_ICMSUB, 0 AS XIT_PRETST, FT_BASERET, FT_MARGEM, FT_ICMSRET, FT_OBSSOL, FT_SOLTRIB,
+      ' ' AS XIT_CSTIPI, 0 AS XIT_BASIPI, 0 AS XIT_PIPI, 0 AS XIT_VALIPI, FT_CTIPI, FT_BASEIPI, FT_VALIPI, FT_ISENIPI, FT_OUTRIPI, D1_VALIPI, ' ' AS XIT_CSTPIS, 0 AS XIT_BASPIS, 0 AS XIT_PPIS,
+      0 AS XIT_VALPIS, FT_CSTPIS, FT_BASEPIS, FT_ALIQPIS, FT_VALPIS, ' ' AS XIT_CSTCOF, 0 AS XIT_BASCOF, 0 AS XIT_PCOF, 0 AS XIT_VALCOF, FT_CSTCOF, FT_BASECOF, FT_ALIQCOF, FT_VALCOF, FT_BASEIRR,
+      FT_ALIQIRR, FT_VALIRR, FT_BRETCOF, FT_ARETCOF, FT_VRETCOF, FT_BRETPIS, FT_ARETPIS, FT_VRETPIS, FT_BRETCSL, FT_ARETCSL, FT_VRETCSL, XML_VRETIR, XML_VRETCF, XML_VRETPS, XML_VRETCS, ' ' AS XIT_KEYSD1,
+      XML_KEYF1, XML_CONFCO, XML_CONFIS, XML_DTRCTO, XML_DTENTG, COALESCE(FT.R_E_C_N_O_,0) FTRECNO
+"@
+
+# Função simples para quebrar por vírgula respeitando parênteses
+function Split-SqlColumns($sql) {
+    $columns = @()
+    $current = ""
+    $parenLevel = 0
+    
+    for ($i = 0; $i -lt $sql.Length; $i++) {
+        $c = $sql[$i]
+        if ($c -eq '(') {
+            $parenLevel++
+            $current += $c
+        } elseif ($c -eq ')') {
+            $parenLevel--
+            $current += $c
+        } elseif ($c -eq ',' -and $parenLevel -eq 0) {
+            $columns += $current.Trim()
+            $current = ""
+        } else {
+            $current += $c
+        }
+    }
+    if ($current.Trim() -ne "") {
+        $columns += $current.Trim()
+    }
+    return $columns
+}
+
+$cols1 = Split-SqlColumns $sql1
+$cols2 = Split-SqlColumns $sql2
+
+Write-Host "Bloco 1 colunas: $($cols1.Count)"
+Write-Host "Bloco 2 colunas: $($cols2.Count)"
+
+$max = [Math]::Max($cols1.Count, $cols2.Count)
+for ($i = 0; $i -lt $max; $i++) {
+    $col1 = if ($i -lt $cols1.Count) { $cols1[$i] } else { "[MALTAL]" }
+    $col2 = if ($i -lt $cols2.Count) { $cols2[$i] } else { "[FALTAL]" }
+    
+    # Se forem diferentes, destaca em vermelho
+    if ($col1 -ne $col2) {
+        Write-Host "Index $i : " -NoNewline
+        Write-Host "$col1" -ForegroundColor Red -NoNewline
+        Write-Host "  VS  " -NoNewline
+        Write-Host "$col2" -ForegroundColor Green
+    }
+}

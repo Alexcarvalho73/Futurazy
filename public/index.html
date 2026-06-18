@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trato Consumido - Painel de BI</title>
+  <!-- Fonte Outfit e Inter do Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- CSS Principal -->
+  <link rel="stylesheet" href="style.css">
+  <!-- Font Awesome para ícones -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+  <!-- Layout Container -->
+  <div class="dashboard-container">
+    
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="brand">
+        <i class="fa-solid fa-chart-line logo-icon"></i>
+        <h2>Futurazy<span>BI</span></h2>
+      </div>
+      <nav class="nav-menu">
+        <a href="index.html" class="active"><i class="fa-solid fa-house"></i> Dashboard</a>
+        <a href="notas.html"><i class="fa-solid fa-file-invoice-dollar"></i> Central XML</a>
+        <a href="#" class="nav-disabled"><i class="fa-solid fa-database"></i> Conexões</a>
+        <a href="#" class="nav-disabled"><i class="fa-solid fa-gears"></i> Configurações</a>
+      </nav>
+      <div class="connection-status">
+        <div class="status-indicator online"></div>
+        <span>Oracle DB: Conectado</span>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      
+      <!-- Top Header -->
+      <header class="header">
+        <div class="header-title">
+          <h1>Trato Consumido</h1>
+          <p>Painel de Análise de Pesagens de Trato - Instância Protheus11</p>
+        </div>
+        <div class="header-actions">
+          <div class="refresh-badge" id="last-update">Atualizando dados...</div>
+          <button class="btn btn-primary" id="btn-refresh"><i class="fa-solid fa-rotate"></i> Atualizar</button>
+        </div>
+      </header>
+
+      <!-- KPI Cards Grid -->
+      <section class="kpi-grid">
+        <!-- Card 1: Peso Total -->
+        <div class="kpi-card" id="card-peso-total">
+          <div class="kpi-icon icon-blue"><i class="fa-solid fa-weight-hanging"></i></div>
+          <div class="kpi-data">
+            <h3>Trato Consumido</h3>
+            <h2 id="val-peso-total">0 kg</h2>
+            <span class="kpi-sub" id="val-peso-ton">0.00 Ton</span>
+          </div>
+        </div>
+        <!-- Card 2: Total de Pesagens -->
+        <div class="kpi-card" id="card-pesagens">
+          <div class="kpi-icon icon-green"><i class="fa-solid fa-truck-moving"></i></div>
+          <div class="kpi-data">
+            <h3>Pesagens (Viagens)</h3>
+            <h2 id="val-total-pesagens">0</h2>
+            <span class="kpi-sub">Registros válidos</span>
+          </div>
+        </div>
+        <!-- Card 3: Placas Únicas -->
+        <div class="kpi-card" id="card-placas">
+          <div class="kpi-icon icon-orange"><i class="fa-solid fa-id-card"></i></div>
+          <div class="kpi-data">
+            <h3>Placas Únicas</h3>
+            <h2 id="val-placas-unicas">0</h2>
+            <span class="kpi-sub">Veículos distintos</span>
+          </div>
+        </div>
+        <!-- Card 4: Média por Trato -->
+        <div class="kpi-card" id="card-media">
+          <div class="kpi-icon icon-purple"><i class="fa-solid fa-calculator"></i></div>
+          <div class="kpi-data">
+            <h3>Média por Pesagem</h3>
+            <h2 id="val-media-peso">0 kg</h2>
+            <span class="kpi-sub">Peso médio por viagem</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Filters Section -->
+      <section class="filters-card">
+        <div class="filters-header">
+          <h2><i class="fa-solid fa-filter"></i> Filtros de Análise</h2>
+          <button class="btn btn-secondary btn-sm" id="btn-clear-filters">Limpar Filtros</button>
+        </div>
+        <div class="filters-grid">
+          <!-- Filtro de Data -->
+          <div class="filter-group">
+            <label for="filter-date"><i class="fa-regular fa-calendar"></i> Data do Trato</label>
+            <select id="filter-date" class="form-control">
+              <option value="">Todas as Datas</option>
+            </select>
+          </div>
+          <!-- Filtro de Entidade (Noment) -->
+          <div class="filter-group">
+            <label for="filter-noment"><i class="fa-regular fa-user"></i> Fornecedor / Entidade (NJH_NOMENT)</label>
+            <select id="filter-noment" class="form-control">
+              <option value="">Todas as Entidades</option>
+            </select>
+          </div>
+          <!-- Filtro de Produto -->
+          <div class="filter-group">
+            <label for="filter-product"><i class="fa-solid fa-wheat-awn"></i> Produto (NJH_DESPRO)</label>
+            <select id="filter-product" class="form-control">
+              <option value="">Todos os Produtos</option>
+            </select>
+          </div>
+        </div>
+      </section>
+
+      <!-- Pivot Table Cube -->
+      <section class="cube-section">
+        <div class="cube-header">
+          <h2><i class="fa-solid fa-cubes"></i> Cubo de Dados Dinâmico (Drill-down)</h2>
+          <div class="cube-actions">
+            <button class="btn btn-secondary btn-sm" id="btn-expand-all"><i class="fa-solid fa-square-plus"></i> Expandir Tudo</button>
+            <button class="btn btn-secondary btn-sm" id="btn-collapse-all"><i class="fa-solid fa-square-minus"></i> Recolher Tudo</button>
+          </div>
+        </div>
+        
+        <!-- Loading State -->
+        <div class="loading-overlay" id="loading-state">
+          <div class="spinner"></div>
+          <p>Carregando dados do Oracle...</p>
+        </div>
+
+        <!-- Scrollable Cube Grid -->
+        <div class="cube-table-container">
+          <table class="cube-table" id="pivot-table">
+            <thead>
+              <tr>
+                <th>Estrutura Hierárquica (Drill-down)</th>
+                <th class="text-right">Peso Consumido (NJH_PSSUBT)</th>
+              </tr>
+            </thead>
+            <tbody id="pivot-body">
+              <!-- Renderizado dinamicamente pelo app.js -->
+            </tbody>
+            <tfoot>
+              <tr class="total-row">
+                <td>Total Geral</td>
+                <td class="text-right" id="cube-total-geral">0 kg</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
