@@ -138,6 +138,7 @@ app.get('/api/notas', async (req, res) => {
       WHERE XM.D_E_L_E_T_ = ' '
         AND (XM.XML_TIPODC IN ('T', 'F') OR XM.XML_TPNF NOT IN ('0'))
         AND XM.XML_DEST <> XM.XML_EMIT
+        AND XM.XML_EMISSA >= '20240601'
     ) XM
   `;
 
