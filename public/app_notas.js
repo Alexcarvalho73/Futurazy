@@ -23,6 +23,7 @@ const pagShowingEnd = document.getElementById('pag-showing-end');
 const pagTotalItems = document.getElementById('pag-total-items');
 
 // Filtros de Pesquisa
+const filterFluxo = document.getElementById('filter-fluxo');
 const filterStatus = document.getElementById('filter-status');
 const filterFilial = document.getElementById('filter-filial');
 const filterFornecedor = document.getElementById('filter-fornecedor');
@@ -34,6 +35,69 @@ const filterVencimentoAte = document.getElementById('filter-vencimento-ate');
 
 const btnApplyFilters = document.getElementById('btn-apply-filters');
 const btnClearFilters = document.getElementById('btn-clear-filters');
+
+// Mapeamento de status por fluxo/categoria
+const PENDENTES_STATUSES = [
+  'Sem Definição',
+  'NF-e Aberto + COM-Ok',
+  'Pré-Nota',
+  'Pré-Nota COM/FIS/LOG-Ok',
+  'NF-e Aberto + COM/LOG-Ok',
+  'NF-e Aberto LOG-Ok',
+  'Pré-Nota COM-Ok',
+  'Dev.Venda Aberto',
+  'Benef.Aberto',
+  'NFS-e Aberto',
+  'CT-e FOB Aberto',
+  'NF-e Aberto',
+  'CT-e CIF Aberto'
+];
+
+const CONCLUIDOS_STATUSES = [
+  'Lançada',
+  'Rejeitada',
+  'Classificada FIS/LOG-Ok',
+  'Classificada COM-Ok',
+  'Classificada COM/FIS/LOG-Ok',
+  'Classificada'
+];
+
+function updateStatusOptions() {
+  const fluxoVal = filterFluxo.value;
+  const currentStatusVal = filterStatus.value;
+  
+  // Limpar opções existentes
+  filterStatus.innerHTML = '';
+  
+  // Sempre adicionar a opção "Todos"
+  const optionTodos = document.createElement('option');
+  optionTodos.value = 'todos';
+  optionTodos.textContent = 'Todos';
+  filterStatus.appendChild(optionTodos);
+  
+  let targetStatuses = [];
+  if (fluxoVal === 'pendentes') {
+    targetStatuses = PENDENTES_STATUSES;
+  } else if (fluxoVal === 'concluidos') {
+    targetStatuses = CONCLUIDOS_STATUSES;
+  } else {
+    targetStatuses = [...PENDENTES_STATUSES, ...CONCLUIDOS_STATUSES];
+  }
+  
+  targetStatuses.forEach(status => {
+    const opt = document.createElement('option');
+    opt.value = status;
+    opt.textContent = status;
+    filterStatus.appendChild(opt);
+  });
+  
+  // Tentar restaurar o valor anterior se ele ainda existir na lista, caso contrário volta para "todos"
+  if (targetStatuses.includes(currentStatusVal)) {
+    filterStatus.value = currentStatusVal;
+  } else {
+    filterStatus.value = 'todos';
+  }
+}
 
 // Helper para escapar HTML
 function escapeHTML(str) {
@@ -78,36 +142,27 @@ function getDaysBadge(days) {
 }
 
 function getHeaderStatusBadge(row) {
-  // 1. Rejeitada (Se XML_REJEIT estiver preenchido com data/valor)
-  if (row.XML_REJEIT && row.XML_REJEIT.trim() !== '') {
-    return `<span class="header-status-dot status-dot-red" title="NFe/CTe Rejeitados"></span>`;
+  const status = row.XML_STATUS ? row.XML_STATUS.trim() : '';
+  let dotClass = 'status-dot-grey';
+  
+  if (status === 'Rejeitada' || status.includes('Rejeitada')) {
+    dotClass = 'status-dot-red';
+  } else if (status.includes('CT-e FOB')) {
+    dotClass = 'status-dot-red';
+  } else if (status.includes('CT-e CIF')) {
+    dotClass = 'status-dot-blue';
+  } else if (status.includes('Classificada') || status.includes('Lançada')) {
+    dotClass = 'status-dot-green';
+  } else if (status.includes('Pré-Nota')) {
+    dotClass = 'status-dot-lightblue';
+  } else if (status === 'Benef.Aberto' || status === 'Dev.Venda Aberto' || status === 'NFS-e Aberto') {
+    dotClass = 'status-dot-orange';
+  } else {
+    // NF-e Aberto, Sem Definição, etc.
+    dotClass = 'status-dot-grey';
   }
-
-  const tipodc = row.XML_TIPODC ? row.XML_TIPODC.trim() : '';
-  const ctefob = row.XML_CTEFOB ? row.XML_CTEFOB.trim() : '';
-  const ok = row.XML_OK ? row.XML_OK.trim() : '';
-
-  // 2. CTe FOB ou CTe CIF (XML_TIPODC = 'T')
-  if (tipodc === 'T') {
-    if (ctefob === 'S') {
-      return `<span class="header-status-dot status-dot-red" title="CTe FOB em Aberto"></span>`;
-    } else {
-      return `<span class="header-status-dot status-dot-blue" title="CTe CIF em Aberto"></span>`;
-    }
-  }
-
-  // 3. NFe lançada Pré-Nota (XML_OK = 'NP')
-  if (ok === 'NP') {
-    return `<span class="header-status-dot status-dot-lightblue" title="NFe lançada Pré-Nota"></span>`;
-  }
-
-  // 4. Complementar / Outros (XML_TIPODC = 'F')
-  if (tipodc === 'F') {
-    return `<span class="header-status-dot status-dot-orange" title="NFe Complementar em Aberto"></span>`;
-  }
-
-  // 5. NFe Normal em aberto (Default para outros TIPODC, ex: 'N')
-  return `<span class="header-status-dot status-dot-grey" title="NFe Normal em Aberto"></span>`;
+  
+  return `<span class="header-status-dot ${dotClass}" title="${escapeHTML(status)}"></span>`;
 }
 
 function getItemStatusDot(item) {
@@ -146,6 +201,7 @@ async function loadHeaders() {
     const params = new URLSearchParams({
       page: currentPage,
       limit,
+      fluxo: filterFluxo.value,
       status: filterStatus.value,
       filial: filterFilial.value.trim(),
       fornecedor: filterFornecedor.value.trim(),
@@ -330,6 +386,8 @@ btnApplyFilters.addEventListener('click', () => {
 
 btnClearFilters.addEventListener('click', () => {
   // Limpar todos os campos
+  filterFluxo.value = 'pendentes';
+  updateStatusOptions();
   filterStatus.value = 'todos';
   filterFilial.value = '';
   filterFornecedor.value = '';
@@ -368,7 +426,13 @@ filtersHeader.addEventListener('click', (e) => {
 // Ajustar a altura na carga inicial
 adjustLayoutHeight();
 
-// Atualizar automaticamente ao mudar o status da classificação
+// Atualizar automaticamente ao mudar o fluxo ou status da classificação
+filterFluxo.addEventListener('change', () => {
+  updateStatusOptions();
+  currentPage = 1;
+  loadHeaders();
+});
+
 filterStatus.addEventListener('change', () => {
   currentPage = 1;
   loadHeaders();
@@ -386,4 +450,7 @@ textInputs.forEach(input => {
 });
 
 // Carga Inicial ao abrir a página
-document.addEventListener('DOMContentLoaded', loadHeaders);
+document.addEventListener('DOMContentLoaded', () => {
+  updateStatusOptions();
+  loadHeaders();
+});

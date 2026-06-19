@@ -57,17 +57,39 @@
           </div>
         </div>
         <div class="filters-grid">
+          <!-- Fluxo (Categoria) -->
+          <div class="filter-group">
+            <label for="filter-fluxo"><i class="fa-solid fa-list-check"></i> Fluxo</label>
+            <select id="filter-fluxo" class="form-control">
+              <option value="pendentes" selected>Pendentes</option>
+              <option value="concluidos">Concluídos</option>
+              <option value="todos">Todos</option>
+            </select>
+          </div>
           <!-- Status do Documento -->
           <div class="filter-group">
             <label for="filter-status"><i class="fa-solid fa-tags"></i> Status do Documento</label>
             <select id="filter-status" class="form-control">
-              <option value="todos" selected>1 - Todos</option>
-              <option value="normal">2 - NFe Normal em aberto (🔘)</option>
-              <option value="cte_cif">3 - CTe CIF em aberto (🔵)</option>
-              <option value="cte_fob">4 - CTe FOB em aberto (🔴)</option>
-              <option value="prenota">5 - NFe lançada Pré-Nota (🌐)</option>
-              <option value="compl">6 - NFe Compl em aberto (🔶)</option>
-              <option value="rejeitada">7 - NFe/CTe Rejeitados (🔴)</option>
+              <option value="todos" selected>Todos</option>
+              <option value="Lançada">Lançada</option>
+              <option value="Sem Definição">Sem Definição</option>
+              <option value="NF-e Aberto + COM-Ok">NF-e Aberto + COM-Ok</option>
+              <option value="Pré-Nota">Pré-Nota</option>
+              <option value="Pré-Nota COM/FIS/LOG-Ok">Pré-Nota COM/FIS/LOG-Ok</option>
+              <option value="NF-e Aberto + COM/LOG-Ok">NF-e Aberto + COM/LOG-Ok</option>
+              <option value="NF-e Aberto LOG-Ok">NF-e Aberto LOG-Ok</option>
+              <option value="Pré-Nota COM-Ok">Pré-Nota COM-Ok</option>
+              <option value="Dev.Venda Aberto">Dev.Venda Aberto</option>
+              <option value="Benef.Aberto">Benef.Aberto</option>
+              <option value="NFS-e Aberto">NFS-e Aberto</option>
+              <option value="Rejeitada">Rejeitada</option>
+              <option value="Classificada FIS/LOG-Ok">Classificada FIS/LOG-Ok</option>
+              <option value="CT-e FOB Aberto">CT-e FOB Aberto</option>
+              <option value="Classificada COM-Ok">Classificada COM-Ok</option>
+              <option value="Classificada COM/FIS/LOG-Ok">Classificada COM/FIS/LOG-Ok</option>
+              <option value="NF-e Aberto">NF-e Aberto</option>
+              <option value="CT-e CIF Aberto">CT-e CIF Aberto</option>
+              <option value="Classificada">Classificada</option>
             </select>
           </div>
           <!-- Filial -->

@@ -40,7 +40,8 @@ app.get('/api/notas', async (req, res) => {
   const page = parseInt(req.query.page, 10) || 1;
   const limit = parseInt(req.query.limit, 10) || 50;
   
-  const status = req.query.status || 'pendente';
+  const status = req.query.status || 'todos';
+  const fluxo = req.query.fluxo || 'pendentes';
   const filial = req.query.filial || '';
   const fornecedor = req.query.fornecedor || '';
   const numnf = req.query.numnf || '';
@@ -53,30 +54,92 @@ app.get('/api/notas', async (req, res) => {
   const maxRow = page * limit;
   const minRow = (page - 1) * limit;
 
-  let whereClause = `
-    WHERE XM.D_E_L_E_T_ = ' '
-      AND NOT EXISTS (
-        SELECT 1 FROM PROTHEUS11.SFT020 FT 
-        WHERE FT.D_E_L_E_T_ = ' ' 
-          AND FT.FT_CHVNFE = XM.XML_CHAVE 
-          AND FT.FT_TIPOMOV = 'E'
-      )
+  const baseQuery = `
+    SELECT XM.*,
+      CASE
+        WHEN XML_STATUS = 'Rejeitada' OR XML_STATUS LIKE 'Classificada%' OR XML_STATUS LIKE 'Lançada%' THEN 'Concluido'
+        ELSE 'Pendente'
+      END as XML_CATEGORIA
+    FROM (
+      SELECT 
+        XM.XML_CHAVE,
+        TRIM(XM.XML_NUMNF) as XML_NUMNF,
+        TRIM(XM.XML_NOMEMT) as XML_NOMEMT,
+        XM.XML_EMISSA,
+        XM.XML_RECEB,
+        XM.XML_DTRVLD,
+        XM.XML_VLRDOC,
+        TRIM(XM.XML_TIPODC) as XML_TIPODC,
+        TRIM(XM.XML_OK) as XML_OK,
+        TRIM(XM.XML_REJEIT) as XML_REJEIT,
+        TRIM(XM.XML_CTEFOB) as XML_CTEFOB,
+        XM.XML_FIL,
+        XM.XML_EMIT,
+        XM.XML_DEST,
+        XM.XML_TPNF,
+        XM.D_E_L_E_T_,
+        CASE  
+          WHEN TRIM(XM.XML_REJEIT) IS NOT NULL AND TRIM(XM.XML_REJEIT) <> ' ' THEN 'Rejeitada'
+          WHEN TRIM(XM.XML_KEYF1) IS NOT NULL AND TRIM(XM.XML_KEYF1) <> ' ' AND XM.XML_KEYF1 LIKE '%|A%' AND TRIM(XM.XML_CONFCO) IS NOT NULL AND TRIM(XM.XML_CONFCO) <> ' ' AND TRIM(XM.XML_CONFIS) IS NOT NULL AND TRIM(XM.XML_CONFIS) <> ' ' AND TRIM(XM.XML_DTRCTO) IS NOT NULL AND TRIM(XM.XML_DTRCTO) <> ' ' THEN 'Classificada COM/FIS/LOG-Ok'
+          WHEN TRIM(XM.XML_KEYF1) IS NOT NULL AND TRIM(XM.XML_KEYF1) <> ' ' AND XM.XML_KEYF1 LIKE '%| %' AND TRIM(XM.XML_CONFCO) IS NOT NULL AND TRIM(XM.XML_CONFCO) <> ' ' AND TRIM(XM.XML_CONFIS) IS NOT NULL AND TRIM(XM.XML_CONFIS) <> ' ' AND TRIM(XM.XML_DTRCTO) IS NOT NULL AND TRIM(XM.XML_DTRCTO) <> ' ' THEN 'Pré-Nota COM/FIS/LOG-Ok'
+          WHEN TRIM(XM.XML_KEYF1) IS NOT NULL AND TRIM(XM.XML_KEYF1) <> ' ' AND TRIM(XM.XML_CONFCO) IS NOT NULL AND TRIM(XM.XML_CONFCO) <> ' ' AND TRIM(XM.XML_CONFIS) IS NOT NULL AND TRIM(XM.XML_CONFIS) <> ' ' AND TRIM(XM.XML_DTRCTO) IS NOT NULL AND TRIM(XM.XML_DTRCTO) <> ' ' THEN 'Lançada COM/FIS/LOG-Ok'
+          
+          WHEN TRIM(XM.XML_KEYF1) IS NOT NULL AND TRIM(XM.XML_KEYF1) <> ' ' AND XM.XML_KEYF1 LIKE '%|A%' AND TRIM(XM.XML_CONFIS) IS NOT NULL AND TRIM(XM.XML_CONFIS) <> ' ' AND TRIM(XM.XML_DTRCTO) IS NOT NULL AND TRIM(XM.XML_DTRCTO) <> ' ' THEN 'Classificada FIS/LOG-Ok'
+          WHEN TRIM(XM.XML_KEYF1) IS NOT NULL AND TRIM(XM.XML_KEYF1) <> ' ' AND XM.XML_KEYF1 LIKE '%| %' AND TRIM(XM.XML_CONFIS) IS NOT NULL AND TRIM(XM.XML_CONFIS) <> ' ' AND TRIM(XM.XML_DTRCTO) IS NOT NULL AND TRIM(XM.XML_DTRCTO) <> ' ' THEN 'Pré-Nota FIS/LOG-Ok'
+          WHEN TRIM(XM.XML_KEYF1) IS NOT NULL AND TRIM(XM.XML_KEYF1) <> ' ' AND TRIM(XM.XML_CONFCO) IS NOT NULL AND TRIM(XM.XML_CONFCO) <> ' ' AND TRIM(XM.XML_CONFIS) IS NOT NULL AND TRIM(XM.XML_CONFIS) <> ' ' AND TRIM(XM.XML_DTRCTO) IS NOT NULL AND TRIM(XM.XML_DTRCTO) <> ' ' THEN 'Lançada FIS/LOG-Ok'
+          
+          WHEN TRIM(XM.XML_KEYF1) IS NOT NULL AND TRIM(XM.XML_KEYF1) <> ' ' AND XM.XML_KEYF1 LIKE '%|A%' AND TRIM(XM.XML_DTRCTO) IS NOT NULL AND TRIM(XM.XML_DTRCTO) <> ' ' AND (TRIM(XM.XML_CONFCO) IS NULL OR TRIM(XM.XML_CONFCO) = ' ') THEN 'Classificada LOG-Ok'
+          WHEN TRIM(XM.XML_KEYF1) IS NOT NULL AND TRIM(XM.XML_KEYF1) <> ' ' AND XM.XML_KEYF1 LIKE '%| %' AND TRIM(XM.XML_DTRCTO) IS NOT NULL AND TRIM(XM.XML_DTRCTO) <> ' ' AND (TRIM(XM.XML_CONFCO) IS NULL OR TRIM(XM.XML_CONFCO) = ' ') THEN 'Pré-Nota LOG-Ok'
+          WHEN TRIM(XM.XML_KEYF1) IS NOT NULL AND TRIM(XM.XML_KEYF1) <> ' ' AND XM.XML_KEYF1 LIKE '%| %' AND TRIM(XM.XML_DTRCTO) IS NOT NULL AND TRIM(XM.XML_DTRCTO) <> ' ' THEN 'Pré-Nota LOG-Ok'
+          
+          WHEN TRIM(XM.XML_KEYF1) IS NOT NULL AND TRIM(XM.XML_KEYF1) <> ' ' AND XM.XML_KEYF1 LIKE '%|A%' AND TRIM(XM.XML_CONFCO) IS NOT NULL AND TRIM(XM.XML_CONFCO) <> ' ' THEN 'Classificada COM-Ok'
+          WHEN TRIM(XM.XML_KEYF1) IS NOT NULL AND TRIM(XM.XML_KEYF1) <> ' ' AND XM.XML_KEYF1 LIKE '%| %' AND TRIM(XM.XML_CONFCO) IS NOT NULL AND TRIM(XM.XML_CONFCO) <> ' ' THEN 'Pré-Nota COM-Ok'
+          
+          WHEN TRIM(XM.XML_KEYF1) IS NOT NULL AND TRIM(XM.XML_KEYF1) <> ' ' AND XM.XML_KEYF1 LIKE '%|A%' THEN 'Classificada'
+          WHEN TRIM(XM.XML_KEYF1) IS NOT NULL AND TRIM(XM.XML_KEYF1) <> ' ' AND XM.XML_KEYF1 LIKE '%| %'  THEN 'Pré-Nota'
+          
+          WHEN TRIM(XM.XML_KEYF1) IS NOT NULL AND TRIM(XM.XML_KEYF1) <> ' ' THEN 'Lançada'
+          
+          WHEN (TRIM(XM.XML_KEYF1) IS NULL OR TRIM(XM.XML_KEYF1) = ' ') AND TRIM(XM.XML_TIPODC) = 'B' THEN 'Benef.Aberto' 
+          
+          WHEN (TRIM(XM.XML_KEYF1) IS NULL OR TRIM(XM.XML_KEYF1) = ' ') AND TRIM(XM.XML_TIPODC) = 'S' THEN 'NFS-e Aberto' 
+          
+          WHEN (TRIM(XM.XML_KEYF1) IS NULL OR TRIM(XM.XML_KEYF1) = ' ') AND TRIM(XM.XML_TIPODC) = 'D' THEN 'Dev.Venda Aberto' 
+          
+          WHEN (TRIM(XM.XML_KEYF1) IS NULL OR TRIM(XM.XML_KEYF1) = ' ') AND TRIM(XM.XML_TIPODC) = 'F' THEN 'CT-e FOB Aberto' 
+          
+          WHEN (TRIM(XM.XML_KEYF1) IS NULL OR TRIM(XM.XML_KEYF1) = ' ') AND TRIM(XM.XML_TIPODC) = 'T' THEN 'CT-e CIF Aberto' 
+          
+          WHEN (TRIM(XM.XML_KEYF1) IS NULL OR TRIM(XM.XML_KEYF1) = ' ') AND (TRIM(XM.XML_CONFCO) IS NULL OR TRIM(XM.XML_CONFCO) = ' ') AND (TRIM(XM.XML_CONFIS) IS NULL OR TRIM(XM.XML_CONFIS) = ' ') AND (TRIM(XM.XML_DTRCTO) IS NULL OR TRIM(XM.XML_DTRCTO) = ' ') AND TRIM(XM.XML_TIPODC) = 'N' THEN 'NF-e Aberto' 
+          
+          WHEN (TRIM(XM.XML_KEYF1) IS NULL OR TRIM(XM.XML_KEYF1) = ' ') AND TRIM(XM.XML_CONFCO) IS NOT NULL AND TRIM(XM.XML_CONFCO) <> ' ' AND (TRIM(XM.XML_CONFIS) IS NULL OR TRIM(XM.XML_CONFIS) = ' ') AND (TRIM(XM.XML_DTRCTO) IS NULL OR TRIM(XM.XML_DTRCTO) = ' ') AND TRIM(XM.XML_TIPODC) = 'N'  THEN 'NF-e Aberto + COM-Ok'
+          WHEN (TRIM(XM.XML_KEYF1) IS NULL OR TRIM(XM.XML_KEYF1) = ' ') AND TRIM(XM.XML_CONFCO) IS NOT NULL AND TRIM(XM.XML_CONFCO) <> ' ' AND TRIM(XM.XML_CONFIS) IS NOT NULL AND TRIM(XM.XML_CONFIS) <> ' ' AND (TRIM(XM.XML_DTRCTO) IS NULL OR TRIM(XM.XML_DTRCTO) = ' ') AND TRIM(XM.XML_TIPODC) = 'N'  THEN 'NF-e Aberto + COM/FIS-Ok'
+          WHEN (TRIM(XM.XML_KEYF1) IS NULL OR TRIM(XM.XML_KEYF1) = ' ') AND TRIM(XM.XML_CONFCO) IS NOT NULL AND TRIM(XM.XML_CONFCO) <> ' ' AND (TRIM(XM.XML_CONFIS) IS NULL OR TRIM(XM.XML_CONFIS) = ' ') AND TRIM(XM.XML_DTRCTO) IS NOT NULL AND TRIM(XM.XML_DTRCTO) <> ' ' AND TRIM(XM.XML_TIPODC) = 'N'  THEN 'NF-e Aberto + COM/LOG-Ok'
+          WHEN (TRIM(XM.XML_KEYF1) IS NULL OR TRIM(XM.XML_KEYF1) = ' ') AND TRIM(XM.XML_DTRCTO) IS NOT NULL AND TRIM(XM.XML_DTRCTO) <> ' ' AND TRIM(XM.XML_TIPODC) = 'N'  THEN 'NF-e Aberto LOG-Ok'
+          WHEN (TRIM(XM.XML_KEYF1) IS NULL OR TRIM(XM.XML_KEYF1) = ' ') AND TRIM(XM.XML_CONFCO) IS NOT NULL AND TRIM(XM.XML_CONFCO) <> ' ' AND TRIM(XM.XML_TIPODC) = 'N'  THEN 'NF-e Aberto COM-Ok'
+          ELSE 'Sem Definição'
+        END as XML_STATUS
+      FROM PROTHEUS11.CONDORXML XM
+      WHERE XM.D_E_L_E_T_ = ' '
+        AND (XM.XML_TIPODC IN ('T', 'F') OR XM.XML_TPNF NOT IN ('0'))
+        AND XM.XML_DEST <> XM.XML_EMIT
+    ) XM
   `;
+
+  let whereClause = ' WHERE 1 = 1';
   const binds = {};
 
-  // Status do Documento
-  if (status === 'normal') {
-    whereClause += " AND TRIM(XM.XML_REJEIT) IS NULL AND TRIM(XM.XML_TIPODC) NOT IN ('T', 'F') AND (TRIM(XM.XML_OK) IS NULL OR TRIM(XM.XML_OK) <> 'NP')";
-  } else if (status === 'cte_cif') {
-    whereClause += " AND TRIM(XM.XML_REJEIT) IS NULL AND TRIM(XM.XML_TIPODC) = 'T' AND (TRIM(XM.XML_CTEFOB) IS NULL OR TRIM(XM.XML_CTEFOB) <> 'S')";
-  } else if (status === 'cte_fob') {
-    whereClause += " AND TRIM(XM.XML_REJEIT) IS NULL AND TRIM(XM.XML_TIPODC) = 'T' AND TRIM(XM.XML_CTEFOB) = 'S'";
-  } else if (status === 'prenota') {
-    whereClause += " AND TRIM(XM.XML_REJEIT) IS NULL AND TRIM(XM.XML_TIPODC) <> 'T' AND TRIM(XM.XML_OK) = 'NP'";
-  } else if (status === 'compl') {
-    whereClause += " AND TRIM(XM.XML_REJEIT) IS NULL AND TRIM(XM.XML_TIPODC) = 'F'";
-  } else if (status === 'rejeitada') {
-    whereClause += " AND TRIM(XM.XML_REJEIT) IS NOT NULL";
+  // Filtro de Fluxo (Categoria)
+  if (fluxo === 'pendentes') {
+    whereClause += " AND XM.XML_CATEGORIA = 'Pendente'";
+  } else if (fluxo === 'concluidos') {
+    whereClause += " AND XM.XML_CATEGORIA = 'Concluido'";
+  }
+
+  // Filtro de Status Específico
+  if (status && status !== 'todos') {
+    whereClause += " AND XM.XML_STATUS = :status";
+    binds.status = status;
   }
 
   // Filial
@@ -125,7 +188,7 @@ app.get('/api/notas', async (req, res) => {
 
   const countSql = `
     SELECT COUNT(*) as TOTAL 
-    FROM PROTHEUS11.CONDORXML XM
+    FROM (${baseQuery}) XM
     ${whereClause}
   `;
 
@@ -134,22 +197,24 @@ app.get('/api/notas', async (req, res) => {
       SELECT a.*, ROWNUM rnum FROM (
         SELECT 
           XM.XML_CHAVE,
-          TRIM(XM.XML_NUMNF) as XML_NUMNF,
-          TRIM(XM.XML_NOMEMT) as XML_NOMEMT,
+          XM.XML_NUMNF,
+          XM.XML_NOMEMT,
           XM.XML_EMISSA,
           XM.XML_RECEB,
           XM.XML_DTRVLD,
           XM.XML_VLRDOC,
-          TRIM(XM.XML_TIPODC) as XML_TIPODC,
-          TRIM(XM.XML_OK) as XML_OK,
-          TRIM(XM.XML_REJEIT) as XML_REJEIT,
-          TRIM(XM.XML_CTEFOB) as XML_CTEFOB,
+          XM.XML_TIPODC,
+          XM.XML_OK,
+          XM.XML_REJEIT,
+          XM.XML_CTEFOB,
+          XM.XML_STATUS,
+          XM.XML_CATEGORIA,
           CASE 
             WHEN REGEXP_LIKE(TRIM(COALESCE(TRIM(XM.XML_RECEB), XM.XML_EMISSA)), '^[0-9]{8}$') 
             THEN ROUND(SYSDATE - TO_DATE(TRIM(COALESCE(TRIM(XM.XML_RECEB), XM.XML_EMISSA)), 'YYYYMMDD'))
             ELSE NULL 
           END as DIAS
-        FROM PROTHEUS11.CONDORXML XM
+        FROM (${baseQuery}) XM
         ${whereClause}
         ORDER BY DIAS DESC NULLS LAST
       ) a WHERE ROWNUM <= :maxRow
