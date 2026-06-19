@@ -234,7 +234,7 @@ function renderHeaders(data) {
   if (!data || data.length === 0) {
     masterBody.innerHTML = `
       <tr>
-        <td colspan="7" class="text-center" style="padding: 40px; color: var(--text-muted);">
+        <td colspan="8" class="text-center" style="padding: 40px; color: var(--text-muted);">
           Nenhuma nota fiscal pendente localizada.
         </td>
       </tr>
@@ -247,6 +247,7 @@ function renderHeaders(data) {
       <tr data-chave="${row.XML_CHAVE}">
         <td>${getDaysBadge(row.DIAS)}</td>
         <td class="text-center">${getHeaderStatusBadge(row)}</td>
+        <td>${escapeHTML(row.XML_FIL_CALC)}</td>
         <td>${escapeHTML(row.XML_NUMNF)}</td>
         <td title="${escapeHTML(row.XML_NOMEMT)}">${escapeHTML(row.XML_NOMEMT)}</td>
         <td>${formatDateDisplay(row.XML_EMISSA)}</td>
