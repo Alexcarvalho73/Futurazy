@@ -73,7 +73,7 @@ app.get('/api/notas', async (req, res) => {
         TRIM(XM.XML_OK) as XML_OK,
         TRIM(XM.XML_REJEIT) as XML_REJEIT,
         TRIM(XM.XML_CTEFOB) as XML_CTEFOB,
-        XM.XML_FIL,
+        TRIM(XM.XML_FIL) as XML_FIL,
         XM.XML_EMIT,
         XM.XML_DEST,
         XM.XML_TPNF,
@@ -158,6 +158,7 @@ app.get('/api/notas', async (req, res) => {
       WHERE XM.D_E_L_E_T_ = ' '
         AND (XM.XML_TIPODC IN ('T', 'F') OR XM.XML_TPNF NOT IN ('0'))
         AND XM.XML_DEST <> XM.XML_EMIT
+        AND XM.XML_EMISSA >= '20240601'
     ) XM
   `;
 
@@ -244,6 +245,7 @@ app.get('/api/notas', async (req, res) => {
           XM.XML_CTEFOB,
           XM.XML_STATUS,
           XM.XML_CATEGORIA,
+          XM.XML_FIL,
           XM.XML_FIL_CALC,
           CASE 
             WHEN REGEXP_LIKE(TRIM(COALESCE(TRIM(XM.XML_RECEB), XM.XML_EMISSA)), '^[0-9]{8}$') 
