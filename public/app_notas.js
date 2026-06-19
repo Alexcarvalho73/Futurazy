@@ -38,28 +38,16 @@ const btnClearFilters = document.getElementById('btn-clear-filters');
 
 // Mapeamento de status por fluxo/categoria
 const PENDENTES_STATUSES = [
-  'Sem Definição',
-  'NF-e Aberto + COM-Ok',
-  'Pré-Nota',
-  'Pré-Nota COM/FIS/LOG-Ok',
-  'NF-e Aberto + COM/LOG-Ok',
-  'NF-e Aberto LOG-Ok',
-  'Pré-Nota COM-Ok',
-  'Dev.Venda Aberto',
-  'Benef.Aberto',
-  'NFS-e Aberto',
-  'CT-e FOB Aberto',
-  'NF-e Aberto',
-  'CT-e CIF Aberto'
+  'EM ABERTO',
+  'PRÉ-NOTA',
+  'CTE (FOB E CIF)',
+  'DEV VENDA ABERTO',
+  'BENEF ABERTO'
 ];
 
 const CONCLUIDOS_STATUSES = [
-  'Lançada',
-  'Rejeitada',
-  'Classificada FIS/LOG-Ok',
-  'Classificada COM-Ok',
-  'Classificada COM/FIS/LOG-Ok',
-  'Classificada'
+  'CLASSIFICADA',
+  'Rejeitada'
 ];
 
 function updateStatusOptions() {
@@ -145,20 +133,18 @@ function getHeaderStatusBadge(row) {
   const status = row.XML_STATUS ? row.XML_STATUS.trim() : '';
   let dotClass = 'status-dot-grey';
   
-  if (status === 'Rejeitada' || status.includes('Rejeitada')) {
+  if (status === 'Rejeitada') {
     dotClass = 'status-dot-red';
-  } else if (status.includes('CT-e FOB')) {
-    dotClass = 'status-dot-red';
-  } else if (status.includes('CT-e CIF')) {
-    dotClass = 'status-dot-blue';
-  } else if (status.includes('Classificada') || status.includes('Lançada')) {
+  } else if (status === 'CLASSIFICADA') {
     dotClass = 'status-dot-green';
-  } else if (status.includes('Pré-Nota')) {
+  } else if (status === 'PRÉ-NOTA') {
     dotClass = 'status-dot-lightblue';
-  } else if (status === 'Benef.Aberto' || status === 'Dev.Venda Aberto' || status === 'NFS-e Aberto') {
+  } else if (status === 'CTE (FOB E CIF)') {
+    dotClass = 'status-dot-blue';
+  } else if (status === 'DEV VENDA ABERTO' || status === 'BENEF ABERTO') {
     dotClass = 'status-dot-orange';
   } else {
-    // NF-e Aberto, Sem Definição, etc.
+    // EM ABERTO
     dotClass = 'status-dot-grey';
   }
   
@@ -247,7 +233,7 @@ function renderHeaders(data) {
       <tr data-chave="${row.XML_CHAVE}">
         <td>${getDaysBadge(row.DIAS)}</td>
         <td class="text-center">${getHeaderStatusBadge(row)}</td>
-        <td>${escapeHTML(row.XML_FIL)}</td>
+        <td>${escapeHTML(row.XML_FIL_CALC)}</td>
         <td>${escapeHTML(row.XML_NUMNF)}</td>
         <td title="${escapeHTML(row.XML_NOMEMT)}">${escapeHTML(row.XML_NOMEMT)}</td>
         <td>${formatDateDisplay(row.XML_EMISSA)}</td>
