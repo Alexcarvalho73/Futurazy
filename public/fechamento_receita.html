@@ -563,6 +563,45 @@
             <label for="f-produto"><i class="fa-solid fa-box"></i> Produto</label>
             <input type="text" id="f-produto" class="form-control" placeholder="Nome do produto...">
           </div>
+          <div class="filter-group">
+            <label for="f-periodo-mes"><i class="fa-solid fa-calendar-day"></i> Período (Mês)</label>
+            <select id="f-periodo-mes" class="form-control">
+              <option value="todos">Todos (Mês Ant. + Mês Atual)</option>
+              <option value="anterior">Mês Anterior</option>
+              <option value="atual">Mês Atual</option>
+            </select>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tabela Anual (Meses Horizontais) -->
+      <section class="anual-section" id="anual-section">
+        <div class="loading-overlay" id="loading-anual">
+          <div class="spinner"></div>
+          <p>Carregando resumo anual…</p>
+        </div>
+        <div class="anual-header">
+          <h2>
+            <i class="fa-solid fa-calendar-days" style="color:var(--color-primary)"></i>
+            Resumo Anual — <span id="label-periodo">Safra 2025/26</span>
+          </h2>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <div class="empresa-tabs">
+              <button class="empresa-tab active" data-emp="TOTAL" id="tab-total">Consolidado</button>
+              <button class="empresa-tab" data-emp="028501" id="tab-028501">028501</button>
+              <button class="empresa-tab" data-emp="028503" id="tab-028503">028503</button>
+            </div>
+          </div>
+        </div>
+        <div class="anual-table-wrap">
+          <table class="anual-table" id="anual-table">
+            <thead id="anual-thead">
+              <!-- Preenchido por app_receita.js -->
+            </thead>
+            <tbody id="anual-tbody">
+              <!-- Preenchido por app_receita.js -->
+            </tbody>
+          </table>
         </div>
       </section>
 
@@ -615,37 +654,6 @@
                 <td colspan="2"></td>
               </tr>
             </tfoot>
-          </table>
-        </div>
-      </section>
-
-      <!-- Tabela Anual (Meses Horizontais) -->
-      <section class="anual-section" id="anual-section">
-        <div class="loading-overlay" id="loading-anual">
-          <div class="spinner"></div>
-          <p>Carregando resumo anual…</p>
-        </div>
-        <div class="anual-header">
-          <h2>
-            <i class="fa-solid fa-calendar-days" style="color:var(--color-primary)"></i>
-            Resumo Anual — <span id="label-periodo">Safra 2025/26</span>
-          </h2>
-          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-            <div class="empresa-tabs">
-              <button class="empresa-tab active" data-emp="TOTAL" id="tab-total">Consolidado</button>
-              <button class="empresa-tab" data-emp="028501" id="tab-028501">028501</button>
-              <button class="empresa-tab" data-emp="028503" id="tab-028503">028503</button>
-            </div>
-          </div>
-        </div>
-        <div class="anual-table-wrap">
-          <table class="anual-table" id="anual-table">
-            <thead id="anual-thead">
-              <!-- Preenchido por app_receita.js -->
-            </thead>
-            <tbody id="anual-tbody">
-              <!-- Preenchido por app_receita.js -->
-            </tbody>
           </table>
         </div>
       </section>

@@ -114,7 +114,7 @@ function setupEventListeners() {
     updateKpis(filtered);
   });
   document.getElementById('btn-clear-filters').addEventListener('click', () => {
-    ['f-tipo-negocio','f-empresa','f-cfop','f-produto'].forEach(id => {
+    ['f-tipo-negocio','f-empresa','f-cfop','f-produto','f-periodo-mes'].forEach(id => {
       const el = document.getElementById(id);
       if (el.tagName === 'SELECT') el.value = el.options[0].value;
       else el.value = '';
@@ -219,12 +219,40 @@ function applyFilters(data) {
   const empresa = document.getElementById('f-empresa').value;
   const cfop    = document.getElementById('f-cfop').value.trim().toUpperCase();
   const produto = document.getElementById('f-produto').value.trim().toUpperCase();
+  const periodo = document.getElementById('f-periodo-mes').value; // 'todos' | 'anterior' | 'atual'
+
+  const hoje = new Date();
+  const mesAtual = hoje.getMonth();
+  const anoAtual = hoje.getFullYear();
+
+  const prevD = new Date(anoAtual, mesAtual - 1, 1);
+  const mesAnt = prevD.getMonth();
+  const anoAnt = prevD.getFullYear();
 
   return data.filter(r => {
     if (tipo    !== 'todos'  && r.TIPO_NEGOCIO !== tipo)                 return false;
     if (empresa !== 'todas'  && r.EMPRESA !== empresa)                   return false;
     if (cfop    && !(r.CFOP    || '').toUpperCase().includes(cfop))      return false;
     if (produto && !(r.PRODUTO || '').toUpperCase().includes(produto))   return false;
+
+    if (periodo !== 'todos') {
+      if (!r.EMISSAO) return false;
+      const d = new Date(r.EMISSAO);
+      // O Date construído a partir de ISO string 'YYYY-MM-DDT00:00:00.000Z' pode ser interpretado em UTC.
+      // Para evitar problemas de timezone com as datas do banco (que não têm timezone),
+      // usamos os métodos getUTCDate e getUTCMonth se a string vier como ISO.
+      // Vamos verificar e comparar usando getUTCMonth / getUTCFullYear ou getMonth / getFullYear de forma segura.
+      // Já que no backend convertemos to_date(F2_EMISSAO,'yyyymmdd'), ele vem como data do Oracle que o driver node-oracledb
+      // retorna como um objeto Date local ou UTC dependendo da config.
+      // Como o objeto já é uma instância Date em JS, vamos extrair mês/ano do objeto.
+      const m = d.getMonth();
+      const y = d.getFullYear();
+      if (periodo === 'atual') {
+        if (m !== mesAtual || y !== anoAtual) return false;
+      } else if (periodo === 'anterior') {
+        if (m !== mesAnt || y !== anoAnt) return false;
+      }
+    }
     return true;
   });
 }

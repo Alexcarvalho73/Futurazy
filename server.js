@@ -647,10 +647,13 @@ app.get('/api/receita/dados', async (req, res) => {
     const hoje = new Date();
     const anoSafra = parseInt(req.query.ano_safra) || getSafraYear(hoje);
 
-    // Intervalo: Set(anoSafra-1) → Ago(anoSafra) — ou parâmetros customizados
+    // Por padrão, trazer apenas o mês anterior e o mês corrente
+    const prevDate = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+    const currLastDate = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
+
     // Datas como string 'YYYY-MM-DD' para bind seguro com TO_DATE no Oracle
-    const dataDe  = req.query.data_de  || dateToStr(new Date(anoSafra - 1, 8,  1));
-    const dataAte = req.query.data_ate || dateToStr(new Date(anoSafra,     7, 31));
+    const dataDe  = req.query.data_de  || dateToStr(prevDate);
+    const dataAte = req.query.data_ate || dateToStr(currLastDate);
 
     const sql = buildReceitaSQL();
     const binds = { data_de: dataDe, data_ate: dataAte };
