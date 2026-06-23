@@ -454,7 +454,7 @@ function buildReceitaSQL() {
       FROM (
         SELECT distinct
           f2_filial                             AS EMPRESA,
-          to_date(F2_EMISSAO, 'yyyy/mm/dd')     AS EMISSAO,
+          to_date(F2_EMISSAO, 'yyyymmdd')       AS EMISSAO,
           TRIM(F2_DOC)                           AS NF,
           decode(f2_tipo,'D',
             (select SUBSTR(a2.a2_nome,1,30) from protheus11.sa2020 a2
@@ -502,8 +502,8 @@ function buildReceitaSQL() {
           AND f2.d_e_l_e_t_ <> '*'
           AND d2.d_e_l_e_t_ <> '*'
           AND b1.d_e_l_e_t_ <> '*'
-          AND to_date(F2_EMISSAO,'yyyy/mm/dd') >= to_date(:data_de,'yyyy-mm-dd')
-          AND to_date(F2_EMISSAO,'yyyy/mm/dd') <= to_date(:data_ate,'yyyy-mm-dd')
+          AND to_date(F2_EMISSAO,'yyyymmdd') >= to_date(:data_de,'yyyy-mm-dd')
+          AND to_date(F2_EMISSAO,'yyyymmdd') <= to_date(:data_ate,'yyyy-mm-dd')
           AND D2_CF NOT IN ('5949','5905','5151','5910','5201','5208')
           AND F2.F2_FILIAL IN ('028501','028503')
 
@@ -511,7 +511,7 @@ function buildReceitaSQL() {
 
         SELECT distinct
           f1_filial                              AS EMPRESA,
-          to_date(F1_EMISSAO,'yyyy/mm/dd')       AS EMISSAO,
+          to_date(F1_EMISSAO,'yyyymmdd')         AS EMISSAO,
           TRIM(D1_DOC)                           AS NF,
           decode(d1_TIPO,'D',
             (select SUBSTR(a2.a2_nome,1,30) from protheus11.sa2020 a2
@@ -551,8 +551,8 @@ function buildReceitaSQL() {
           AND f1.d_e_l_e_t_ <> '*'
           AND d1.d_e_l_e_t_ <> '*'
           AND b1.d_e_l_e_t_ <> '*'
-          AND to_date(F1_EMISSAO,'yyyy/mm/dd') >= to_date(:data_de,'yyyy-mm-dd')
-          AND to_date(F1_EMISSAO,'yyyy/mm/dd') <= to_date(:data_ate,'yyyy-mm-dd')
+          AND to_date(F1_EMISSAO,'yyyymmdd') >= to_date(:data_de,'yyyy-mm-dd')
+          AND to_date(F1_EMISSAO,'yyyymmdd') <= to_date(:data_ate,'yyyy-mm-dd')
           AND D1_CF NOT IN ('1906','1151','1101','1933','1356','1922','1910','1209')
           AND f1.f1_filial IN ('028501','028503')
       ) MID_Q
