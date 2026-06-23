@@ -57,7 +57,7 @@ app.get('/api/notas', async (req, res) => {
   const baseQuery = `
     SELECT XM.*,
       CASE
-        WHEN XML_STATUS IN ('CLASSIFICADA', 'Rejeitada') THEN 'Concluido'
+        WHEN XML_STATUS = 'Lançada' THEN 'Concluido'
         ELSE 'Pendente'
       END as XML_CATEGORIA
     FROM (
@@ -114,25 +114,34 @@ app.get('/api/notas', async (req, res) => {
             END
         END as XML_FIL_CALC,
         CASE  
-          WHEN TRIM(XM.XML_REJEIT) IS NOT NULL AND TRIM(XM.XML_REJEIT) <> ' ' THEN 'Rejeitada'
-          
-          -- Classificadas / Lançadas
-          WHEN TRIM(XM.XML_KEYF1) IS NOT NULL AND TRIM(XM.XML_KEYF1) <> ' ' AND XM.XML_KEYF1 NOT LIKE '%| %' THEN 'CLASSIFICADA'
-          
-          -- Pré-Nota COM-Ok -> EM ABERTO
-          WHEN TRIM(XM.XML_KEYF1) IS NOT NULL AND TRIM(XM.XML_KEYF1) <> ' ' AND XM.XML_KEYF1 LIKE '%| %' 
-               AND TRIM(XM.XML_CONFCO) IS NOT NULL AND TRIM(XM.XML_CONFCO) <> ' ' 
-               AND (TRIM(XM.XML_DTRCTO) IS NULL OR TRIM(XM.XML_DTRCTO) = ' ') THEN 'EM ABERTO'
-          
-          -- Outras Pré-Notas -> PRÉ-NOTA
-          WHEN TRIM(XM.XML_KEYF1) IS NOT NULL AND TRIM(XM.XML_KEYF1) <> ' ' AND XM.XML_KEYF1 LIKE '%| %' THEN 'PRÉ-NOTA'
-          
-          -- Sem XML_KEYF1
-          WHEN (TRIM(XM.XML_KEYF1) IS NULL OR TRIM(XM.XML_KEYF1) = ' ') AND TRIM(XM.XML_TIPODC) = 'B' THEN 'BENEF ABERTO'
-          WHEN (TRIM(XM.XML_KEYF1) IS NULL OR TRIM(XM.XML_KEYF1) = ' ') AND TRIM(XM.XML_TIPODC) = 'D' THEN 'DEV VENDA ABERTO'
-          WHEN (TRIM(XM.XML_KEYF1) IS NULL OR TRIM(XM.XML_KEYF1) = ' ') AND TRIM(XM.XML_TIPODC) IN ('F', 'T') THEN 'CTE (FOB E CIF)'
-          
-          ELSE 'EM ABERTO'
+          WHEN XM.XML_REJEIT <> ' ' THEN 'Rejeitada'
+          WHEN XM.XML_KEYF1 <> ' ' AND XM.XML_KEYF1 LIKE '%|A%' AND XM.XML_CONFCO <> ' ' AND XM.XML_CONFIS <> ' ' AND XM.XML_DTRCTO <> ' ' THEN 'Lançada'
+          WHEN XM.XML_KEYF1 <> ' ' AND XM.XML_KEYF1 LIKE '%| %' AND XM.XML_CONFCO <> ' ' AND XM.XML_CONFIS <> ' ' AND XM.XML_DTRCTO <> ' ' THEN 'Pré-Nota'
+          WHEN XM.XML_KEYF1 <> ' ' AND XM.XML_CONFCO <> ' ' AND XM.XML_CONFIS <> ' ' AND XM.XML_DTRCTO <> ' ' THEN 'Lançada'
+          WHEN XM.XML_KEYF1 <> ' ' AND XM.XML_KEYF1 LIKE '%|A%' AND XM.XML_CONFIS <> ' ' AND XM.XML_DTRCTO <> ' ' THEN 'Lançada'
+          WHEN XM.XML_KEYF1 <> ' ' AND XM.XML_KEYF1 LIKE '%| %' AND XM.XML_CONFIS <> ' ' AND XM.XML_DTRCTO <> ' ' THEN 'Pré-Nota'
+          WHEN XM.XML_KEYF1 <> ' ' AND XM.XML_CONFCO <> ' ' AND XM.XML_CONFIS <> ' ' AND XM.XML_DTRCTO <> ' ' THEN 'Lançada'
+          WHEN XM.XML_KEYF1 <> ' ' AND XM.XML_KEYF1 LIKE '%|A%' AND XM.XML_DTRCTO <> ' ' AND XM.XML_CONFCO = ' ' THEN 'Lançada'
+          WHEN XM.XML_KEYF1 <> ' ' AND XM.XML_KEYF1 LIKE '%| %' AND XM.XML_DTRCTO <> ' ' AND XM.XML_CONFCO = ' ' THEN 'Pré-Nota'
+          WHEN XM.XML_KEYF1 <> ' ' AND XM.XML_KEYF1 LIKE '%| %' AND XM.XML_DTRCTO <> ' ' THEN 'Pré-Nota'
+          WHEN XM.XML_KEYF1 <> ' ' AND XM.XML_KEYF1 LIKE '%|A%' AND XM.XML_CONFCO <> ' ' THEN 'Lançada'
+          WHEN XM.XML_KEYF1 <> ' ' AND XM.XML_KEYF1 LIKE '%| %' AND XM.XML_CONFCO <> ' ' THEN 'Pré-Nota'
+          WHEN XM.XML_KEYF1 <> ' ' AND XM.XML_KEYF1 LIKE '%|A%' THEN 'Lançada'
+          WHEN XM.XML_KEYF1 <> ' ' AND XM.XML_KEYF1 LIKE '%| %'  THEN 'Pré-Nota'
+          WHEN XM.XML_KEYF1 <> ' ' THEN 'Lançada'
+          WHEN XM.XML_KEYF1 = ' ' AND XM.XML_TIPODC = 'B' THEN 'Benef.Aberto' 
+          WHEN XM.XML_KEYF1 = ' ' AND XM.XML_TIPODC = 'S' THEN 'Em Aberto' 
+          WHEN XM.XML_KEYF1 = ' ' AND XM.XML_TIPODC = 'D' THEN 'Dev.Venda Aberto' 
+          WHEN XM.XML_KEYF1 = ' ' AND XM.XML_TIPODC = 'F' THEN 'CT-e Aberto' 
+          WHEN XM.XML_KEYF1 = ' ' AND XM.XML_TIPODC = 'T' THEN 'CT-e Aberto' 
+          WHEN XM.XML_KEYF1 = ' ' AND XM.XML_CONFCO = ' ' AND XM.XML_CONFIS = ' ' AND XM.XML_DTRCTO  = ' ' AND XM.XML_TIPODC = 'N' THEN 'Em Aberto' 
+          WHEN XM.XML_KEYF1 = ' ' AND XM.XML_CONFCO <> ' ' AND XM.XML_CONFIS = ' ' AND XM.XML_DTRCTO = ' ' AND XM.XML_TIPODC = 'N'  THEN 'Em Aberto'
+          WHEN XM.XML_KEYF1 = ' ' AND XM.XML_CONFCO <> ' ' AND XM.XML_CONFIS <>  ' ' AND XM.XML_DTRCTO = ' ' AND XM.XML_TIPODC = 'N'  THEN 'Em Aberto'
+          WHEN XM.XML_KEYF1 = ' ' AND XM.XML_CONFCO <> ' ' AND XM.XML_CONFIS = ' ' AND XM.XML_DTRCTO <> ' ' AND XM.XML_TIPODC = 'N'  THEN 'Em Aberto'
+          WHEN XM.XML_KEYF1 = ' ' AND XM.XML_DTRCTO <> ' ' AND XM.XML_TIPODC = 'N'  THEN 'Em Aberto'
+          WHEN XM.XML_KEYF1 = ' ' AND XM.XML_CONFCO <> ' ' AND XM.XML_TIPODC = 'N'  THEN 'Em Aberto'
+          ELSE 
+            'Sem Definição'
         END as XML_STATUS
       FROM PROTHEUS11.CONDORXML XM
       WHERE XM.D_E_L_E_T_ = ' '

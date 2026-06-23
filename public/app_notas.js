@@ -38,16 +38,17 @@ const btnClearFilters = document.getElementById('btn-clear-filters');
 
 // Mapeamento de status por fluxo/categoria
 const PENDENTES_STATUSES = [
-  'EM ABERTO',
-  'PRÉ-NOTA',
-  'CTE (FOB E CIF)',
-  'DEV VENDA ABERTO',
-  'BENEF ABERTO'
+  'Rejeitada',
+  'Pré-Nota',
+  'Benef.Aberto',
+  'Em Aberto',
+  'Dev.Venda Aberto',
+  'CT-e Aberto',
+  'Sem Definição'
 ];
 
 const CONCLUIDOS_STATUSES = [
-  'CLASSIFICADA',
-  'Rejeitada'
+  'Lançada'
 ];
 
 function updateStatusOptions() {
@@ -135,16 +136,16 @@ function getHeaderStatusBadge(row) {
   
   if (status === 'Rejeitada') {
     dotClass = 'status-dot-red';
-  } else if (status === 'CLASSIFICADA') {
+  } else if (status === 'Lançada') {
     dotClass = 'status-dot-green';
-  } else if (status === 'PRÉ-NOTA') {
+  } else if (status === 'Pré-Nota') {
     dotClass = 'status-dot-lightblue';
-  } else if (status === 'CTE (FOB E CIF)') {
+  } else if (status === 'CT-e Aberto') {
     dotClass = 'status-dot-blue';
-  } else if (status === 'DEV VENDA ABERTO' || status === 'BENEF ABERTO') {
+  } else if (status === 'Benef.Aberto' || status === 'Dev.Venda Aberto') {
     dotClass = 'status-dot-orange';
   } else {
-    // EM ABERTO
+    // Em Aberto, Sem Definição
     dotClass = 'status-dot-grey';
   }
   

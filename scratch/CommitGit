@@ -1,0 +1,1 @@
+git add . ; git commit -m "Ajustes classificação de Notas" ; git push origin main ;node .\scratch\run_commit_remoto.js
