@@ -473,7 +473,8 @@ function buildReceitaSQL() {
           (d2_total + d2_valfre)                 AS TOTAL,
           SUBSTR(B1_desc,1,35)                   AS PRODUTO,
           TRIM(F2_TIPO)                          AS TPDOC,
-          D2_QUANT/60                            AS SACAS,
+          CASE WHEN TRIM(B1_GRUPO) = '0402008' THEN D2_QUANT/60 ELSE 0 END AS SACAS,
+          CASE WHEN TRIM(B1_GRUPO) = '0203003' THEN D2_QUANT ELSE 0 END AS CABECAS,
           D2_PRCVEN                              AS VLR_UNIT,
           F2_VALFAC                              AS VLR_FACS,
           F2_VALFET                              AS VLR_FETHAB,
@@ -534,7 +535,8 @@ function buildReceitaSQL() {
           d1_total * -1                          AS TOTAL,
           SUBSTR(B1_desc,1,35)                   AS PRODUTO,
           TRIM(d1_TIPO)                          AS TPDOC,
-          D1_QUANT / 60                          AS SACAS,
+          CASE WHEN TRIM(B1_GRUPO) = '0402008' THEN D1_QUANT/60 ELSE 0 END * -1 AS SACAS,
+          CASE WHEN TRIM(B1_GRUPO) = '0203003' THEN D1_QUANT ELSE 0 END * -1 AS CABECAS,
           D1_VUNIT                               AS VLR_UNIT,
           D1_VALFAC * -1                         AS VLR_FACS,
           D1_VALFET                              AS VLR_FETHAB,
@@ -621,7 +623,7 @@ function agregarPorMes(rows) {
         empresa: r.EMPRESA,
         ano: d.getFullYear(),
         mes: d.getMonth() + 1,
-        receita: 0, sacas: 0, qtdNfs: new Set(),
+        receita: 0, sacas: 0, cabecas: 0, qtdNfs: new Set(),
         funrural: 0, fethab: 0, vlrFacs: 0,
         // Campos USD
         receitaUsd: 0, funruralUsd: 0, fethabUsd: 0, vlrFacsUsd: 0
@@ -629,6 +631,7 @@ function agregarPorMes(rows) {
     }
     map[key].receita     += Number(r.TOTAL         || 0);
     map[key].sacas       += Number(r.SACAS         || 0);
+    map[key].cabecas     += Number(r.CABECAS       || 0);
     map[key].funrural    += Number(r.VL_FUNRURAL   || 0);
     map[key].fethab      += Number(r.VLR_FETHAB    || 0);
     map[key].vlrFacs     += Number(r.VLR_FACS      || 0);
@@ -748,7 +751,7 @@ app.get('/api/receita/resumo-anual', async (req, res) => {
         if (fechadosMap[keyFech]) {
           const f = fechadosMap[keyFech];
           porEmpresa[emp] = {
-            receita: f.FR_RECEITA_TOTAL, sacas: f.FR_SACAS, qtdNfs: f.FR_QTD_NFS,
+            receita: f.FR_RECEITA_TOTAL, sacas: f.FR_SACAS, cabecas: f.FR_PEC_SACAS, qtdNfs: f.FR_QTD_NFS,
             funrural: f.FR_FUNRURAL, fethab: f.FR_FETHAB, vlrFacs: f.FR_VLR_FACS,
             agroReceita: f.FR_AGRO_RECEITA, pecReceita: f.FR_PEC_RECEITA, outrosReceita: f.FR_OUTROS_RECEITA,
             status: 'fechado', dtFechamento: f.FR_DT_FECHAMENTO
@@ -756,19 +759,20 @@ app.get('/api/receita/resumo-anual', async (req, res) => {
         } else if (isMesAtual || isMesAnterior) {
           const din = dadosDinamicos.find(d => d.empresa === emp && d.ano === m.ano && d.mes === m.mes);
           porEmpresa[emp] = din
-            ? { receita: din.receita, sacas: din.sacas, qtdNfs: din.qtdNfs,
+            ? { receita: din.receita, sacas: din.sacas, cabecas: din.cabecas, qtdNfs: din.qtdNfs,
                 funrural: din.funrural, fethab: din.fethab, vlrFacs: din.vlrFacs, status }
-            : { receita: 0, sacas: 0, qtdNfs: 0, funrural: 0, fethab: 0, vlrFacs: 0, status };
+            : { receita: 0, sacas: 0, cabecas: 0, qtdNfs: 0, funrural: 0, fethab: 0, vlrFacs: 0, status };
         } else {
-          porEmpresa[emp] = { receita: 0, sacas: 0, qtdNfs: 0, funrural: 0, fethab: 0, vlrFacs: 0, status };
+          porEmpresa[emp] = { receita: 0, sacas: 0, cabecas: 0, qtdNfs: 0, funrural: 0, fethab: 0, vlrFacs: 0, status };
         }
       }
 
       // Total consolidado das duas filiais
-      const total = { receita: 0, sacas: 0, qtdNfs: 0, funrural: 0, fethab: 0, vlrFacs: 0 };
+      const total = { receita: 0, sacas: 0, cabecas: 0, qtdNfs: 0, funrural: 0, fethab: 0, vlrFacs: 0 };
       for (const emp of ['028501','028503']) {
         total.receita  += porEmpresa[emp].receita  || 0;
         total.sacas    += porEmpresa[emp].sacas    || 0;
+        total.cabecas  += porEmpresa[emp].cabecas  || 0;
         total.qtdNfs   += porEmpresa[emp].qtdNfs   || 0;
         total.funrural += porEmpresa[emp].funrural || 0;
         total.fethab   += porEmpresa[emp].fethab   || 0;
@@ -805,22 +809,24 @@ app.post('/api/receita/fechar-mes', async (req, res) => {
       : rows.filter(r => r.EMPRESA === empresa);
 
     // Agregar totais
-    let receita = 0, sacas = 0, funrural = 0, fethab = 0, vlrFacs = 0;
+    let receita = 0, sacas = 0, cabecas = 0, funrural = 0, fethab = 0, vlrFacs = 0;
     let agroReceita = 0, agroSacas = 0, pecReceita = 0, pecSacas = 0, outrosReceita = 0, outrosSacas = 0;
     const nfsSet = new Set();
 
     for (const r of rowsEmp) {
       const tot = Number(r.TOTAL || 0);
       const sac = Number(r.SACAS || 0);
+      const cab = Number(r.CABECAS || 0);
       receita  += tot;
       sacas    += sac;
+      cabecas  += cab;
       funrural += Number(r.VL_FUNRURAL || 0);
       fethab   += Number(r.VLR_FETHAB  || 0);
       vlrFacs  += Number(r.VLR_FACS    || 0);
       if (r.NF) nfsSet.add(r.NF);
 
       if (r.TIPO_NEGOCIO === 'Agricultura') { agroReceita += tot; agroSacas += sac; }
-      else if (r.TIPO_NEGOCIO === 'Pecuária') { pecReceita += tot; pecSacas += sac; }
+      else if (r.TIPO_NEGOCIO === 'Pecuária') { pecReceita += tot; pecSacas += cab; }
       else { outrosReceita += tot; outrosSacas += sac; }
     }
     const qtdNfs = nfsSet.size;

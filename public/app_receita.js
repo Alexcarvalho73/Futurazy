@@ -262,20 +262,39 @@ function applyFilters(data) {
 // ─────────────────────────────────────────────
 function updateKpis(data) {
   const cf = campos();
-  let receita=0, sacas=0, funrural=0, fethab=0;
+  let receita=0, sacas=0, cabecas=0, funrural=0, fethab=0;
   const nfsSet = new Set();
 
   for (const r of data) {
     receita  += Number(r[cf.total]    || 0);
     sacas    += Number(r.SACAS        || 0);
+    cabecas  += Number(r.CABECAS      || 0);
     funrural += Number(r[cf.funrural] || 0);
     fethab   += Number(r[cf.fethab]   || 0);
     if (r.NF) nfsSet.add(r.NF);
   }
-  const ticket = sacas > 0 ? receita / sacas : 0;
+  
+  let ticket = 0;
+  if (sacas > 0 && cabecas > 0) {
+    ticket = receita / (sacas + cabecas);
+  } else if (cabecas > 0) {
+    ticket = receita / cabecas;
+  } else if (sacas > 0) {
+    ticket = receita / sacas;
+  }
 
   document.getElementById('kpi-receita').textContent   = fmtMoeda(receita);
-  document.getElementById('kpi-sacas').textContent     = fmtN(sacas);
+  
+  let kpiSacasText = '';
+  if (sacas > 0 && cabecas > 0) {
+    kpiSacasText = `${fmtN(sacas)} Sc / ${fmtN(cabecas)} Cab`;
+  } else if (cabecas > 0) {
+    kpiSacasText = `${fmtN(cabecas)} Cab`;
+  } else {
+    kpiSacasText = fmtN(sacas);
+  }
+  document.getElementById('kpi-sacas').textContent     = kpiSacasText;
+  
   document.getElementById('kpi-nfs').textContent       = nfsSet.size.toLocaleString('pt-BR');
   document.getElementById('kpi-ticket').textContent    = fmtMoeda(ticket);
   document.getElementById('kpi-funrural').textContent  = fmtMoeda(funrural);
@@ -312,11 +331,12 @@ function sumRows(rows) {
     acc.quant    += Number(r.QUANT        || 0);
     acc.total    += Number(r[cf.total]    || 0);
     acc.sacas    += Number(r.SACAS        || 0);
+    acc.cabecas  += Number(r.CABECAS      || 0);
     acc.facs     += Number(r[cf.facs]     || 0);
     acc.fethab   += Number(r[cf.fethab]   || 0);
     acc.funrural += Number(r[cf.funrural] || 0);
     return acc;
-  }, { quant:0, total:0, sacas:0, facs:0, fethab:0, funrural:0 });
+  }, { quant:0, total:0, sacas:0, cabecas:0, facs:0, fethab:0, funrural:0 });
 }
 
 let _rowId = 0;
@@ -421,12 +441,22 @@ function buildRow({ id, parentId, level, labelHtml, sums, extra = {} }) {
       ? `<span style="font-size:10px;color:#f59e0b;font-weight:600;" title="PTAX usada">R$${fmtBrl.format(extra.cotacao)}</span>`
       : '';
   }
+
+  let qCell = '';
+  if (sums.sacas > 0 && sums.cabecas > 0) {
+    qCell = `${fmtN(sums.sacas)} Sc / ${fmtN(sums.cabecas)} Cab`;
+  } else if (sums.cabecas > 0) {
+    qCell = `${fmtN(sums.cabecas)} Cab`;
+  } else {
+    qCell = fmtN(sums.sacas);
+  }
+
   return `
     <tr id="${id}" ${parentAttr} class="lvl-${level}" data-level="${level}">
       <td style="min-width:280px">${labelHtml}</td>
       <td class="text-right">${fmtN(sums.quant)}</td>
       <td class="text-right" style="font-weight:${level<=1?'600':'400'}">${fmtMoeda(sums.total)}</td>
-      <td class="text-right">${fmtN(sums.sacas)}</td>
+      <td class="text-right">${qCell}</td>
       <td class="text-right">—</td>
       <td class="text-right">${fmtMoeda(sums.facs)}</td>
       <td class="text-right">${fmtMoeda(sums.fethab)}</td>
@@ -462,9 +492,18 @@ function collapseChildren(parentId) {
 }
 
 function updateTotals(sums) {
+  let qCell = '';
+  if (sums.sacas > 0 && sums.cabecas > 0) {
+    qCell = `${fmtN(sums.sacas)} Sc / ${fmtN(sums.cabecas)} Cab`;
+  } else if (sums.cabecas > 0) {
+    qCell = `${fmtN(sums.cabecas)} Cab`;
+  } else {
+    qCell = fmtN(sums.sacas);
+  }
+
   document.getElementById('tot-quant').textContent    = fmtN(sums.quant);
   document.getElementById('tot-total').textContent    = fmtMoeda(sums.total);
-  document.getElementById('tot-sacas').textContent    = fmtN(sums.sacas);
+  document.getElementById('tot-sacas').textContent    = qCell;
   document.getElementById('tot-facs').textContent     = fmtMoeda(sums.facs);
   document.getElementById('tot-fethab').textContent   = fmtMoeda(sums.fethab);
   document.getElementById('tot-funrural').textContent = fmtMoeda(sums.funrural);
@@ -551,6 +590,7 @@ function renderAnualTable() {
   const metricas = [
     { brl: 'receita',  usd: 'receitaUsd',  label: '💰 Receita Total',     format: fmtMoeda },
     { brl: 'sacas',    usd: null,           label: '📦 Sacas',              format: fmtN     },
+    { brl: 'cabecas',  usd: null,           label: '🐄 Cabeças',            format: fmtN     },
     { brl: 'qtdNfs',   usd: null,           label: '📄 Nº de NFs',          format: v => Number(v).toLocaleString('pt-BR') },
     { brl: 'funrural', usd: 'funruralUsd',  label: '🌿 FUNRURAL',           format: fmtMoeda },
     { brl: 'fethab',   usd: 'fethabUsd',    label: '🚛 FETHAB',             format: fmtMoeda },
@@ -633,10 +673,11 @@ function renderAnualTable() {
     if (isAnterior && status !== 'fechado') {
       const recValor = getValor(m, 'receita') || 0;
       const sacasVal = getValor(m, 'sacas')   || 0;
+      const cabecasVal = getValor(m, 'cabecas') || 0;
       const nfsVal   = getValor(m, 'qtdNfs')  || 0;
       const funVal   = getValor(m, 'funrural') || 0;
       action = `<button class="btn btn-sm btn-success"
-        onclick="abrirModalFechar(${m.mes},${m.ano},'${emp}',${recValor},${sacasVal},${nfsVal},${funVal})"
+        onclick="abrirModalFechar(${m.mes},${m.ano},'${emp}',${recValor},${sacasVal},${cabecasVal},${nfsVal},${funVal})"
         style="font-size:11px;padding:4px 10px;">
         <i class="fa-solid fa-lock"></i> Fechar Mês
       </button>`;
@@ -653,12 +694,21 @@ function renderAnualTable() {
 // ─────────────────────────────────────────────
 // Modal de Fechamento
 // ─────────────────────────────────────────────
-function abrirModalFechar(mes, ano, empresa, receita, sacas, nfs, funrural) {
+function abrirModalFechar(mes, ano, empresa, receita, sacas, cabecas, nfs, funrural) {
   state.fecharPending = { mes, ano, empresa };
   document.getElementById('modal-mes-ano').textContent  = `${NOMES_MES[mes-1]}/${ano}`;
   document.getElementById('modal-empresa').textContent  = empresa;
   document.getElementById('modal-receita').textContent  = fmtMoeda(receita);
-  document.getElementById('modal-sacas').textContent    = fmtN(sacas);
+  
+  let qCell = '';
+  if (sacas > 0 && cabecas > 0) {
+    qCell = `${fmtN(sacas)} Sc / ${fmtN(cabecas)} Cab`;
+  } else if (cabecas > 0) {
+    qCell = `${fmtN(cabecas)} Cab`;
+  } else {
+    qCell = fmtN(sacas);
+  }
+  document.getElementById('modal-sacas').textContent    = qCell;
   document.getElementById('modal-nfs').textContent      = Number(nfs).toLocaleString('pt-BR');
   document.getElementById('modal-funrural').textContent = fmtMoeda(funrural);
   document.getElementById('modal-fechar').classList.add('open');
