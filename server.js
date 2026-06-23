@@ -427,114 +427,136 @@ app.get('/api/notas/:chave/itens', async (req, res) => {
 // MÓDULO FECHAMENTO FINANCEIRO — RECEITAS
 // ============================================================
 
-// SQL principal de Receitas (UNION Saídas + Entradas)
-function buildReceitaSQL(binds) {
+// SQL principal de Receitas (UNION Saídas + Entradas) com cotação do dólar (PTAX)
+// Estrutura em 3 camadas:
+//   1. UNION interno (distinct): dados brutos SF2020 + SF1020
+//   2. Camada intermediária: busca COTACAO_DOLAR via scalar subquery em SM2020
+//      Regra: busca M2_PTAX com M2_DATA <= (data_nf - 1 dia), ORDER BY DESC → ROWNUM = 1
+//      Assim garante fallback automático para qualquer dia anterior com cotação disponível.
+// NOTA: SM2020.M2_DATA assumido em formato 'YYYYMMDD' (VARCHAR2). Se for tipo DATE, remover to_char().
+// NOTA: SM2020.M2_PTAX é o campo da cotação PTAX. Verifique o nome correto no banco se necessário.
+function buildReceitaSQL() {
   return `
-    SELECT * FROM (
-      SELECT distinct
-        f2_filial                             AS EMPRESA,
-        to_date(F2_EMISSAO, 'yyyy/mm/dd')     AS EMISSAO,
-        TRIM(F2_DOC)                           AS NF,
-        decode(f2_tipo,'D',
-          (select SUBSTR(a2.a2_nome,1,30) from protheus11.sa2020 a2
-            where a2.a2_cod=f2_cliente and a2.a2_loja=f2_loja and a2.d_e_l_e_t_<>'*'),
-          (select SUBSTR(a1.a1_nome,1,30) from protheus11.sa1020 a1
-            where a1.a1_cod=f2_cliente and a1.a1_loja=f2_loja and a1.d_e_l_e_t_<>'*')
-        )                                      AS NOME_CLIENTE,
-        C5_CONTRAT                             AS CONTRPAI,
-        C5_SUBCOO                              AS CONTRFILHO,
-        TRIM(D2_CF)                            AS CFOP,
-        D2_QUANT                               AS QUANT,
-        (d2_total + d2_valfre)                 AS TOTAL,
-        SUBSTR(B1_desc,1,35)                   AS PRODUTO,
-        TRIM(F2_TIPO)                          AS TPDOC,
-        D2_QUANT/60                            AS SACAS,
-        D2_PRCVEN                              AS VLR_UNIT,
-        F2_VALFAC                              AS VLR_FACS,
-        F2_VALFET                              AS VLR_FETHAB,
-        F2_CONTSOC                             AS VL_FUNRURAL,
-        SUBSTR(C5_NOMTRAN,1,25)                AS TRANSP,
-        C5.C5_VEICULO                          AS PLACA,
-        TRIM(B1_GRUPO)                         AS B1_GRUPO,
-        CASE
-          WHEN TRIM(B1_GRUPO) = '0203003' THEN 'Pecuária'
-          WHEN TRIM(B1_GRUPO) = '0402008' THEN 'Agricultura'
-          ELSE 'Outros'
-        END                                    AS TIPO_NEGOCIO
-      FROM protheus11.sc5020 c5,
-           protheus11.sc6020 c6,
-           protheus11.sf2020 f2,
-           protheus11.sd2020 d2,
-           protheus11.sb1020 b1
-      WHERE c5.c5_num      = c6.c6_num
-        AND D2.D2_PEDIDO   = c5.c5_num
-        AND c5.c5_filial   = c6.c6_filial
-        AND F2.F2_FILIAL   = c6.c6_filial
-        AND D2.D2_FILIAL   = f2.f2_filial
-        AND d2.d2_cod      = b1.b1_cod
-        AND f2.f2_doc      = d2.d2_doc
-        AND f2.f2_serie    = d2.d2_serie
-        AND f2.f2_cliente  = d2.d2_cliente
-        AND f2.f2_loja     = d2.d2_loja
-        AND c5.d_e_l_e_t_ <> '*'
-        AND c6.d_e_l_e_t_ <> '*'
-        AND f2.d_e_l_e_t_ <> '*'
-        AND d2.d_e_l_e_t_ <> '*'
-        AND b1.d_e_l_e_t_ <> '*'
-        AND to_date(F2_EMISSAO,'yyyy/mm/dd') >= to_date(:data_de,'yyyy-mm-dd')
-        AND to_date(F2_EMISSAO,'yyyy/mm/dd') <= to_date(:data_ate,'yyyy-mm-dd')
-        AND D2_CF NOT IN ('5949','5905','5151','5910','5201','5208')
-        AND F2.F2_FILIAL IN ('028501','028503')
+    SELECT OUTER_Q.*,
+      CASE WHEN OUTER_Q.COTACAO_DOLAR > 0 THEN OUTER_Q.TOTAL       / OUTER_Q.COTACAO_DOLAR ELSE NULL END AS TOTAL_USD,
+      CASE WHEN OUTER_Q.COTACAO_DOLAR > 0 THEN OUTER_Q.VLR_FACS    / OUTER_Q.COTACAO_DOLAR ELSE NULL END AS VLR_FACS_USD,
+      CASE WHEN OUTER_Q.COTACAO_DOLAR > 0 THEN OUTER_Q.VLR_FETHAB  / OUTER_Q.COTACAO_DOLAR ELSE NULL END AS VLR_FETHAB_USD,
+      CASE WHEN OUTER_Q.COTACAO_DOLAR > 0 THEN OUTER_Q.VL_FUNRURAL / OUTER_Q.COTACAO_DOLAR ELSE NULL END AS VL_FUNRURAL_USD
+    FROM (
+      SELECT MID_Q.*,
+        (SELECT PTAX FROM (
+           SELECT SM.M2_PTAX AS PTAX
+           FROM protheus11.SM2020 SM
+           WHERE SM.M2_DATA <= to_char(MID_Q.EMISSAO - 1,'yyyymmdd')
+             AND SM.D_E_L_E_T_ <> '*'
+           ORDER BY SM.M2_DATA DESC
+         ) WHERE ROWNUM = 1) AS COTACAO_DOLAR
+      FROM (
+        SELECT distinct
+          f2_filial                             AS EMPRESA,
+          to_date(F2_EMISSAO, 'yyyy/mm/dd')     AS EMISSAO,
+          TRIM(F2_DOC)                           AS NF,
+          decode(f2_tipo,'D',
+            (select SUBSTR(a2.a2_nome,1,30) from protheus11.sa2020 a2
+              where a2.a2_cod=f2_cliente and a2.a2_loja=f2_loja and a2.d_e_l_e_t_<>'*'),
+            (select SUBSTR(a1.a1_nome,1,30) from protheus11.sa1020 a1
+              where a1.a1_cod=f2_cliente and a1.a1_loja=f2_loja and a1.d_e_l_e_t_<>'*')
+          )                                      AS NOME_CLIENTE,
+          C5_CONTRAT                             AS CONTRPAI,
+          C5_SUBCOO                              AS CONTRFILHO,
+          TRIM(D2_CF)                            AS CFOP,
+          D2_QUANT                               AS QUANT,
+          (d2_total + d2_valfre)                 AS TOTAL,
+          SUBSTR(B1_desc,1,35)                   AS PRODUTO,
+          TRIM(F2_TIPO)                          AS TPDOC,
+          D2_QUANT/60                            AS SACAS,
+          D2_PRCVEN                              AS VLR_UNIT,
+          F2_VALFAC                              AS VLR_FACS,
+          F2_VALFET                              AS VLR_FETHAB,
+          F2_CONTSOC                             AS VL_FUNRURAL,
+          SUBSTR(C5_NOMTRAN,1,25)                AS TRANSP,
+          C5.C5_VEICULO                          AS PLACA,
+          TRIM(B1_GRUPO)                         AS B1_GRUPO,
+          CASE
+            WHEN TRIM(B1_GRUPO) = '0203003' THEN 'Pecuária'
+            WHEN TRIM(B1_GRUPO) = '0402008' THEN 'Agricultura'
+            ELSE 'Outros'
+          END                                    AS TIPO_NEGOCIO
+        FROM protheus11.sc5020 c5,
+             protheus11.sc6020 c6,
+             protheus11.sf2020 f2,
+             protheus11.sd2020 d2,
+             protheus11.sb1020 b1
+        WHERE c5.c5_num      = c6.c6_num
+          AND D2.D2_PEDIDO   = c5.c5_num
+          AND c5.c5_filial   = c6.c6_filial
+          AND F2.F2_FILIAL   = c6.c6_filial
+          AND D2.D2_FILIAL   = f2.f2_filial
+          AND d2.d2_cod      = b1.b1_cod
+          AND f2.f2_doc      = d2.d2_doc
+          AND f2.f2_serie    = d2.d2_serie
+          AND f2.f2_cliente  = d2.d2_cliente
+          AND f2.f2_loja     = d2.d2_loja
+          AND c5.d_e_l_e_t_ <> '*'
+          AND c6.d_e_l_e_t_ <> '*'
+          AND f2.d_e_l_e_t_ <> '*'
+          AND d2.d_e_l_e_t_ <> '*'
+          AND b1.d_e_l_e_t_ <> '*'
+          AND to_date(F2_EMISSAO,'yyyy/mm/dd') >= to_date(:data_de,'yyyy-mm-dd')
+          AND to_date(F2_EMISSAO,'yyyy/mm/dd') <= to_date(:data_ate,'yyyy-mm-dd')
+          AND D2_CF NOT IN ('5949','5905','5151','5910','5201','5208')
+          AND F2.F2_FILIAL IN ('028501','028503')
 
-      UNION
+        UNION
 
-      SELECT distinct
-        f1_filial                              AS EMPRESA,
-        to_date(F1_EMISSAO,'yyyy/mm/dd')       AS EMISSAO,
-        TRIM(D1_DOC)                           AS NF,
-        decode(d1_TIPO,'D',
-          (select SUBSTR(a2.a2_nome,1,30) from protheus11.sa2020 a2
-            where a2.a2_cod=F1_fornece and a2.a2_loja=d1_loja and a2.d_e_l_e_t_<>'*'),
-          (select SUBSTR(a1.a1_nome,1,30) from protheus11.sa1020 a1
-            where a1.a1_cod=F1_fornece and a1.a1_loja=d1_loja and a1.d_e_l_e_t_<>'*')
-        )                                      AS NOME_CLIENTE,
-        'ENTRADA'                              AS CONTRPAI,
-        'ENTRADA'                              AS CONTRFILHO,
-        TRIM(D1_CF)                            AS CFOP,
-        D1_QUANT * -1                          AS QUANT,
-        d1_total * -1                          AS TOTAL,
-        SUBSTR(B1_desc,1,35)                   AS PRODUTO,
-        TRIM(d1_TIPO)                          AS TPDOC,
-        D1_QUANT / 60                          AS SACAS,
-        D1_VUNIT                               AS VLR_UNIT,
-        D1_VALFAC * -1                         AS VLR_FACS,
-        D1_VALFET                              AS VLR_FETHAB,
-        F1_CONTSOC * -1                        AS VL_FUNRURAL,
-        SUBSTR(F1_TRANSP,1,25)                 AS TRANSP,
-        'ENTRADA'                              AS PLACA,
-        TRIM(B1_GRUPO)                         AS B1_GRUPO,
-        CASE
-          WHEN TRIM(B1_GRUPO) = '0203003' THEN 'Pecuária'
-          WHEN TRIM(B1_GRUPO) = '0402008' THEN 'Agricultura'
-          ELSE 'Outros'
-        END                                    AS TIPO_NEGOCIO
-      FROM protheus11.sf1020 f1,
-           protheus11.sd1020 d1,
-           protheus11.sb1020 b1
-      WHERE D1.D1_FILIAL  = f1.f1_filial
-        AND d1.d1_cod     = b1.b1_cod
-        AND f1.f1_doc     = d1.d1_doc
-        AND f1.f1_serie   = d1.d1_serie
-        AND f1.f1_fornece = d1.d1_fornece
-        AND f1.f1_loja    = d1.d1_loja
-        AND f1.d_e_l_e_t_ <> '*'
-        AND d1.d_e_l_e_t_ <> '*'
-        AND b1.d_e_l_e_t_ <> '*'
-        AND to_date(F1_EMISSAO,'yyyy/mm/dd') >= to_date(:data_de,'yyyy-mm-dd')
-        AND to_date(F1_EMISSAO,'yyyy/mm/dd') <= to_date(:data_ate,'yyyy-mm-dd')
-        AND D1_CF NOT IN ('1906','1151','1101','1933','1356','1922','1910','1209')
-        AND f1.f1_filial IN ('028501','028503')
-    )
+        SELECT distinct
+          f1_filial                              AS EMPRESA,
+          to_date(F1_EMISSAO,'yyyy/mm/dd')       AS EMISSAO,
+          TRIM(D1_DOC)                           AS NF,
+          decode(d1_TIPO,'D',
+            (select SUBSTR(a2.a2_nome,1,30) from protheus11.sa2020 a2
+              where a2.a2_cod=F1_fornece and a2.a2_loja=d1_loja and a2.d_e_l_e_t_<>'*'),
+            (select SUBSTR(a1.a1_nome,1,30) from protheus11.sa1020 a1
+              where a1.a1_cod=F1_fornece and a1.a1_loja=d1_loja and a1.d_e_l_e_t_<>'*')
+          )                                      AS NOME_CLIENTE,
+          'ENTRADA'                              AS CONTRPAI,
+          'ENTRADA'                              AS CONTRFILHO,
+          TRIM(D1_CF)                            AS CFOP,
+          D1_QUANT * -1                          AS QUANT,
+          d1_total * -1                          AS TOTAL,
+          SUBSTR(B1_desc,1,35)                   AS PRODUTO,
+          TRIM(d1_TIPO)                          AS TPDOC,
+          D1_QUANT / 60                          AS SACAS,
+          D1_VUNIT                               AS VLR_UNIT,
+          D1_VALFAC * -1                         AS VLR_FACS,
+          D1_VALFET                              AS VLR_FETHAB,
+          F1_CONTSOC * -1                        AS VL_FUNRURAL,
+          SUBSTR(F1_TRANSP,1,25)                 AS TRANSP,
+          'ENTRADA'                              AS PLACA,
+          TRIM(B1_GRUPO)                         AS B1_GRUPO,
+          CASE
+            WHEN TRIM(B1_GRUPO) = '0203003' THEN 'Pecuária'
+            WHEN TRIM(B1_GRUPO) = '0402008' THEN 'Agricultura'
+            ELSE 'Outros'
+          END                                    AS TIPO_NEGOCIO
+        FROM protheus11.sf1020 f1,
+             protheus11.sd1020 d1,
+             protheus11.sb1020 b1
+        WHERE D1.D1_FILIAL  = f1.f1_filial
+          AND d1.d1_cod     = b1.b1_cod
+          AND f1.f1_doc     = d1.d1_doc
+          AND f1.f1_serie   = d1.d1_serie
+          AND f1.f1_fornece = d1.d1_fornece
+          AND f1.f1_loja    = d1.d1_loja
+          AND f1.d_e_l_e_t_ <> '*'
+          AND d1.d_e_l_e_t_ <> '*'
+          AND b1.d_e_l_e_t_ <> '*'
+          AND to_date(F1_EMISSAO,'yyyy/mm/dd') >= to_date(:data_de,'yyyy-mm-dd')
+          AND to_date(F1_EMISSAO,'yyyy/mm/dd') <= to_date(:data_ate,'yyyy-mm-dd')
+          AND D1_CF NOT IN ('1906','1151','1101','1933','1356','1922','1910','1209')
+          AND f1.f1_filial IN ('028501','028503')
+      ) MID_Q
+    ) OUTER_Q
   `;
 }
 
@@ -578,7 +600,7 @@ function getMesesCalendario(ano) {
   return Array.from({ length: 12 }, (_, i) => ({ ano, mes: i + 1 }));
 }
 
-// Agrega linhas do SQL em totais por mês/empresa
+// Agrega linhas do SQL em totais por mês/empresa (BRL + USD)
 function agregarPorMes(rows) {
   const map = {};
   for (const r of rows) {
@@ -592,14 +614,20 @@ function agregarPorMes(rows) {
         ano: d.getFullYear(),
         mes: d.getMonth() + 1,
         receita: 0, sacas: 0, qtdNfs: new Set(),
-        funrural: 0, fethab: 0, vlrFacs: 0
+        funrural: 0, fethab: 0, vlrFacs: 0,
+        // Campos USD
+        receitaUsd: 0, funruralUsd: 0, fethabUsd: 0, vlrFacsUsd: 0
       };
     }
-    map[key].receita  += Number(r.TOTAL   || 0);
-    map[key].sacas    += Number(r.SACAS   || 0);
-    map[key].funrural += Number(r.VL_FUNRURAL || 0);
-    map[key].fethab   += Number(r.VLR_FETHAB  || 0);
-    map[key].vlrFacs  += Number(r.VLR_FACS    || 0);
+    map[key].receita     += Number(r.TOTAL         || 0);
+    map[key].sacas       += Number(r.SACAS         || 0);
+    map[key].funrural    += Number(r.VL_FUNRURAL   || 0);
+    map[key].fethab      += Number(r.VLR_FETHAB    || 0);
+    map[key].vlrFacs     += Number(r.VLR_FACS      || 0);
+    map[key].receitaUsd  += Number(r.TOTAL_USD     || 0);
+    map[key].funruralUsd += Number(r.VL_FUNRURAL_USD || 0);
+    map[key].fethabUsd   += Number(r.VLR_FETHAB_USD  || 0);
+    map[key].vlrFacsUsd  += Number(r.VLR_FACS_USD    || 0);
     if (r.NF) map[key].qtdNfs.add(r.NF);
   }
   return Object.values(map).map(v => ({ ...v, qtdNfs: v.qtdNfs.size }));

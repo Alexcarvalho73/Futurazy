@@ -152,7 +152,32 @@
       border-top: 2px solid var(--border-color);
     }
 
-    /* Badges tipo negócio */
+    /* Moeda Toggle */
+    .moeda-toggle-group {
+      display: flex;
+      gap: 0;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid var(--border-color);
+    }
+    .moeda-btn {
+      padding: 8px 14px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      border: none;
+      background: rgba(255,255,255,.04);
+      color: var(--text-muted);
+      transition: all .2s;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      letter-spacing: .04em;
+    }
+    .moeda-btn:hover { background: rgba(255,255,255,.08); color: var(--text-white); }
+    .moeda-btn.active[data-moeda="BRL"] { background: rgba(16,185,129,.15); color: #10b981; }
+    .moeda-btn.active[data-moeda="USD"] { background: rgba(245,158,11,.15);  color: #f59e0b; }
+    .moeda-btn + .moeda-btn { border-left: 1px solid var(--border-color); }
     .badge-agro { background:rgba(16,185,129,.15); color:#10b981; padding:2px 7px; border-radius:4px; font-size:10px; font-weight:700; }
     .badge-pec  { background:rgba(245,158,11,.15);  color:#f59e0b; padding:2px 7px; border-radius:4px; font-size:10px; font-weight:700; }
     .badge-out  { background:rgba(100,116,139,.15); color:#94a3b8; padding:2px 7px; border-radius:4px; font-size:10px; font-weight:700; }
@@ -418,6 +443,16 @@
           </p>
         </div>
         <div class="page-header-actions">
+          <!-- Toggle Moeda -->
+          <div class="moeda-toggle-group" title="Selecionar moeda de visualização">
+            <button class="moeda-btn active" data-moeda="BRL" id="btn-moeda-brl">
+              <i class="fa-solid fa-brazilian-real-sign"></i> Real
+            </button>
+            <button class="moeda-btn" data-moeda="USD" id="btn-moeda-usd">
+              <i class="fa-solid fa-dollar-sign"></i> Dólar
+            </button>
+          </div>
+          <!-- Toggle Calendário -->
           <button class="btn btn-toggle-cal" id="btn-toggle-cal">
             <i class="fa-solid fa-seedling"></i>
             <span id="label-cal">Safra Agrícola</span>
