@@ -50,6 +50,7 @@ app.get('/api/notas', async (req, res) => {
   const vencimento_de = req.query.vencimento_de || '';
   const vencimento_ate = req.query.vencimento_ate || '';
   const search = req.query.search || '';
+  const xml_confco = req.query.xml_confco || 'todos';
 
   const maxRow = page * limit;
   const minRow = (page - 1) * limit;
@@ -78,6 +79,7 @@ app.get('/api/notas', async (req, res) => {
         XM.XML_DEST,
         XM.XML_TPNF,
         XM.D_E_L_E_T_,
+        XM.XML_CONFCO,
         -- Lógica de Filial Calculada
         CASE
           WHEN TRIM(XM.XML_FIL) IS NOT NULL AND TRIM(XM.XML_FIL) <> ' ' THEN TRIM(XM.XML_FIL)
@@ -151,8 +153,72 @@ app.get('/api/notas', async (req, res) => {
     ) XM
   `;
 
-  let whereClause = ' WHERE 1 = 1';
-  const binds = {};
+  let baseWhere = ' WHERE 1 = 1';
+  const baseBinds = {};
+
+  // Filial
+  if (filial) {
+    baseWhere += " AND XM.XML_FIL_CALC = :filial";
+    baseBinds.filial = filial.trim();
+  }
+
+  // Fornecedor (Nome ou CNPJ)
+  if (fornecedor) {
+    baseWhere += " AND (XM.XML_EMIT LIKE :fornecedor OR UPPER(XM.XML_NOMEMT) LIKE :fornecedor)";
+    baseBinds.fornecedor = `%${fornecedor.trim().toUpperCase()}%`;
+  }
+
+  // Número NF
+  if (numnf) {
+    baseWhere += " AND XM.XML_NUMNF LIKE :numnf";
+    baseBinds.numnf = `%${numnf.trim()}%`;
+  }
+
+  // Datas de Emissão
+  if (emissao_de) {
+    baseWhere += " AND XM.XML_EMISSA >= :emissao_de";
+    baseBinds.emissao_de = emissao_de.replace(/-/g, '');
+  }
+  if (emissao_ate) {
+    baseWhere += " AND XM.XML_EMISSA <= :emissao_ate";
+    baseBinds.emissao_ate = emissao_ate.replace(/-/g, '');
+  }
+
+  // Datas de Vencimento
+  if (vencimento_de) {
+    baseWhere += " AND XM.XML_DTRVLD >= :vencimento_de";
+    baseBinds.vencimento_de = vencimento_de.replace(/-/g, '');
+  }
+  if (vencimento_ate) {
+    baseWhere += " AND XM.XML_DTRVLD <= :vencimento_ate";
+    baseBinds.vencimento_ate = vencimento_ate.replace(/-/g, '');
+  }
+
+  // Busca Geral
+  if (search) {
+    baseWhere += " AND (XM.XML_NUMNF LIKE :search OR UPPER(XM.XML_NOMEMT) LIKE :search OR XM.XML_CHAVE LIKE :search)";
+    baseBinds.search = `%${search.trim().toUpperCase()}%`;
+  }
+
+  // Filtro de Conferência Comercial (xml_confco)
+  if (xml_confco === 'sim') {
+    baseWhere += " AND XM.XML_CONFCO <> ' ' AND XM.XML_CONFCO IS NOT NULL";
+  } else if (xml_confco === 'nao') {
+    baseWhere += " AND (XM.XML_CONFCO = ' ' OR XM.XML_CONFCO IS NULL)";
+  }
+
+  // Query de Totalizadores para os KPI Cards
+  const summarySql = `
+    SELECT 
+      SUM(CASE WHEN XML_CATEGORIA = 'Pendente' THEN 1 ELSE 0 END) as PENDENTES,
+      SUM(CASE WHEN XML_CATEGORIA = 'Concluido' THEN 1 ELSE 0 END) as CONCLUIDOS
+    FROM (${baseQuery}) XM
+    ${baseWhere}
+  `;
+
+  // Query do total de registros paginados
+  let whereClause = baseWhere;
+  const listBinds = { ...baseBinds };
 
   // Filtro de Fluxo (Categoria)
   if (fluxo === 'pendentes') {
@@ -164,51 +230,7 @@ app.get('/api/notas', async (req, res) => {
   // Filtro de Status Específico
   if (status && status !== 'todos') {
     whereClause += " AND XM.XML_STATUS = :status";
-    binds.status = status;
-  }
-
-  // Filial
-  if (filial) {
-    whereClause += " AND XM.XML_FIL_CALC = :filial";
-    binds.filial = filial.trim();
-  }
-
-  // Fornecedor (Nome ou CNPJ)
-  if (fornecedor) {
-    whereClause += " AND (XM.XML_EMIT LIKE :fornecedor OR UPPER(XM.XML_NOMEMT) LIKE :fornecedor)";
-    binds.fornecedor = `%${fornecedor.trim().toUpperCase()}%`;
-  }
-
-  // Número NF
-  if (numnf) {
-    whereClause += " AND XM.XML_NUMNF LIKE :numnf";
-    binds.numnf = `%${numnf.trim()}%`;
-  }
-
-  // Datas de Emissão
-  if (emissao_de) {
-    whereClause += " AND XM.XML_EMISSA >= :emissao_de";
-    binds.emissao_de = emissao_de.replace(/-/g, '');
-  }
-  if (emissao_ate) {
-    whereClause += " AND XM.XML_EMISSA <= :emissao_ate";
-    binds.emissao_ate = emissao_ate.replace(/-/g, '');
-  }
-
-  // Datas de Vencimento
-  if (vencimento_de) {
-    whereClause += " AND XM.XML_DTRVLD >= :vencimento_de";
-    binds.vencimento_de = vencimento_de.replace(/-/g, '');
-  }
-  if (vencimento_ate) {
-    whereClause += " AND XM.XML_DTRVLD <= :vencimento_ate";
-    binds.vencimento_ate = vencimento_ate.replace(/-/g, '');
-  }
-
-  // Busca Geral (mantida para compatibilidade e flexibilidade)
-  if (search) {
-    whereClause += " AND (XM.XML_NUMNF LIKE :search OR UPPER(XM.XML_NOMEMT) LIKE :search OR XM.XML_CHAVE LIKE :search)";
-    binds.search = `%${search.trim().toUpperCase()}%`;
+    listBinds.status = status;
   }
 
   const countSql = `
@@ -248,16 +270,26 @@ app.get('/api/notas', async (req, res) => {
   `;
 
   try {
-    const totalRows = await db.execute(countSql, binds);
+    // Executar a query de resumo/totalizadores
+    const summaryRows = await db.execute(summarySql, baseBinds);
+    const totalPendentes = summaryRows[0]?.PENDENTES || 0;
+    const totalConcluidos = summaryRows[0]?.CONCLUIDOS || 0;
+
+    // Executar a contagem da lista filtrada
+    const totalRows = await db.execute(countSql, listBinds);
     const total = totalRows[0]?.TOTAL || 0;
 
-    const queryBinds = { ...binds, maxRow, minRow };
+    // Executar a query paginada da lista
+    const queryBinds = { ...listBinds, maxRow, minRow };
     const rows = await db.execute(querySql, queryBinds);
+
     res.json({
       success: true,
       page,
       limit,
       total,
+      totalPendentes,
+      totalConcluidos,
       data: rows
     });
   } catch (err) {
@@ -284,7 +316,7 @@ app.get('/api/notas/:chave/itens', async (req, res) => {
       XIT_PRCNFE,
       TRIM(FT_PRODUTO) as FT_PRODUTO, 
       TRIM(XIT_DESCRI) as XIT_DESCRI, 
-      D1_NFORI, XIT_CFNFE, FT_TES, FT_CFOP, XIT_NCM, FT_POSIPI, XIT_QTENFE, FT_QUANT, XIT_TOTNFE, FT_TOTAL, FT_DESPESA, FT_SEGURO,
+      D1_NFORI, XIT_CFNFE, FT_TES, FT_CFOP, TRIM(D1_TES) as D1_TES, TRIM(D1_CF) as D1_CF, XIT_NCM, FT_POSIPI, XIT_QTENFE, FT_QUANT, XIT_TOTNFE, FT_TOTAL, FT_DESPESA, FT_SEGURO,
       FT_FRETE, FT_VALPEDG, XIT_CSTORI, XIT_BASICM, XIT_PICM, XIT_VALICM, XIT_PREDBC, FT_CLASFIS, FT_BASEICM, FT_ALIQICM, FT_VALICM, FT_ISENICM, FT_OUTRICM, FT_OBSICM, D1_VALICM, D1_ICMSCOM, XIT_BASRET,
       XIT_PMVA, XIT_PICMST, XIT_VALRET, XIT_BRETAN, XIT_VRETAN, XIT_ICMSUB, XIT_PRETST, FT_BASERET, FT_MARGEM, FT_ICMSRET, FT_OBSSOL, FT_SOLTRIB, XIT_CSTIPI, XIT_BASIPI, XIT_PIPI, XIT_VALIPI, FT_CTIPI,
       FT_BASEIPI, FT_VALIPI, FT_ISENIPI, FT_OUTRIPI, D1_VALIPI, XIT_CSTPIS, XIT_BASPIS, XIT_PPIS, XIT_VALPIS, FT_CSTPIS, FT_BASEPIS, FT_ALIQPIS, FT_VALPIS, XIT_CSTCOF, XIT_BASCOF, XIT_PCOF, XIT_VALCOF,
@@ -339,7 +371,7 @@ app.get('/api/notas/:chave/itens', async (req, res) => {
       0 AS XIT_PRCNFE,
       TRIM(FT_PRODUTO) as FT_PRODUTO, 
       TRIM(XIM_PRPRED) as XIT_DESCRI, 
-      D1_NFORI, XML_NATOPE XIT_CFNFE, FT_TES, FT_CFOP, ' ' XIT_NCM,
+      D1_NFORI, XML_NATOPE XIT_CFNFE, FT_TES, FT_CFOP, TRIM(D1_TES) as D1_TES, TRIM(D1_CF) as D1_CF, ' ' XIT_NCM,
       FT_POSIPI, 0 AS XIT_QTENFE, FT_QUANT, XML_VLRDOC AS XIT_TOTNFE, FT_TOTAL, FT_DESPESA, FT_SEGURO, FT_FRETE, FT_VALPEDG, XIM_CST XIT_CSTORI, XIM_BASICM AS XIT_BASICM, XIM_ALQICM AS XIT_PICM,
       XIM_VALICM AS XIT_VALICM, XIM_PICRED AS XIT_PREDBC, FT_CLASFIS, FT_BASEICM, FT_ALIQICM, FT_VALICM, FT_ISENICM, FT_OUTRICM, FT_OBSICM, D1_VALICM, D1_ICMSCOM, XIM_BRICMS AS XIT_BASRET,
       0 AS XIT_PMVA, XIM_PICRET AS XIT_PICMST, XIM_ICMRET AS XIT_VALRET, 0 AS XIT_BRETAN, 0 AS XIT_VRETAN, 0 AS XIT_ICMSUB, 0 AS XIT_PRETST, FT_BASERET, FT_MARGEM, FT_ICMSRET, FT_OBSSOL, FT_SOLTRIB,

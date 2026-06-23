@@ -32,6 +32,7 @@ const filterEmissaoDe = document.getElementById('filter-emissao-de');
 const filterEmissaoAte = document.getElementById('filter-emissao-ate');
 const filterVencimentoDe = document.getElementById('filter-vencimento-de');
 const filterVencimentoAte = document.getElementById('filter-vencimento-ate');
+const filterXmlConfco = document.getElementById('filter-xmlconfco');
 
 const btnApplyFilters = document.getElementById('btn-apply-filters');
 const btnClearFilters = document.getElementById('btn-clear-filters');
@@ -196,7 +197,8 @@ async function loadHeaders() {
       emissao_de: filterEmissaoDe.value,
       emissao_ate: filterEmissaoAte.value,
       vencimento_de: filterVencimentoDe.value,
-      vencimento_ate: filterVencimentoAte.value
+      vencimento_ate: filterVencimentoAte.value,
+      xml_confco: filterXmlConfco.value
     });
 
     const url = `/api/notas?${params.toString()}`;
@@ -206,6 +208,10 @@ async function loadHeaders() {
     if (result.success) {
       renderHeaders(result.data);
       updatePaginationControls(result.page, result.limit, result.total);
+      
+      // Atualizar cards de totalização
+      document.getElementById('val-total-pendentes').textContent = Number(result.totalPendentes || 0).toLocaleString('pt-BR');
+      document.getElementById('val-total-concluidos').textContent = Number(result.totalConcluidos || 0).toLocaleString('pt-BR');
     } else {
       alert('Erro ao carregar cabeçalhos: ' + result.error);
     }
@@ -308,6 +314,8 @@ function renderItems(data) {
         <td class="text-center">${getItemStatusDot(item)}</td>
         <td>${escapeHTML(item.XIT_ITEM)}</td>
         <td>${escapeHTML(item.XIT_CODNFE || item.FT_PRODUTO)}</td>
+        <td>${escapeHTML(item.D1_TES || item.FT_TES || '')}</td>
+        <td>${escapeHTML(item.D1_CF || item.FT_CFOP || '')}</td>
         <td title="${escapeHTML(desc)}">${escapeHTML(desc)}</td>
         <td class="text-right font-numeric">${Number(item.XIT_QTENFE || item.FT_QUANT || 0).toLocaleString('pt-BR')}</td>
         <td>${escapeHTML(item.XIT_UMNFE || 'UN')}</td>
@@ -384,6 +392,7 @@ btnClearFilters.addEventListener('click', () => {
   filterEmissaoAte.value = '';
   filterVencimentoDe.value = '';
   filterVencimentoAte.value = '';
+  filterXmlConfco.value = 'todos';
   
   currentPage = 1;
   loadHeaders();
@@ -396,9 +405,9 @@ const centralXmlLayout = document.querySelector('.central-xml-layout');
 
 function adjustLayoutHeight() {
   if (filtersCard.classList.contains('filters-collapsed')) {
-    centralXmlLayout.style.height = 'calc(100vh - 180px)';
+    centralXmlLayout.style.height = 'calc(100vh - 300px)';
   } else {
-    centralXmlLayout.style.height = 'calc(100vh - 350px)';
+    centralXmlLayout.style.height = 'calc(100vh - 470px)';
   }
 }
 
@@ -422,6 +431,11 @@ filterFluxo.addEventListener('change', () => {
 });
 
 filterStatus.addEventListener('change', () => {
+  currentPage = 1;
+  loadHeaders();
+});
+
+filterXmlConfco.addEventListener('change', () => {
   currentPage = 1;
   loadHeaders();
 });

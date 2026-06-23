@@ -47,6 +47,28 @@
         </div>
       </header>
 
+      <!-- KPI Cards Grid -->
+      <section class="kpi-grid" style="margin-bottom: 24px;">
+        <!-- Card 1: Total Pendentes -->
+        <div class="kpi-card" id="card-total-pendentes">
+          <div class="kpi-icon icon-orange"><i class="fa-solid fa-clock"></i></div>
+          <div class="kpi-data">
+            <h3>Total Pendentes</h3>
+            <h2 id="val-total-pendentes">0</h2>
+            <span class="kpi-sub">Notas a classificar</span>
+          </div>
+        </div>
+        <!-- Card 2: Total Concluídos -->
+        <div class="kpi-card" id="card-total-concluidos">
+          <div class="kpi-icon icon-green"><i class="fa-solid fa-circle-check"></i></div>
+          <div class="kpi-data">
+            <h3>Total Concluídos</h3>
+            <h2 id="val-total-concluidos">0</h2>
+            <span class="kpi-sub">Notas lançadas</span>
+          </div>
+        </div>
+      </section>
+
       <!-- Filters Section -->
       <section class="filters-card filters-collapsed">
         <div class="filters-header">
@@ -115,6 +137,15 @@
           <div class="filter-group">
             <label for="filter-vencimento-ate"><i class="fa-regular fa-calendar"></i> Vencimento Até</label>
             <input type="date" id="filter-vencimento-ate" class="form-control">
+          </div>
+          <!-- Conf. Comercial -->
+          <div class="filter-group">
+            <label for="filter-xmlconfco"><i class="fa-solid fa-list-check"></i> Conf. Comercial</label>
+            <select id="filter-xmlconfco" class="form-control">
+              <option value="todos" selected>Todos</option>
+              <option value="sim">Sim</option>
+              <option value="nao">Não</option>
+            </select>
           </div>
         </div>
       </section>
@@ -195,6 +226,8 @@
                     <th width="70" class="text-center">Status</th>
                     <th width="70">Item</th>
                     <th width="130">Código</th>
+                    <th width="80">D1 TES</th>
+                    <th width="80">D1 CF (CFOP)</th>
                     <th>Descrição do Item</th>
                     <th width="110" class="text-right">Qtd. XML</th>
                     <th width="75">U.M.</th>
