@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fechamento Financeiro — FuturazBI</title>
+  <meta name="description" content="Painel central de Fechamento Financeiro mensal da empresa — FuturazBI">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    /* ─── Hub de Fechamento ─── */
+    .fechamento-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .safra-badge {
+      background: linear-gradient(135deg, rgba(59,130,246,.2), rgba(139,92,246,.15));
+      border: 1px solid rgba(139,92,246,.35);
+      color: #a78bfa;
+      padding: 6px 16px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: .04em;
+    }
+
+    /* ─── Grid de Módulos ─── */
+    .modulos-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 20px;
+    }
+
+    .modulo-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      position: relative;
+      overflow: hidden;
+      transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease;
+      cursor: pointer;
+      text-decoration: none;
+      color: inherit;
+    }
+    .modulo-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      background: var(--card-accent, var(--color-primary));
+      border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    }
+    .modulo-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 20px 40px rgba(0,0,0,.3);
+      border-color: rgba(255,255,255,.12);
+    }
+    .modulo-card.disabled {
+      opacity: .45;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+
+    .modulo-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .modulo-icon {
+      width: 52px; height: 52px;
+      border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px;
+      flex-shrink: 0;
+    }
+    .modulo-badge {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .06em;
+      padding: 4px 10px;
+      border-radius: 20px;
+      text-transform: uppercase;
+    }
+    .badge-ativo    { background: rgba(16,185,129,.15); color: #10b981; border: 1px solid rgba(16,185,129,.3); }
+    .badge-breve    { background: rgba(100,116,139,.1);  color: #64748b; border: 1px solid rgba(100,116,139,.25); }
+    .badge-pendente { background: rgba(245,158,11,.15); color: #f59e0b; border: 1px solid rgba(245,158,11,.3); }
+
+    .modulo-titulo {
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--text-white);
+      margin-bottom: 4px;
+    }
+    .modulo-subtitulo {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    /* Barra de progresso dos meses */
+    .modulo-progresso {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .progresso-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .progresso-bar {
+      height: 6px;
+      background: rgba(255,255,255,.06);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .progresso-fill {
+      height: 100%;
+      border-radius: 3px;
+      background: linear-gradient(90deg, var(--card-accent, var(--color-primary)), rgba(255,255,255,.3));
+      transition: width .6s ease;
+    }
+
+    /* Meses pill-row */
+    .meses-pills {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+    .mes-pill {
+      width: 28px; height: 20px;
+      border-radius: 4px;
+      font-size: 9px;
+      font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    .pill-fechado  { background: rgba(16,185,129,.2);  color: #10b981; }
+    .pill-pendente { background: rgba(245,158,11,.2);  color: #f59e0b; }
+    .pill-futuro   { background: rgba(255,255,255,.05); color: #475569; }
+    .pill-atual    { background: rgba(59,130,246,.2);  color: #3b82f6; border: 1px solid rgba(59,130,246,.4); }
+
+    /* ─── Painel de Resumo Anual (futuro) ─── */
+    .resumo-anual-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 28px;
+    }
+    .resumo-anual-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    .resumo-anual-header h2 {
+      font-size: 18px;
+      color: var(--text-white);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .em-breve-overlay {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px;
+      gap: 12px;
+      color: var(--text-muted);
+    }
+    .em-breve-overlay i { font-size: 36px; opacity: .3; }
+    .em-breve-overlay p { font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="dashboard-container">
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="brand">
+        <i class="fa-solid fa-chart-line logo-icon"></i>
+        <h2>Futurazy<span>BI</span></h2>
+      </div>
+      <nav class="nav-menu">
+        <a href="index.html"><i class="fa-solid fa-house"></i> Dashboard</a>
+        <a href="notas.html"><i class="fa-solid fa-file-invoice-dollar"></i> Central XML</a>
+        <a href="fechamento.html" class="active"><i class="fa-solid fa-file-chart-column"></i> Fechamento</a>
+        <a href="#" class="nav-disabled"><i class="fa-solid fa-database"></i> Conexões</a>
+        <a href="#" class="nav-disabled"><i class="fa-solid fa-gears"></i> Configurações</a>
+      </nav>
+      <div class="connection-status">
+        <div class="status-indicator online"></div>
+        <span>Oracle DB: Conectado</span>
+      </div>
+    </aside>
+
+    <!-- Conteúdo Principal -->
+    <main class="main-content">
+
+      <!-- Header -->
+      <header class="fechamento-header">
+        <div class="header-title">
+          <h1>Fechamento Financeiro</h1>
+          <p>Painel de controle de fechamentos mensais por rubrica</p>
+        </div>
+        <div class="safra-badge" id="badge-safra">
+          <i class="fa-solid fa-seedling"></i> Safra <span id="txt-safra">…</span>
+        </div>
+      </header>
+
+      <!-- KPI Resumo rápido -->
+      <section class="kpi-grid" id="kpi-hub">
+        <div class="kpi-card">
+          <div class="kpi-icon icon-green"><i class="fa-solid fa-lock"></i></div>
+          <div class="kpi-data">
+            <h3>Meses Fechados</h3>
+            <h2 id="val-fechados">—</h2>
+            <span class="kpi-sub">Receitas consolidadas</span>
+          </div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon icon-orange"><i class="fa-solid fa-lock-open"></i></div>
+          <div class="kpi-data">
+            <h3>Pendentes de Fechar</h3>
+            <h2 id="val-pendentes">—</h2>
+            <span class="kpi-sub">Meses a consolidar</span>
+          </div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon icon-blue"><i class="fa-solid fa-calendar-check"></i></div>
+          <div class="kpi-data">
+            <h3>Mês de Referência</h3>
+            <h2 id="val-mes-ref">—</h2>
+            <span class="kpi-sub">Período em curso</span>
+          </div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon icon-purple"><i class="fa-solid fa-chart-pie"></i></div>
+          <div class="kpi-data">
+            <h3>Módulos Ativos</h3>
+            <h2>1 / 6</h2>
+            <span class="kpi-sub">Receitas habilitadas</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Grid de Módulos de Fechamento -->
+      <section>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+          <h2 style="font-size:17px; color:var(--text-white); display:flex; align-items:center; gap:8px;">
+            <i class="fa-solid fa-grid-2" style="color:var(--color-primary)"></i> Módulos de Fechamento
+          </h2>
+        </div>
+        <div class="modulos-grid" id="modulos-grid">
+
+          <!-- RECEITAS — Ativo -->
+          <a href="fechamento_receita.html" class="modulo-card" id="card-receitas"
+             style="--card-accent: #10b981;">
+            <div class="modulo-top">
+              <div class="modulo-icon" style="background:rgba(16,185,129,.12); color:#10b981;">
+                <i class="fa-solid fa-sack-dollar"></i>
+              </div>
+              <span class="modulo-badge badge-ativo">Ativo</span>
+            </div>
+            <div>
+              <div class="modulo-titulo">Receitas</div>
+              <div class="modulo-subtitulo">Receita Operacional Bruta: Vendas a Clientes, Vendas Intercompany</div>
+            </div>
+            <div class="modulo-progresso">
+              <div class="progresso-label">
+                <span>Progresso da Safra</span>
+                <span id="pct-receitas">Carregando…</span>
+              </div>
+              <div class="progresso-bar">
+                <div class="progresso-fill" id="bar-receitas" style="width:0%"></div>
+              </div>
+              <div class="meses-pills" id="pills-receitas">
+                <!-- Renderizado pelo JS -->
+              </div>
+            </div>
+          </a>
+
+          <!-- CUSTO OPERACIONAL DIRETO — Em breve -->
+          <div class="modulo-card disabled" style="--card-accent: #6366f1;">
+            <div class="modulo-top">
+              <div class="modulo-icon" style="background:rgba(99,102,241,.12); color:#6366f1;">
+                <i class="fa-solid fa-industry"></i>
+              </div>
+              <span class="modulo-badge badge-breve">Em Breve</span>
+            </div>
+            <div>
+              <div class="modulo-titulo">Custo Operacional Direto</div>
+              <div class="modulo-subtitulo">CAV / CMV — Resultado Bruto da Operação</div>
+            </div>
+          </div>
+
+          <!-- CUSTO OPERACIONAL INDIRETO — Em breve -->
+          <div class="modulo-card disabled" style="--card-accent: #8b5cf6;">
+            <div class="modulo-top">
+              <div class="modulo-icon" style="background:rgba(139,92,246,.12); color:#8b5cf6;">
+                <i class="fa-solid fa-gears"></i>
+              </div>
+              <span class="modulo-badge badge-breve">Em Breve</span>
+            </div>
+            <div>
+              <div class="modulo-titulo">Custo Operacional Indireto</div>
+              <div class="modulo-subtitulo">Dia-a-Dia, Manutenções, Combustíveis, Logística, Arrendamentos</div>
+            </div>
+          </div>
+
+          <!-- DESPESAS ADMINISTRATIVAS — Em breve -->
+          <div class="modulo-card disabled" style="--card-accent: #f59e0b;">
+            <div class="modulo-top">
+              <div class="modulo-icon" style="background:rgba(245,158,11,.12); color:#f59e0b;">
+                <i class="fa-solid fa-building-columns"></i>
+              </div>
+              <span class="modulo-badge badge-breve">Em Breve</span>
+            </div>
+            <div>
+              <div class="modulo-titulo">Despesas Administrativas</div>
+              <div class="modulo-subtitulo">Rateios administrativos e despesas de suporte</div>
+            </div>
+          </div>
+
+          <!-- EBITDA — Em breve -->
+          <div class="modulo-card disabled" style="--card-accent: #06b6d4;">
+            <div class="modulo-top">
+              <div class="modulo-icon" style="background:rgba(6,182,212,.12); color:#06b6d4;">
+                <i class="fa-solid fa-chart-line"></i>
+              </div>
+              <span class="modulo-badge badge-breve">Em Breve</span>
+            </div>
+            <div>
+              <div class="modulo-titulo">EBITDA</div>
+              <div class="modulo-subtitulo">Resultado antes de juros, impostos, depreciação e amortização</div>
+            </div>
+          </div>
+
+          <!-- RESULTADO FINAL — Em breve -->
+          <div class="modulo-card disabled" style="--card-accent: #ef4444;">
+            <div class="modulo-top">
+              <div class="modulo-icon" style="background:rgba(239,68,68,.12); color:#ef4444;">
+                <i class="fa-solid fa-flag-checkered"></i>
+              </div>
+              <span class="modulo-badge badge-breve">Em Breve</span>
+            </div>
+            <div>
+              <div class="modulo-titulo">Resultado Final</div>
+              <div class="modulo-subtitulo">Resultado operacional líquido e não operacional consolidado</div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- Painel de Resumo Anual (futuro) -->
+      <section class="resumo-anual-card">
+        <div class="resumo-anual-header">
+          <h2>
+            <i class="fa-solid fa-table-cells" style="color:var(--color-primary)"></i>
+            Demonstrativo Anual Consolidado
+          </h2>
+          <span class="modulo-badge badge-breve">Disponível após todos os módulos</span>
+        </div>
+        <div class="em-breve-overlay">
+          <i class="fa-solid fa-hourglass-half"></i>
+          <p>O demonstrativo completo (P&amp;L) estará disponível quando todos os módulos de fechamento forem ativados.</p>
+          <p style="font-size:12px; opacity:.6;">Receitas → Custo Direto → Custo Indireto → Despesas → EBITDA → Resultado</p>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script src="app_fechamento.js"></script>
+</body>
+</html>

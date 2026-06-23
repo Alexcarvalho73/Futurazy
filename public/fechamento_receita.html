@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Receitas — Fechamento Financeiro | FuturazBI</title>
+  <meta name="description" content="Cubo de Receitas com drill-down por tipo de negócio, empresa e produto — Fechamento Financeiro FuturazBI">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    /* ────────────────────────────────────
+       Cabeçalho da página
+    ──────────────────────────────────── */
+    .page-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .page-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .btn-toggle-cal {
+      background: rgba(139,92,246,.15);
+      color: #a78bfa;
+      border: 1px solid rgba(139,92,246,.3);
+    }
+    .btn-toggle-cal:hover {
+      background: rgba(139,92,246,.25);
+    }
+    .btn-toggle-cal.cal-contabil {
+      background: rgba(6,182,212,.15);
+      color: #22d3ee;
+      border: 1px solid rgba(6,182,212,.3);
+    }
+    .breadcrumb {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+    .breadcrumb a { color: var(--color-primary); text-decoration: none; }
+    .breadcrumb a:hover { text-decoration: underline; }
+
+    /* ────────────────────────────────────
+       KPI Cards — 6 colunas
+    ──────────────────────────────────── */
+    .kpi-grid-6 {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 16px;
+    }
+    @media (max-width: 1400px) { .kpi-grid-6 { grid-template-columns: repeat(3, 1fr); } }
+    @media (max-width: 900px)  { .kpi-grid-6 { grid-template-columns: repeat(2, 1fr); } }
+
+    /* ────────────────────────────────────
+       Cubo Pivot — Drill-down
+    ──────────────────────────────────── */
+    .cube-section {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 24px;
+      position: relative;
+    }
+    .cube-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .cube-header h2 {
+      font-size: 17px;
+      color: var(--text-white);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .cube-actions { display: flex; gap: 8px; }
+    .cube-table-wrap {
+      overflow: auto;
+      max-height: 480px;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+    }
+    .cube-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    .cube-table th {
+      background: var(--bg-sidebar);
+      color: var(--text-white);
+      font-weight: 600;
+      padding: 10px 12px;
+      border-bottom: 2px solid var(--border-color);
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      white-space: nowrap;
+    }
+    .cube-table td {
+      padding: 7px 12px;
+      border-bottom: 1px solid var(--border-color);
+      white-space: nowrap;
+      color: var(--text-muted);
+    }
+    .cube-table tr:hover td { background: rgba(255,255,255,.02); }
+    .cube-table .text-right { text-align: right; }
+
+    /* Níveis de indentação */
+    .lvl-0 td:first-child { font-weight: 700; color: var(--text-white); font-size: 13px; }
+    .lvl-0 { background: rgba(255,255,255,.015); }
+    .lvl-1 td:first-child { padding-left: 28px !important; color: #cbd5e1; font-weight: 600; }
+    .lvl-2 td:first-child { padding-left: 52px !important; color: #94a3b8; }
+    .lvl-3 td:first-child { padding-left: 76px !important; color: #64748b; font-style: italic; }
+
+    .toggle-btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 18px; height: 18px;
+      border-radius: 4px;
+      background: rgba(255,255,255,.06);
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      margin-right: 6px;
+      font-size: 9px;
+      cursor: pointer;
+      transition: all .15s;
+      flex-shrink: 0;
+    }
+    tr:hover .toggle-btn {
+      background: rgba(59,130,246,.12);
+      color: var(--color-primary);
+      border-color: rgba(59,130,246,.4);
+    }
+    .row-hidden { display: none; }
+    .subtotal-row td { font-weight: 600; color: #94a3b8; background: rgba(255,255,255,.02); }
+    .grand-total-row td {
+      font-weight: 700; color: var(--color-primary);
+      background: var(--bg-sidebar);
+      border-top: 2px solid var(--border-color);
+    }
+
+    /* Badges tipo negócio */
+    .badge-agro { background:rgba(16,185,129,.15); color:#10b981; padding:2px 7px; border-radius:4px; font-size:10px; font-weight:700; }
+    .badge-pec  { background:rgba(245,158,11,.15);  color:#f59e0b; padding:2px 7px; border-radius:4px; font-size:10px; font-weight:700; }
+    .badge-out  { background:rgba(100,116,139,.15); color:#94a3b8; padding:2px 7px; border-radius:4px; font-size:10px; font-weight:700; }
+
+    /* ────────────────────────────────────
+       Tabela Anual — Meses Horizontais
+    ──────────────────────────────────── */
+    .anual-section {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 24px;
+    }
+    .anual-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .anual-header h2 {
+      font-size: 17px;
+      color: var(--text-white);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .anual-table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+    }
+    .anual-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12.5px;
+    }
+    .anual-table th, .anual-table td {
+      padding: 8px 14px;
+      border-bottom: 1px solid var(--border-color);
+      white-space: nowrap;
+    }
+    .anual-table th {
+      background: var(--bg-sidebar);
+      color: var(--text-white);
+      font-weight: 600;
+      border-right: 1px solid var(--border-color);
+      text-align: center;
+    }
+    /* Primeira coluna (label da métrica) */
+    .anual-table th:first-child, .anual-table td:first-child {
+      text-align: left;
+      background: var(--bg-sidebar);
+      position: sticky;
+      left: 0;
+      z-index: 3;
+      color: var(--text-white);
+      font-weight: 600;
+      border-right: 2px solid var(--border-color);
+      min-width: 180px;
+    }
+    .anual-table td {
+      text-align: right;
+      color: var(--text-muted);
+      border-right: 1px solid rgba(255,255,255,.04);
+    }
+    .anual-table tr:hover td { background: rgba(255,255,255,.02); }
+    .anual-table tr:hover td:first-child { background: var(--bg-sidebar); }
+
+    /* Coluna do mês atual */
+    .col-atual { background: rgba(59,130,246,.06) !important; }
+    .col-anterior { background: rgba(245,158,11,.04) !important; }
+    .col-total {
+      background: rgba(59,130,246,.08) !important;
+      color: var(--color-primary) !important;
+      font-weight: 700 !important;
+      border-left: 2px solid rgba(59,130,246,.3) !important;
+    }
+
+    /* Linha de status */
+    .status-row td { text-align: center !important; }
+    .status-icon { font-size: 15px; }
+    .action-row td { text-align: center !important; padding: 6px 8px !important; }
+
+    /* Linha de seção */
+    .section-row td {
+      background: rgba(255,255,255,.02) !important;
+      color: var(--text-muted) !important;
+      font-size: 10px !important;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      padding: 4px 14px !important;
+    }
+    .section-row td:first-child {
+      background: var(--bg-sidebar) !important;
+    }
+
+    /* Empresa toggle (028501 / 028503) */
+    .empresa-tabs {
+      display: flex;
+      gap: 6px;
+    }
+    .empresa-tab {
+      padding: 5px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      background: transparent;
+      transition: all .2s;
+    }
+    .empresa-tab.active {
+      background: rgba(59,130,246,.15);
+      color: var(--color-primary);
+      border-color: rgba(59,130,246,.4);
+    }
+
+    /* ────────────────────────────────────
+       Modal de Fechamento
+    ──────────────────────────────────── */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.7);
+      backdrop-filter: blur(4px);
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .25s;
+    }
+    .modal-overlay.open {
+      opacity: 1;
+      pointer-events: all;
+    }
+    .modal-box {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 36px;
+      max-width: 480px;
+      width: 90%;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      transform: scale(.94);
+      transition: transform .25s;
+    }
+    .modal-overlay.open .modal-box { transform: scale(1); }
+    .modal-icon {
+      width: 60px; height: 60px;
+      border-radius: 50%;
+      background: rgba(245,158,11,.15);
+      color: #f59e0b;
+      font-size: 26px;
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto;
+    }
+    .modal-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text-white);
+      text-align: center;
+    }
+    .modal-body {
+      font-size: 14px;
+      color: var(--text-muted);
+      text-align: center;
+      line-height: 1.6;
+    }
+    .modal-preview {
+      background: rgba(255,255,255,.04);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 14px 18px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      font-size: 13px;
+    }
+    .modal-preview-item label {
+      display: block;
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 2px;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+    .modal-preview-item span {
+      font-weight: 600;
+      color: var(--text-white);
+    }
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+    }
+    .btn-danger {
+      background: rgba(239,68,68,.15);
+      color: #f87171;
+      border: 1px solid rgba(239,68,68,.3);
+    }
+    .btn-danger:hover { background: rgba(239,68,68,.25); }
+    .btn-success {
+      background: rgba(16,185,129,.15);
+      color: #10b981;
+      border: 1px solid rgba(16,185,129,.3);
+    }
+    .btn-success:hover { background: rgba(16,185,129,.25); }
+
+    /* Loading state */
+    .loading-overlay { position: absolute; inset: 0; background: rgba(11,15,25,.85);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 14px; z-index: 10; border-radius: var(--radius-md);
+      opacity: 0; pointer-events: none; transition: opacity .2s; }
+    .loading-overlay.active { opacity: 1; pointer-events: all; }
+    .spinner { width: 36px; height: 36px; border: 3px solid rgba(255,255,255,.1);
+      border-left-color: var(--color-primary); border-radius: 50%; animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="dashboard-container">
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="brand">
+        <i class="fa-solid fa-chart-line logo-icon"></i>
+        <h2>Futurazy<span>BI</span></h2>
+      </div>
+      <nav class="nav-menu">
+        <a href="index.html"><i class="fa-solid fa-house"></i> Dashboard</a>
+        <a href="notas.html"><i class="fa-solid fa-file-invoice-dollar"></i> Central XML</a>
+        <a href="fechamento.html" class="active"><i class="fa-solid fa-file-chart-column"></i> Fechamento</a>
+        <a href="#" class="nav-disabled"><i class="fa-solid fa-database"></i> Conexões</a>
+        <a href="#" class="nav-disabled"><i class="fa-solid fa-gears"></i> Configurações</a>
+      </nav>
+      <div class="connection-status">
+        <div class="status-indicator online"></div>
+        <span>Oracle DB: Conectado</span>
+      </div>
+    </aside>
+
+    <!-- Conteúdo Principal -->
+    <main class="main-content">
+
+      <!-- Cabeçalho -->
+      <header class="page-header">
+        <div>
+          <div class="breadcrumb">
+            <a href="fechamento.html"><i class="fa-solid fa-file-chart-column"></i> Fechamento</a>
+            <i class="fa-solid fa-chevron-right" style="font-size:10px"></i>
+            <span style="color:var(--text-white)">Receitas</span>
+          </div>
+          <h1 style="font-size:26px; color:var(--text-white); margin-bottom:4px;">Receitas Operacionais</h1>
+          <p style="color:var(--text-muted); font-size:14px;">
+            Vendas a Clientes · Pecuária · Agricultura — Filiais 028501 e 028503
+          </p>
+        </div>
+        <div class="page-header-actions">
+          <button class="btn btn-toggle-cal" id="btn-toggle-cal">
+            <i class="fa-solid fa-seedling"></i>
+            <span id="label-cal">Safra Agrícola</span>
+          </button>
+          <button class="btn btn-secondary" id="btn-refresh">
+            <i class="fa-solid fa-rotate"></i> Atualizar
+          </button>
+        </div>
+      </header>
+
+      <!-- KPI Cards (6) -->
+      <section class="kpi-grid-6">
+        <div class="kpi-card">
+          <div class="kpi-icon icon-green"><i class="fa-solid fa-sack-dollar"></i></div>
+          <div class="kpi-data">
+            <h3>Receita Total</h3>
+            <h2 id="kpi-receita">—</h2>
+            <span class="kpi-sub" id="kpi-receita-sub">Período selecionado</span>
+          </div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon icon-blue"><i class="fa-solid fa-wheat-awn"></i></div>
+          <div class="kpi-data">
+            <h3>Total Sacas</h3>
+            <h2 id="kpi-sacas">—</h2>
+            <span class="kpi-sub">Equivalente em sacas</span>
+          </div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon icon-orange"><i class="fa-solid fa-file-invoice-dollar"></i></div>
+          <div class="kpi-data">
+            <h3>Nº de NFs</h3>
+            <h2 id="kpi-nfs">—</h2>
+            <span class="kpi-sub">Notas distintas</span>
+          </div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon icon-purple"><i class="fa-solid fa-calculator"></i></div>
+          <div class="kpi-data">
+            <h3>Ticket Médio/Saca</h3>
+            <h2 id="kpi-ticket">—</h2>
+            <span class="kpi-sub">Receita ÷ Sacas</span>
+          </div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon" style="background:rgba(239,68,68,.12);color:#f87171;">
+            <i class="fa-solid fa-leaf"></i>
+          </div>
+          <div class="kpi-data">
+            <h3>FUNRURAL</h3>
+            <h2 id="kpi-funrural">—</h2>
+            <span class="kpi-sub">Contribuição social rural</span>
+          </div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon" style="background:rgba(6,182,212,.12);color:#22d3ee;">
+            <i class="fa-solid fa-droplet"></i>
+          </div>
+          <div class="kpi-data">
+            <h3>FETHAB</h3>
+            <h2 id="kpi-fethab">—</h2>
+            <span class="kpi-sub">Fundo de transporte</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Filtros -->
+      <section class="filters-card filters-collapsed" id="filtros-section">
+        <div class="filters-header" id="filtros-toggle-header">
+          <h2><i class="fa-solid fa-chevron-down toggle-icon"></i> Filtros de Análise</h2>
+          <div class="filters-actions" style="display:flex;gap:8px;">
+            <button class="btn btn-secondary btn-sm" id="btn-clear-filters">
+              <i class="fa-solid fa-eraser"></i> Limpar
+            </button>
+            <button class="btn btn-primary btn-sm" id="btn-apply-filters">
+              <i class="fa-solid fa-check"></i> Aplicar
+            </button>
+          </div>
+        </div>
+        <div class="filters-grid">
+          <div class="filter-group">
+            <label for="f-tipo-negocio"><i class="fa-solid fa-tag"></i> Tipo de Negócio</label>
+            <select id="f-tipo-negocio" class="form-control">
+              <option value="todos">Todos</option>
+              <option value="Pecuária">🐄 Pecuária</option>
+              <option value="Agricultura">🌾 Agricultura</option>
+              <option value="Outros">📦 Outros</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label for="f-empresa"><i class="fa-solid fa-building"></i> Empresa (Filial)</label>
+            <select id="f-empresa" class="form-control">
+              <option value="todas">Todas</option>
+              <option value="028501">028501</option>
+              <option value="028503">028503</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label for="f-cfop"><i class="fa-solid fa-hashtag"></i> CFOP</label>
+            <input type="text" id="f-cfop" class="form-control" placeholder="Ex: 5101">
+          </div>
+          <div class="filter-group">
+            <label for="f-produto"><i class="fa-solid fa-box"></i> Produto</label>
+            <input type="text" id="f-produto" class="form-control" placeholder="Nome do produto...">
+          </div>
+        </div>
+      </section>
+
+      <!-- Cubo Pivot -->
+      <section class="cube-section" id="cube-section">
+        <div class="loading-overlay" id="loading-cube">
+          <div class="spinner"></div>
+          <p>Carregando dados do Oracle…</p>
+        </div>
+        <div class="cube-header">
+          <h2><i class="fa-solid fa-cubes" style="color:var(--color-primary)"></i> Cubo de Receitas — Drill-down</h2>
+          <div class="cube-actions">
+            <button class="btn btn-secondary btn-sm" id="btn-expand-all">
+              <i class="fa-solid fa-square-plus"></i> Expandir
+            </button>
+            <button class="btn btn-secondary btn-sm" id="btn-collapse-all">
+              <i class="fa-solid fa-square-minus"></i> Recolher
+            </button>
+          </div>
+        </div>
+        <div class="cube-table-wrap">
+          <table class="cube-table" id="cube-table">
+            <thead>
+              <tr>
+                <th style="min-width:280px">Hierarquia (Tipo → Empresa → Mês → Produto)</th>
+                <th class="text-right">Qtd.</th>
+                <th class="text-right">Total (R$)</th>
+                <th class="text-right">Sacas</th>
+                <th class="text-right">Vlr Unit.</th>
+                <th class="text-right">Vlr FACS</th>
+                <th class="text-right">FETHAB</th>
+                <th class="text-right">FUNRURAL</th>
+                <th>CFOP</th>
+                <th>Transp.</th>
+              </tr>
+            </thead>
+            <tbody id="cube-body">
+              <!-- Preenchido por app_receita.js -->
+            </tbody>
+            <tfoot>
+              <tr class="grand-total-row" id="cube-gd-total">
+                <td>Total Geral</td>
+                <td class="text-right" id="tot-quant">0</td>
+                <td class="text-right" id="tot-total">R$ 0,00</td>
+                <td class="text-right" id="tot-sacas">0</td>
+                <td class="text-right">—</td>
+                <td class="text-right" id="tot-facs">R$ 0,00</td>
+                <td class="text-right" id="tot-fethab">R$ 0,00</td>
+                <td class="text-right" id="tot-funrural">R$ 0,00</td>
+                <td colspan="2"></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </section>
+
+      <!-- Tabela Anual (Meses Horizontais) -->
+      <section class="anual-section" id="anual-section">
+        <div class="loading-overlay" id="loading-anual">
+          <div class="spinner"></div>
+          <p>Carregando resumo anual…</p>
+        </div>
+        <div class="anual-header">
+          <h2>
+            <i class="fa-solid fa-calendar-days" style="color:var(--color-primary)"></i>
+            Resumo Anual — <span id="label-periodo">Safra 2025/26</span>
+          </h2>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <div class="empresa-tabs">
+              <button class="empresa-tab active" data-emp="TOTAL" id="tab-total">Consolidado</button>
+              <button class="empresa-tab" data-emp="028501" id="tab-028501">028501</button>
+              <button class="empresa-tab" data-emp="028503" id="tab-028503">028503</button>
+            </div>
+          </div>
+        </div>
+        <div class="anual-table-wrap">
+          <table class="anual-table" id="anual-table">
+            <thead id="anual-thead">
+              <!-- Preenchido por app_receita.js -->
+            </thead>
+            <tbody id="anual-tbody">
+              <!-- Preenchido por app_receita.js -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Modal de Fechamento -->
+  <div class="modal-overlay" id="modal-fechar">
+    <div class="modal-box">
+      <div class="modal-icon"><i class="fa-solid fa-lock"></i></div>
+      <div class="modal-title">Confirmar Fechamento do Mês</div>
+      <div class="modal-body">
+        Você está prestes a <strong>fechar e gravar</strong> os dados de receita do período:
+      </div>
+      <div class="modal-preview" id="modal-preview">
+        <div class="modal-preview-item">
+          <label>Mês / Ano</label>
+          <span id="modal-mes-ano">—</span>
+        </div>
+        <div class="modal-preview-item">
+          <label>Empresa</label>
+          <span id="modal-empresa">TOTAL</span>
+        </div>
+        <div class="modal-preview-item">
+          <label>Receita Total</label>
+          <span id="modal-receita">—</span>
+        </div>
+        <div class="modal-preview-item">
+          <label>Sacas</label>
+          <span id="modal-sacas">—</span>
+        </div>
+        <div class="modal-preview-item">
+          <label>Nº NFs</label>
+          <span id="modal-nfs">—</span>
+        </div>
+        <div class="modal-preview-item">
+          <label>FUNRURAL</label>
+          <span id="modal-funrural">—</span>
+        </div>
+      </div>
+      <div class="modal-body" style="font-size:12px;color:#64748b;">
+        ⚠️ Esta operação pode ser refeita — o fechamento será substituído se executado novamente.
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" id="btn-cancel-fechar">
+          <i class="fa-solid fa-xmark"></i> Cancelar
+        </button>
+        <button class="btn btn-success" id="btn-confirm-fechar">
+          <i class="fa-solid fa-lock"></i> Confirmar Fechamento
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app_receita.js"></script>
+</body>
+</html>
