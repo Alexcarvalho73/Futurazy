@@ -427,14 +427,14 @@ app.get('/api/notas/:chave/itens', async (req, res) => {
 // MÓDULO FECHAMENTO FINANCEIRO — RECEITAS
 // ============================================================
 
-// SQL principal de Receitas (UNION Saídas + Entradas) com cotação do dólar (PTAX)
+// SQL principal de Receitas (UNION Saídas + Entradas) com cotação do dólar (M2_MOEDA2)
 // Estrutura em 3 camadas:
 //   1. UNION interno (distinct): dados brutos SF2020 + SF1020
 //   2. Camada intermediária: busca COTACAO_DOLAR via scalar subquery em SM2020
-//      Regra: busca M2_PTAX com M2_DATA <= (data_nf - 1 dia), ORDER BY DESC → ROWNUM = 1
+//      Regra: busca M2_MOEDA2 com M2_DATA <= (data_nf - 1 dia), ORDER BY DESC → ROWNUM = 1
 //      Assim garante fallback automático para qualquer dia anterior com cotação disponível.
 // NOTA: SM2020.M2_DATA assumido em formato 'YYYYMMDD' (VARCHAR2). Se for tipo DATE, remover to_char().
-// NOTA: SM2020.M2_PTAX é o campo da cotação PTAX. Verifique o nome correto no banco se necessário.
+// NOTA: SM2020.M2_MOEDA2 é o campo da cotação do Dólar. Verifique o nome correto no banco se necessário.
 function buildReceitaSQL() {
   return `
     SELECT OUTER_Q.*,
@@ -445,7 +445,7 @@ function buildReceitaSQL() {
     FROM (
       SELECT MID_Q.*,
         (SELECT PTAX FROM (
-           SELECT SM.M2_PTAX AS PTAX
+           SELECT SM.M2_MOEDA2 AS PTAX
            FROM protheus11.SM2020 SM
            WHERE SM.M2_DATA <= to_char(MID_Q.EMISSAO - 1,'yyyymmdd')
              AND SM.D_E_L_E_T_ <> '*'
