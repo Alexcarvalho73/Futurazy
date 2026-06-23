@@ -481,8 +481,8 @@ function buildReceitaSQL(binds) {
         AND f2.d_e_l_e_t_ <> '*'
         AND d2.d_e_l_e_t_ <> '*'
         AND b1.d_e_l_e_t_ <> '*'
-        AND to_date(F2_EMISSAO,'yyyy/mm/dd') >= :data_de
-        AND to_date(F2_EMISSAO,'yyyy/mm/dd') <= :data_ate
+        AND to_date(F2_EMISSAO,'yyyy/mm/dd') >= to_date(:data_de,'yyyy-mm-dd')
+        AND to_date(F2_EMISSAO,'yyyy/mm/dd') <= to_date(:data_ate,'yyyy-mm-dd')
         AND D2_CF NOT IN ('5949','5905','5151','5910','5201','5208')
         AND F2.F2_FILIAL IN ('028501','028503')
 
@@ -530,19 +530,28 @@ function buildReceitaSQL(binds) {
         AND f1.d_e_l_e_t_ <> '*'
         AND d1.d_e_l_e_t_ <> '*'
         AND b1.d_e_l_e_t_ <> '*'
-        AND to_date(F1_EMISSAO,'yyyy/mm/dd') >= :data_de
-        AND to_date(F1_EMISSAO,'yyyy/mm/dd') <= :data_ate
+        AND to_date(F1_EMISSAO,'yyyy/mm/dd') >= to_date(:data_de,'yyyy-mm-dd')
+        AND to_date(F1_EMISSAO,'yyyy/mm/dd') <= to_date(:data_ate,'yyyy-mm-dd')
         AND D1_CF NOT IN ('1906','1151','1101','1933','1356','1922','1910','1209')
         AND f1.f1_filial IN ('028501','028503')
     )
   `;
 }
 
-// Helper: datas do mês (Date objects para Oracle)
+// Helper: formata Date para string 'YYYY-MM-DD' (bind variable seguro para Oracle)
+function dateToStr(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+// Helper: datas do mês como strings para bind seguro
 function getMonthRange(ano, mes) {
-  const dataDe  = new Date(ano, mes - 1, 1);
-  const dataAte = new Date(ano, mes, 0, 23, 59, 59); // último dia do mês
-  return { dataDe, dataAte };
+  return {
+    dataDe:  dateToStr(new Date(ano, mes - 1, 1)),
+    dataAte: dateToStr(new Date(ano, mes, 0))  // último dia do mês
+  };
 }
 
 // Helper: determinar ano safra a partir de hoje
@@ -603,8 +612,9 @@ app.get('/api/receita/dados', async (req, res) => {
     const anoSafra = parseInt(req.query.ano_safra) || getSafraYear(hoje);
 
     // Intervalo: Set(anoSafra-1) → Ago(anoSafra) — ou parâmetros customizados
-    let dataDe  = req.query.data_de  ? new Date(req.query.data_de)  : new Date(anoSafra - 1, 8,  1);
-    let dataAte = req.query.data_ate ? new Date(req.query.data_ate) : new Date(anoSafra,    7, 31, 23, 59, 59);
+    // Datas como string 'YYYY-MM-DD' para bind seguro com TO_DATE no Oracle
+    const dataDe  = req.query.data_de  || dateToStr(new Date(anoSafra - 1, 8,  1));
+    const dataAte = req.query.data_ate || dateToStr(new Date(anoSafra,     7, 31));
 
     const sql = buildReceitaSQL();
     const binds = { data_de: dataDe, data_ate: dataAte };
@@ -671,10 +681,11 @@ app.get('/api/receita/resumo-anual', async (req, res) => {
     // 3. Buscar dados dinâmicos (um único SQL para ambos os meses)
     let dadosDinamicos = [];
     if (dinâmicos.length > 0) {
-      const anos = dinâmicos.map(m => m.ano);
-      const mesesNum = dinâmicos.map(m => m.mes);
-      const dataDe  = new Date(Math.min(...dinâmicos.map(m => new Date(m.ano, m.mes - 1, 1))));
-      const dataAte = new Date(Math.max(...dinâmicos.map(m => new Date(m.ano, m.mes, 0, 23, 59, 59))));
+      // Calcular intervalo cobrindo todos os meses dinâmicos — strings 'YYYY-MM-DD'
+      const timestamps = dinâmicos.map(m => new Date(m.ano, m.mes - 1, 1).getTime());
+      const timestampsAte = dinâmicos.map(m => new Date(m.ano, m.mes, 0).getTime());
+      const dataDe  = dateToStr(new Date(Math.min(...timestamps)));
+      const dataAte = dateToStr(new Date(Math.max(...timestampsAte)));
       const sqlDin = buildReceitaSQL();
       const rowsDin = await db.execute(sqlDin, { data_de: dataDe, data_ate: dataAte });
       dadosDinamicos = agregarPorMes(rowsDin);
