@@ -65,6 +65,11 @@
     /* ────────────────────────────────────
        Cubo Pivot — Drill-down
     ──────────────────────────────────── */
+    /* Garantir que os elementos do main-content não encolham (evita sobreposição flex) */
+    .main-content > * {
+      flex-shrink: 0;
+    }
+
     .cube-section {
       background: var(--bg-card);
       border: 1px solid var(--border-color);
@@ -89,8 +94,8 @@
     }
     .cube-actions { display: flex; gap: 8px; }
     .cube-table-wrap {
-      overflow: auto;
-      max-height: 480px;
+      overflow-x: auto;
+      overflow-y: visible;
       border: 1px solid var(--border-color);
       border-radius: var(--radius-sm);
     }
