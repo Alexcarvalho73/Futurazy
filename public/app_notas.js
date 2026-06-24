@@ -296,7 +296,7 @@ function renderItems(data) {
   if (!data || data.length === 0) {
     detailBody.innerHTML = `
       <tr>
-        <td colspan="10" class="text-center" style="padding: 30px; color: var(--text-muted);">
+        <td colspan="14" class="text-center" style="padding: 30px; color: var(--text-muted);">
           Nenhum item localizado para esta nota fiscal no banco.
         </td>
       </tr>
@@ -324,6 +324,8 @@ function renderItems(data) {
         <td class="text-right font-numeric">${formatCurrency(totalXml)}</td>
         <td>${escapeHTML(item.XIT_PEDIDO || '')}</td>
         <td>${escapeHTML(item.XIT_ITEMPC || '')}</td>
+        <td>${escapeHTML(item.D1_CC || '')}</td>
+        <td>${escapeHTML(item.D1_LOCAL || '')}</td>
       </tr>
     `;
   });
