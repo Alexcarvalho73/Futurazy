@@ -12,6 +12,7 @@ const state = {
   tipoCalendario: 'safra',   // 'safra' | 'calendario'
   empresaFiltro:  'TOTAL',   // 'TOTAL' | '028501' | '028503'
   moeda:          'BRL',     // 'BRL' | 'USD'
+  kpiPeriodo:     'atual',   // 'atual' | 'anterior'
   allData:        [],        // dados brutos do Oracle
   resumoAnual:    null,      // resposta do /api/receita/resumo-anual
   fecharPending:  null,      // { mes, ano, empresa }
@@ -20,6 +21,7 @@ const state = {
 const fmtBrl = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtUsd = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtNum = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+const fmtCot = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
 
 // Formata valor monetário conforme moeda selecionada
 function fmtMoeda(v) {
@@ -72,7 +74,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function setupEventListeners() {
   // Toggle calendário
-  document.getElementById('btn-toggle-cal').addEventListener('click', () => {
+  document.getElementById('btn-toggle-cal')?.addEventListener('click', () => {
     state.tipoCalendario = state.tipoCalendario === 'safra' ? 'calendario' : 'safra';
     const btn = document.getElementById('btn-toggle-cal');
     const lbl = document.getElementById('label-cal');
@@ -88,9 +90,9 @@ function setupEventListeners() {
   });
 
   // Toggle moeda
-  document.querySelectorAll('.moeda-btn').forEach(btn => {
+  document.querySelectorAll('.moeda-btn[data-moeda]').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.moeda-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.moeda-btn[data-moeda]').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       state.moeda = btn.dataset.moeda;
       atualizarLabelsMoeda();
@@ -101,34 +103,47 @@ function setupEventListeners() {
     });
   });
 
+  // Toggle período do KPI
+  document.querySelectorAll('.moeda-btn[data-kpi-periodo]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.moeda-btn[data-kpi-periodo]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.kpiPeriodo = btn.dataset.kpiPeriodo;
+      const filtered = applyFilters(state.allData);
+      updateKpis(filtered);
+    });
+  });
+
   // Refresh
-  document.getElementById('btn-refresh').addEventListener('click', loadAll);
+  document.getElementById('btn-refresh')?.addEventListener('click', loadAll);
 
   // Filtros
-  document.getElementById('filtros-toggle-header').addEventListener('click', () => {
+  document.getElementById('filtros-toggle-header')?.addEventListener('click', () => {
     document.getElementById('filtros-section').classList.toggle('filters-collapsed');
   });
-  document.getElementById('btn-apply-filters').addEventListener('click', () => {
+  document.getElementById('btn-apply-filters')?.addEventListener('click', () => {
     const filtered = applyFilters(state.allData);
     renderCube(filtered);
     updateKpis(filtered);
   });
-  document.getElementById('btn-clear-filters').addEventListener('click', () => {
-    ['f-tipo-negocio','f-empresa','f-cfop','f-produto','f-periodo-mes'].forEach(id => {
+  document.getElementById('btn-clear-filters')?.addEventListener('click', () => {
+    ['f-tipo-negocio','f-empresa','f-cfop','f-produto'].forEach(id => {
       const el = document.getElementById(id);
-      if (el.tagName === 'SELECT') el.value = el.options[0].value;
-      else el.value = '';
+      if (el) {
+        if (el.tagName === 'SELECT') el.value = el.options[0].value;
+        else el.value = '';
+      }
     });
     renderCube(state.allData);
     updateKpis(state.allData);
   });
 
   // Expand / Collapse cubo
-  document.getElementById('btn-expand-all').addEventListener('click', () => {
+  document.getElementById('btn-expand-all')?.addEventListener('click', () => {
     document.querySelectorAll('#cube-body .row-hidden').forEach(r => r.classList.remove('row-hidden'));
     document.querySelectorAll('#cube-body .toggle-btn').forEach(b => b.innerHTML = '▼');
   });
-  document.getElementById('btn-collapse-all').addEventListener('click', () => {
+  document.getElementById('btn-collapse-all')?.addEventListener('click', () => {
     document.querySelectorAll('#cube-body tr').forEach(r => {
       if (!r.classList.contains('lvl-0')) r.classList.add('row-hidden');
     });
@@ -146,8 +161,24 @@ function setupEventListeners() {
   });
 
   // Modal fechar
-  document.getElementById('btn-cancel-fechar').addEventListener('click', closeModal);
-  document.getElementById('btn-confirm-fechar').addEventListener('click', confirmarFechamento);
+  document.getElementById('btn-cancel-fechar')?.addEventListener('click', closeModal);
+  document.getElementById('btn-confirm-fechar')?.addEventListener('click', confirmarFechamento);
+
+  // Modal de Ajustes Manuais
+  document.getElementById('btn-open-edit-fechamento')?.addEventListener('click', () => {
+    document.getElementById('modal-edit-fechamento').classList.add('open');
+    loadClosedFechamentos();
+  });
+  document.getElementById('btn-close-edit-fechamento-modal')?.addEventListener('click', closeEditFechamentoModal);
+  document.getElementById('btn-cancel-edit-form')?.addEventListener('click', () => {
+    document.getElementById('edit-fechamento-form-view').style.display = 'none';
+    document.getElementById('edit-fechamento-list-view').style.display = 'block';
+  });
+  document.getElementById('btn-save-edit-form')?.addEventListener('click', saveFechamentoForm);
+
+  document.getElementById('modal-edit-fechamento')?.addEventListener('click', e => {
+    if (e.target.id === 'modal-edit-fechamento') closeEditFechamentoModal();
+  });
 }
 
 // Atualiza labels dinâmicos de moeda na página
@@ -219,40 +250,12 @@ function applyFilters(data) {
   const empresa = document.getElementById('f-empresa').value;
   const cfop    = document.getElementById('f-cfop').value.trim().toUpperCase();
   const produto = document.getElementById('f-produto').value.trim().toUpperCase();
-  const periodo = document.getElementById('f-periodo-mes').value; // 'todos' | 'anterior' | 'atual'
-
-  const hoje = new Date();
-  const mesAtual = hoje.getMonth();
-  const anoAtual = hoje.getFullYear();
-
-  const prevD = new Date(anoAtual, mesAtual - 1, 1);
-  const mesAnt = prevD.getMonth();
-  const anoAnt = prevD.getFullYear();
 
   return data.filter(r => {
     if (tipo    !== 'todos'  && r.TIPO_NEGOCIO !== tipo)                 return false;
     if (empresa !== 'todas'  && r.EMPRESA !== empresa)                   return false;
     if (cfop    && !(r.CFOP    || '').toUpperCase().includes(cfop))      return false;
     if (produto && !(r.PRODUTO || '').toUpperCase().includes(produto))   return false;
-
-    if (periodo !== 'todos') {
-      if (!r.EMISSAO) return false;
-      const d = new Date(r.EMISSAO);
-      // O Date construído a partir de ISO string 'YYYY-MM-DDT00:00:00.000Z' pode ser interpretado em UTC.
-      // Para evitar problemas de timezone com as datas do banco (que não têm timezone),
-      // usamos os métodos getUTCDate e getUTCMonth se a string vier como ISO.
-      // Vamos verificar e comparar usando getUTCMonth / getUTCFullYear ou getMonth / getFullYear de forma segura.
-      // Já que no backend convertemos to_date(F2_EMISSAO,'yyyymmdd'), ele vem como data do Oracle que o driver node-oracledb
-      // retorna como um objeto Date local ou UTC dependendo da config.
-      // Como o objeto já é uma instância Date em JS, vamos extrair mês/ano do objeto.
-      const m = d.getMonth();
-      const y = d.getFullYear();
-      if (periodo === 'atual') {
-        if (m !== mesAtual || y !== anoAtual) return false;
-      } else if (periodo === 'anterior') {
-        if (m !== mesAnt || y !== anoAnt) return false;
-      }
-    }
     return true;
   });
 }
@@ -262,29 +265,50 @@ function applyFilters(data) {
 // ─────────────────────────────────────────────
 function updateKpis(data) {
   const cf = campos();
-  let receita=0, sacas=0, cabecas=0, funrural=0, fethab=0;
-  const nfsSet = new Set();
 
-  for (const r of data) {
+  // Determinar datas do mês corrente e anterior
+  const hoje = new Date();
+  const mesAtual = hoje.getMonth();
+  const anoAtual = hoje.getFullYear();
+
+  const prevD = new Date(anoAtual, mesAtual - 1, 1);
+  const mesAnt = prevD.getMonth();
+  const anoAnt = prevD.getFullYear();
+
+  // Filtrar os dados conforme o período escolhido para os cards
+  const kpiData = data.filter(r => {
+    if (!r.EMISSAO) return false;
+    const d = new Date(r.EMISSAO);
+    const m = d.getMonth();
+    const y = d.getFullYear();
+
+    if (state.kpiPeriodo === 'atual') {
+      return m === mesAtual && y === anoAtual;
+    } else {
+      return m === mesAnt && y === anoAnt;
+    }
+  });
+
+  let receita=0, sacas=0, cabecas=0, funrural=0, fethab=0;
+  let totalBrl=0, totalUsd=0;
+
+  for (const r of kpiData) {
     receita  += Number(r[cf.total]    || 0);
+    totalBrl += Number(r.TOTAL        || 0);
+    totalUsd += Number(r.TOTAL_USD    || 0);
     sacas    += Number(r.SACAS        || 0);
     cabecas  += Number(r.CABECAS      || 0);
     funrural += Number(r[cf.funrural] || 0);
     fethab   += Number(r[cf.fethab]   || 0);
-    if (r.NF) nfsSet.add(r.NF);
-  }
-  
-  let ticket = 0;
-  if (sacas > 0 && cabecas > 0) {
-    ticket = receita / (sacas + cabecas);
-  } else if (cabecas > 0) {
-    ticket = receita / cabecas;
-  } else if (sacas > 0) {
-    ticket = receita / sacas;
   }
 
+  const valorDolar = totalUsd > 0 ? (totalBrl / totalUsd) : 0;
+  const labelMes = state.kpiPeriodo === 'atual'
+    ? `${NOMES_MES[mesAtual]}/${anoAtual}`
+    : `${NOMES_MES[mesAnt]}/${anoAnt}`;
+
   document.getElementById('kpi-receita').textContent   = fmtMoeda(receita);
-  
+
   let kpiSacasText = '';
   if (sacas > 0 && cabecas > 0) {
     kpiSacasText = `${fmtN(sacas)} Sc / ${fmtN(cabecas)} Cab`;
@@ -294,13 +318,18 @@ function updateKpis(data) {
     kpiSacasText = fmtN(sacas);
   }
   document.getElementById('kpi-sacas').textContent     = kpiSacasText;
-  
-  document.getElementById('kpi-nfs').textContent       = nfsSet.size.toLocaleString('pt-BR');
-  document.getElementById('kpi-ticket').textContent    = fmtMoeda(ticket);
+
+  document.getElementById('kpi-val-dolar').textContent = valorDolar > 0 ? fmtCot.format(valorDolar) : '—';
   document.getElementById('kpi-funrural').textContent  = fmtMoeda(funrural);
   document.getElementById('kpi-fethab').textContent    = fmtMoeda(fethab);
-  document.getElementById('kpi-receita-sub').textContent =
-    `${data.length.toLocaleString('pt-BR')} registros | ${state.moeda === 'USD' ? 'Valores em USD (PTAX)' : 'Valores em BRL'}`;
+
+  // Subtítulos informativos para cada card indicando o período selecionado
+  const subText = `${labelMes} | ${state.moeda === 'USD' ? 'USD (PTAX)' : 'BRL'}`;
+  document.getElementById('kpi-receita-sub').textContent   = `${kpiData.length.toLocaleString('pt-BR')} reg. · ${subText}`;
+  document.getElementById('kpi-sacas-sub').textContent     = `Equivalente físico · ${labelMes}`;
+  document.getElementById('kpi-val-dolar-sub').textContent = `Média ponderada · ${labelMes}`;
+  document.getElementById('kpi-funrural-sub').textContent  = `Contrib. social · ${subText}`;
+  document.getElementById('kpi-fethab-sub').textContent    = `Fundo transp. · ${subText}`;
 }
 
 // ─────────────────────────────────────────────
@@ -328,15 +357,17 @@ function buildHierarchy(data) {
 function sumRows(rows) {
   const cf = campos();
   return rows.reduce((acc, r) => {
-    acc.quant    += Number(r.QUANT        || 0);
-    acc.total    += Number(r[cf.total]    || 0);
-    acc.sacas    += Number(r.SACAS        || 0);
-    acc.cabecas  += Number(r.CABECAS      || 0);
-    acc.facs     += Number(r[cf.facs]     || 0);
-    acc.fethab   += Number(r[cf.fethab]   || 0);
-    acc.funrural += Number(r[cf.funrural] || 0);
+    acc.quant      += Number(r.QUANT        || 0);
+    acc.total      += Number(r[cf.total]    || 0);
+    acc.totalBrl   += Number(r.TOTAL        || 0);
+    acc.totalUsd   += Number(r.TOTAL_USD    || 0);
+    acc.sacas      += Number(r.SACAS        || 0);
+    acc.cabecas    += Number(r.CABECAS      || 0);
+    acc.facs       += Number(r[cf.facs]     || 0);
+    acc.fethab     += Number(r[cf.fethab]   || 0);
+    acc.funrural   += Number(r[cf.funrural] || 0);
     return acc;
-  }, { quant:0, total:0, sacas:0, cabecas:0, facs:0, fethab:0, funrural:0 });
+  }, { quant:0, total:0, totalBrl:0, totalUsd:0, sacas:0, cabecas:0, facs:0, fethab:0, funrural:0 });
 }
 
 let _rowId = 0;
@@ -451,11 +482,15 @@ function buildRow({ id, parentId, level, labelHtml, sums, extra = {} }) {
     qCell = fmtN(sums.sacas);
   }
 
+  const rowDolar = sums.totalUsd > 0 ? (sums.totalBrl / sums.totalUsd) : 0;
+  const dolarText = rowDolar > 0 ? fmtCot.format(rowDolar) : '—';
+
   return `
     <tr id="${id}" ${parentAttr} class="lvl-${level}" data-level="${level}">
       <td style="min-width:280px">${labelHtml}</td>
       <td class="text-right">${fmtN(sums.quant)}</td>
       <td class="text-right" style="font-weight:${level<=1?'600':'400'}">${fmtMoeda(sums.total)}</td>
+      <td class="text-right" style="color:#f59e0b;font-weight:600;">${dolarText}</td>
       <td class="text-right">${qCell}</td>
       <td class="text-right">—</td>
       <td class="text-right">${fmtMoeda(sums.facs)}</td>
@@ -501,8 +536,12 @@ function updateTotals(sums) {
     qCell = fmtN(sums.sacas);
   }
 
+  const totDolar = sums.totalUsd > 0 ? (sums.totalBrl / sums.totalUsd) : 0;
+  const dolarText = totDolar > 0 ? fmtCot.format(totDolar) : '—';
+
   document.getElementById('tot-quant').textContent    = fmtN(sums.quant);
   document.getElementById('tot-total').textContent    = fmtMoeda(sums.total);
+  document.getElementById('tot-dolar').textContent    = dolarText;
   document.getElementById('tot-sacas').textContent    = qCell;
   document.getElementById('tot-facs').textContent     = fmtMoeda(sums.facs);
   document.getElementById('tot-fethab').textContent   = fmtMoeda(sums.fethab);
@@ -567,14 +606,11 @@ function renderAnualTable() {
   }
 
   function getValorUsd(m, campoUsd) {
-    // USD disponível apenas para meses dinâmicos (não fechados)
     if (!state.resumoAnual?.meses) return null;
     const mesData = state.resumoAnual.meses.find(x => x.ano === m.ano && x.mes === m.mes);
     if (!mesData) return null;
     const dEmp = emp === 'TOTAL' ? mesData.porEmpresa['TOTAL'] : mesData.porEmpresa[emp];
     if (!dEmp) return null;
-    // Meses fechados não têm USD ainda → retornar null
-    if (dEmp.status === 'fechado') return null;
     return Number(dEmp[campoUsd] ?? 0);
   }
 
@@ -591,7 +627,6 @@ function renderAnualTable() {
     { brl: 'receita',  usd: 'receitaUsd',  label: '💰 Receita Total',     format: fmtMoeda },
     { brl: 'sacas',    usd: null,           label: '📦 Sacas',              format: fmtN     },
     { brl: 'cabecas',  usd: null,           label: '🐄 Cabeças',            format: fmtN     },
-    { brl: 'qtdNfs',   usd: null,           label: '📄 Nº de NFs',          format: v => Number(v).toLocaleString('pt-BR') },
     { brl: 'funrural', usd: 'funruralUsd',  label: '🌿 FUNRURAL',           format: fmtMoeda },
     { brl: 'fethab',   usd: 'fethabUsd',    label: '🚛 FETHAB',             format: fmtMoeda },
     { brl: 'vlrFacs',  usd: 'vlrFacsUsd',  label: '📋 Vlr. FACS',          format: fmtMoeda },
@@ -682,7 +717,21 @@ function renderAnualTable() {
         <i class="fa-solid fa-lock"></i> Fechar Mês
       </button>`;
     } else if (status === 'fechado') {
-      action = `<span style="font-size:11px;color:#10b981;font-weight:600;">✔ Fechado</span>`;
+      const recValor = getValor(m, 'receita') || 0;
+      const sacasVal = getValor(m, 'sacas')   || 0;
+      const cabecasVal = getValor(m, 'cabecas') || 0;
+      const nfsVal   = getValor(m, 'qtdNfs')  || 0;
+      const funVal   = getValor(m, 'funrural') || 0;
+      action = `
+        <div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
+          <span style="font-size:11px;color:#10b981;font-weight:600;">✔ Fechado</span>
+          <button class="btn btn-sm btn-secondary"
+            onclick="abrirModalFechar(${m.mes},${m.ano},'${emp}',${recValor},${sacasVal},${cabecasVal},${nfsVal},${funVal})"
+            style="font-size:9px;padding:2px 6px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:#cbd5e1;cursor:pointer;">
+            <i class="fa-solid fa-arrows-rotate"></i> Refazer
+          </button>
+        </div>
+      `;
     }
     rows += `<td class="${cls}">${action}</td>`;
   }
@@ -788,3 +837,145 @@ function showToast(msg, type = 'success') {
 document.getElementById('modal-fechar')?.addEventListener('click', e => {
   if (e.target.id === 'modal-fechar') closeModal();
 });
+
+// ─────────────────────────────────────────────
+// Ajustes Manuais (CRUD)
+// ─────────────────────────────────────────────
+let _closedFechamentosList = [];
+
+async function loadClosedFechamentos() {
+  const body = document.getElementById('edit-fechamento-list-body');
+  body.innerHTML = `<tr><td colspan="5" class="text-center"><i class="fa-solid fa-spinner fa-spin"></i> Carregando...</td></tr>`;
+  
+  try {
+    const res = await fetch('/api/receita/fechados');
+    const json = await res.json();
+    if (json.success) {
+      _closedFechamentosList = json.data;
+      renderClosedFechamentosList(json.data);
+    } else {
+      body.innerHTML = `<tr><td colspan="5" class="text-center" style="color:var(--color-danger)">Erro: ${json.error}</td></tr>`;
+    }
+  } catch(e) {
+    body.innerHTML = `<tr><td colspan="5" class="text-center" style="color:var(--color-danger)">Erro de conexão.</td></tr>`;
+  }
+}
+
+function renderClosedFechamentosList(data) {
+  const body = document.getElementById('edit-fechamento-list-body');
+  if (data.length === 0) {
+    body.innerHTML = `<tr><td colspan="5" class="text-center">Nenhum fechamento localizado no banco.</td></tr>`;
+    return;
+  }
+  
+  body.innerHTML = data.map(item => {
+    const periodoStr = `${NOMES_MES[item.FR_MES - 1]}/${item.FR_ANO}`;
+    return `
+      <tr>
+        <td>${periodoStr}</td>
+        <td>${escapeHTML(item.FR_EMPRESA)}</td>
+        <td>${escapeHTML(item.FR_NEGOCIO || '—')}</td>
+        <td class="text-right">${Number(item.FR_RECEITA_TOTAL || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+        <td>
+          <button class="btn btn-sm btn-primary" onclick="openEditForm(${item.FR_ID})">
+            <i class="fa-solid fa-pencil"></i> Editar
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+// Global para chamar via onclick inline
+window.openEditForm = function(id) {
+  const item = _closedFechamentosList.find(x => x.FR_ID === id);
+  if (!item) return;
+  
+  document.getElementById('edit-fr-id').value = item.FR_ID;
+  document.getElementById('edit-fr-periodo').value = `${NOMES_MES[item.FR_MES - 1]}/${item.FR_ANO}`;
+  document.getElementById('edit-fr-filial').value = item.FR_EMPRESA;
+  document.getElementById('edit-fr-negocio').value = item.FR_NEGOCIO || '—';
+  
+  document.getElementById('edit-fr-receita').value = item.FR_RECEITA_TOTAL || 0;
+  document.getElementById('edit-fr-sacas').value = item.FR_SACAS || 0;
+  document.getElementById('edit-fr-dolar').value = item.FR_DOLAR_MEDIO || 0;
+  document.getElementById('edit-fr-funrural').value = item.FR_FUNRURAL || 0;
+  document.getElementById('edit-fr-fethab').value = item.FR_FETHAB || 0;
+  document.getElementById('edit-fr-facs').value = item.FR_VLR_FACS || 0;
+  document.getElementById('edit-fr-nfs').value = item.FR_QTD_NFS || 0;
+  
+  document.getElementById('edit-fr-agro-receita').value = item.FR_AGRO_RECEITA || 0;
+  document.getElementById('edit-fr-agro-sacas').value = item.FR_AGRO_SACAS || 0;
+  document.getElementById('edit-fr-pec-receita').value = item.FR_PEC_RECEITA || 0;
+  document.getElementById('edit-fr-pec-sacas').value = item.FR_PEC_SACAS || 0;
+  document.getElementById('edit-fr-outros-receita').value = item.FR_OUTROS_RECEITA || 0;
+  document.getElementById('edit-fr-outros-sacas').value = item.FR_OUTROS_SACAS || 0;
+  
+  document.getElementById('edit-fr-obs').value = item.FR_OBS || '';
+  
+  document.getElementById('edit-fechamento-list-view').style.display = 'none';
+  document.getElementById('edit-fechamento-form-view').style.display = 'block';
+};
+
+async function saveFechamentoForm() {
+  const id = document.getElementById('edit-fr-id').value;
+  const btnSave = document.getElementById('btn-save-edit-form');
+  btnSave.disabled = true;
+  btnSave.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Salvando...';
+  
+  const payload = {
+    receitaTotal: Number(document.getElementById('edit-fr-receita').value || 0),
+    sacas: Number(document.getElementById('edit-fr-sacas').value || 0),
+    dolarMedio: Number(document.getElementById('edit-fr-dolar').value || 0),
+    funrural: Number(document.getElementById('edit-fr-funrural').value || 0),
+    fethab: Number(document.getElementById('edit-fr-fethab').value || 0),
+    vlrFacs: Number(document.getElementById('edit-fr-facs').value || 0),
+    qtdNfs: parseInt(document.getElementById('edit-fr-nfs').value || 0, 10),
+    agroReceita: Number(document.getElementById('edit-fr-agro-receita').value || 0),
+    agroSacas: Number(document.getElementById('edit-fr-agro-sacas').value || 0),
+    pecReceita: Number(document.getElementById('edit-fr-pec-receita').value || 0),
+    pecSacas: Number(document.getElementById('edit-fr-pec-sacas').value || 0),
+    outrosReceita: Number(document.getElementById('edit-fr-outros-receita').value || 0),
+    outrosSacas: Number(document.getElementById('edit-fr-outros-sacas').value || 0),
+    obs: document.getElementById('edit-fr-obs').value
+  };
+  
+  try {
+    const res = await fetch(`/api/receita/fechamento/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const json = await res.json();
+    if (json.success) {
+      showToast('✅ Lançamento atualizado com sucesso!', 'success');
+      document.getElementById('edit-fechamento-form-view').style.display = 'none';
+      document.getElementById('edit-fechamento-list-view').style.display = 'block';
+      loadClosedFechamentos();
+      loadAll(); // Atualiza dashboard principal!
+    } else {
+      showToast('❌ Erro: ' + json.error, 'error');
+    }
+  } catch(e) {
+    showToast('❌ Falha na conexão com o servidor.', 'error');
+  } finally {
+    btnSave.disabled = false;
+    btnSave.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Salvar Alterações';
+  }
+}
+
+function closeEditFechamentoModal() {
+  document.getElementById('modal-edit-fechamento').classList.remove('open');
+  document.getElementById('edit-fechamento-form-view').style.display = 'none';
+  document.getElementById('edit-fechamento-list-view').style.display = 'block';
+}
+
+function escapeHTML(str) {
+  if (str === undefined || str === null) return '';
+  return str.toString()
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}

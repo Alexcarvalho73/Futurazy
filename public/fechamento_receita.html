@@ -52,15 +52,15 @@
     .breadcrumb a:hover { text-decoration: underline; }
 
     /* ────────────────────────────────────
-       KPI Cards — 6 colunas
+       KPI Cards — 5 colunas
     ──────────────────────────────────── */
-    .kpi-grid-6 {
+    .kpi-grid-5 {
       display: grid;
-      grid-template-columns: repeat(6, 1fr);
+      grid-template-columns: repeat(5, 1fr);
       gap: 16px;
     }
-    @media (max-width: 1400px) { .kpi-grid-6 { grid-template-columns: repeat(3, 1fr); } }
-    @media (max-width: 900px)  { .kpi-grid-6 { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 1400px) { .kpi-grid-5 { grid-template-columns: repeat(3, 1fr); } }
+    @media (max-width: 900px)  { .kpi-grid-5 { grid-template-columns: repeat(2, 1fr); } }
 
     /* ────────────────────────────────────
        Cubo Pivot — Drill-down
@@ -182,6 +182,8 @@
     .moeda-btn:hover { background: rgba(255,255,255,.08); color: var(--text-white); }
     .moeda-btn.active[data-moeda="BRL"] { background: rgba(16,185,129,.15); color: #10b981; }
     .moeda-btn.active[data-moeda="USD"] { background: rgba(245,158,11,.15);  color: #f59e0b; }
+    .moeda-btn.active[data-kpi-periodo="atual"] { background: rgba(59,130,246,.15); color: var(--color-primary); }
+    .moeda-btn.active[data-kpi-periodo="anterior"] { background: rgba(245,158,11,.15); color: #f59e0b; }
     .moeda-btn + .moeda-btn { border-left: 1px solid var(--border-color); }
     .badge-agro { background:rgba(16,185,129,.15); color:#10b981; padding:2px 7px; border-radius:4px; font-size:10px; font-weight:700; }
     .badge-pec  { background:rgba(245,158,11,.15);  color:#f59e0b; padding:2px 7px; border-radius:4px; font-size:10px; font-weight:700; }
@@ -448,6 +450,19 @@
           </p>
         </div>
         <div class="page-header-actions">
+          <!-- Toggle Período dos Cards -->
+          <div class="moeda-toggle-group" title="Selecionar período dos cards">
+            <button class="moeda-btn active" data-kpi-periodo="atual" id="btn-kpi-atual">
+              Mês Corrente
+            </button>
+            <button class="moeda-btn" data-kpi-periodo="anterior" id="btn-kpi-anterior">
+              Mês Anterior
+            </button>
+          </div>
+          <!-- Botão Ajustes Manuais -->
+          <button class="btn btn-secondary" id="btn-open-edit-fechamento" style="background: rgba(245,158,11,.15); color: #f59e0b; border: 1px solid rgba(245,158,11,.3);">
+            <i class="fa-solid fa-pen-to-square"></i> Ajustes Manuais
+          </button>
           <!-- Toggle Moeda -->
           <div class="moeda-toggle-group" title="Selecionar moeda de visualização">
             <button class="moeda-btn active" data-moeda="BRL" id="btn-moeda-brl">
@@ -468,8 +483,8 @@
         </div>
       </header>
 
-      <!-- KPI Cards (6) -->
-      <section class="kpi-grid-6">
+      <!-- KPI Cards (5) -->
+      <section class="kpi-grid-5">
         <div class="kpi-card">
           <div class="kpi-icon icon-green"><i class="fa-solid fa-sack-dollar"></i></div>
           <div class="kpi-data">
@@ -487,19 +502,11 @@
           </div>
         </div>
         <div class="kpi-card">
-          <div class="kpi-icon icon-orange"><i class="fa-solid fa-file-invoice-dollar"></i></div>
+          <div class="kpi-icon icon-orange"><i class="fa-solid fa-dollar-sign"></i></div>
           <div class="kpi-data">
-            <h3>Nº de NFs</h3>
-            <h2 id="kpi-nfs">—</h2>
-            <span class="kpi-sub">Notas distintas</span>
-          </div>
-        </div>
-        <div class="kpi-card">
-          <div class="kpi-icon icon-purple"><i class="fa-solid fa-calculator"></i></div>
-          <div class="kpi-data">
-            <h3>Ticket Médio</h3>
-            <h2 id="kpi-ticket">—</h2>
-            <span class="kpi-sub">Receita ÷ Qtd. Física</span>
+            <h3>Valor Dólar</h3>
+            <h2 id="kpi-val-dolar">—</h2>
+            <span class="kpi-sub" id="kpi-val-dolar-sub">Cotação Média</span>
           </div>
         </div>
         <div class="kpi-card">
@@ -509,7 +516,7 @@
           <div class="kpi-data">
             <h3>FUNRURAL</h3>
             <h2 id="kpi-funrural">—</h2>
-            <span class="kpi-sub">Contribuição social rural</span>
+            <span class="kpi-sub" id="kpi-funrural-sub">Contribuição social rural</span>
           </div>
         </div>
         <div class="kpi-card">
@@ -519,7 +526,7 @@
           <div class="kpi-data">
             <h3>FETHAB</h3>
             <h2 id="kpi-fethab">—</h2>
-            <span class="kpi-sub">Fundo de transporte</span>
+            <span class="kpi-sub" id="kpi-fethab-sub">Fundo de transporte</span>
           </div>
         </div>
       </section>
@@ -563,14 +570,7 @@
             <label for="f-produto"><i class="fa-solid fa-box"></i> Produto</label>
             <input type="text" id="f-produto" class="form-control" placeholder="Nome do produto...">
           </div>
-          <div class="filter-group">
-            <label for="f-periodo-mes"><i class="fa-solid fa-calendar-day"></i> Período (Mês)</label>
-            <select id="f-periodo-mes" class="form-control">
-              <option value="todos">Todos (Mês Ant. + Mês Atual)</option>
-              <option value="anterior">Mês Anterior</option>
-              <option value="atual">Mês Atual</option>
-            </select>
-          </div>
+
         </div>
       </section>
 
@@ -628,12 +628,13 @@
               <tr>
                 <th style="min-width:280px">Hierarquia (Tipo → Empresa → Mês → Produto)</th>
                 <th class="text-right">Qtd.</th>
-                <th class="text-right">Total (R$)</th>
+                <th class="text-right" id="th-total-cubo">Total (R$)</th>
+                <th class="text-right" id="th-dolar-cubo">Dólar</th>
                 <th class="text-right">Sacas / Cab.</th>
                 <th class="text-right">Vlr Unit.</th>
-                <th class="text-right">Vlr FACS</th>
-                <th class="text-right">FETHAB</th>
-                <th class="text-right">FUNRURAL</th>
+                <th class="text-right" id="th-facs-cubo">Vlr FACS</th>
+                <th class="text-right" id="th-fethab-cubo">FETHAB</th>
+                <th class="text-right" id="th-funrural-cubo">FUNRURAL</th>
                 <th>CFOP</th>
                 <th>Transp.</th>
               </tr>
@@ -646,6 +647,7 @@
                 <td>Total Geral</td>
                 <td class="text-right" id="tot-quant">0</td>
                 <td class="text-right" id="tot-total">R$ 0,00</td>
+                <td class="text-right" id="tot-dolar">—</td>
                 <td class="text-right" id="tot-sacas">0</td>
                 <td class="text-right">—</td>
                 <td class="text-right" id="tot-facs">R$ 0,00</td>
@@ -706,6 +708,148 @@
           <i class="fa-solid fa-lock"></i> Confirmar Fechamento
         </button>
       </div>
+    </div>
+  </div>
+
+  <!-- Modal de Ajustes Manuais -->
+  <div class="modal-overlay" id="modal-edit-fechamento">
+    <div class="modal-box" style="max-width: 800px; width: 95%; max-height: 90vh; overflow-y: auto;">
+      <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; margin-bottom: 16px;">
+        <h2 class="modal-title" style="margin: 0; text-align: left; display: flex; align-items: center; gap: 8px;">
+          <i class="fa-solid fa-pen-to-square" style="color: #f59e0b;"></i> Ajustes Manuais - FECHAMENTO_RECEITA
+        </h2>
+        <button class="toggle-btn" id="btn-close-edit-fechamento-modal" style="margin: 0; padding: 4px 8px;">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <!-- LISTA DE FECHAMENTOS -->
+      <div id="edit-fechamento-list-view">
+        <div class="table-wrapper" style="max-height: 400px;">
+          <table class="anual-table" style="width: 100%; font-size: 13px;">
+            <thead>
+              <tr>
+                <th>Mês/Ano</th>
+                <th>Filial</th>
+                <th>Negócio</th>
+                <th class="text-right">Receita Total</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody id="edit-fechamento-list-body">
+              <!-- Inserido dinamicamente -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- FORMULÁRIO DE EDIÇÃO -->
+      <div id="edit-fechamento-form-view" style="display: none;">
+        <form id="form-edit-fechamento" onsubmit="event.preventDefault();">
+          <input type="hidden" id="edit-fr-id">
+          
+          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 16px;">
+            <div class="filter-group">
+              <label>Período</label>
+              <input type="text" id="edit-fr-periodo" class="form-control" readonly style="opacity: 0.6; cursor: not-allowed;">
+            </div>
+            <div class="filter-group">
+              <label>Filial</label>
+              <input type="text" id="edit-fr-filial" class="form-control" readonly style="opacity: 0.6; cursor: not-allowed;">
+            </div>
+            <div class="filter-group">
+              <label>Negócio</label>
+              <input type="text" id="edit-fr-negocio" class="form-control" readonly style="opacity: 0.6; cursor: not-allowed;">
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px;">
+            <div class="filter-group">
+              <label>Receita Total (BRL)</label>
+              <input type="number" step="0.01" id="edit-fr-receita" class="form-control" required>
+            </div>
+            <div class="filter-group">
+              <label>Sacas Total</label>
+              <input type="number" step="0.0001" id="edit-fr-sacas" class="form-control" required>
+            </div>
+            <div class="filter-group">
+              <label>Dólar Médio (BRL/USD)</label>
+              <input type="number" step="0.0001" id="edit-fr-dolar" class="form-control" required>
+            </div>
+            <div class="filter-group">
+              <label>FUNRURAL (BRL)</label>
+              <input type="number" step="0.01" id="edit-fr-funrural" class="form-control" required>
+            </div>
+            <div class="filter-group">
+              <label>FETHAB (BRL)</label>
+              <input type="number" step="0.01" id="edit-fr-fethab" class="form-control" required>
+            </div>
+            <div class="filter-group">
+              <label>Vlr FACS (BRL)</label>
+              <input type="number" step="0.01" id="edit-fr-facs" class="form-control" required>
+            </div>
+            <div class="filter-group">
+              <label>Qtd NFs</label>
+              <input type="number" id="edit-fr-nfs" class="form-control" required>
+            </div>
+          </div>
+
+          <h3 style="font-size: 14px; color: var(--text-white); margin-bottom: 8px; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">Segmentações por Negócio</h3>
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px;">
+            <!-- Agro -->
+            <div style="border-right: 1px solid var(--border-color); padding-right: 8px;">
+              <h4 style="font-size:12px; color:#10b981; margin-bottom:6px;">🌾 Agricultura</h4>
+              <div class="filter-group" style="margin-bottom: 8px;">
+                <label>Receita</label>
+                <input type="number" step="0.01" id="edit-fr-agro-receita" class="form-control" required>
+              </div>
+              <div class="filter-group">
+                <label>Sacas</label>
+                <input type="number" step="0.0001" id="edit-fr-agro-sacas" class="form-control" required>
+              </div>
+            </div>
+            <!-- Pecuária -->
+            <div style="border-right: 1px solid var(--border-color); padding-right: 8px;">
+              <h4 style="font-size:12px; color:#f59e0b; margin-bottom:6px;">🐄 Pecuária</h4>
+              <div class="filter-group" style="margin-bottom: 8px;">
+                <label>Receita</label>
+                <input type="number" step="0.01" id="edit-fr-pec-receita" class="form-control" required>
+              </div>
+              <div class="filter-group">
+                <label>Cabeças</label>
+                <input type="number" step="0.0001" id="edit-fr-pec-sacas" class="form-control" required>
+              </div>
+            </div>
+            <!-- Outros -->
+            <div>
+              <h4 style="font-size:12px; color:#94a3b8; margin-bottom:6px;">📦 Outros</h4>
+              <div class="filter-group" style="margin-bottom: 8px;">
+                <label>Receita</label>
+                <input type="number" step="0.01" id="edit-fr-outros-receita" class="form-control" required>
+              </div>
+              <div class="filter-group">
+                <label>Quantidade</label>
+                <input type="number" step="0.0001" id="edit-fr-outros-sacas" class="form-control" required>
+              </div>
+            </div>
+          </div>
+
+          <div class="filter-group" style="margin-bottom: 16px;">
+            <label>Observações</label>
+            <textarea id="edit-fr-obs" class="form-control" rows="2" placeholder="Observações do fechamento..."></textarea>
+          </div>
+
+          <div class="modal-actions" style="justify-content: flex-end; gap: 8px;">
+            <button class="btn btn-secondary" type="button" id="btn-cancel-edit-form">
+              <i class="fa-solid fa-arrow-left"></i> Voltar para Lista
+            </button>
+            <button class="btn btn-success" type="button" id="btn-save-edit-form">
+              <i class="fa-solid fa-floppy-disk"></i> Salvar Alterações
+            </button>
+          </div>
+        </form>
+      </div>
+
     </div>
   </div>
 
