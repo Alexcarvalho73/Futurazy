@@ -226,6 +226,16 @@ h1, h2, h3, h4, h5, h6 {
   background-color: var(--color-primary-hover);
 }
 
+.btn-success {
+  background-color: rgba(16, 185, 129, 0.15);
+  color: var(--color-success);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.btn-success:hover {
+  background-color: rgba(16, 185, 129, 0.25);
+}
+
 .btn-secondary {
   background-color: rgba(255, 255, 255, 0.05);
   color: var(--text-main);

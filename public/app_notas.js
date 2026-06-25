@@ -460,3 +460,96 @@ document.addEventListener('DOMContentLoaded', () => {
   updateStatusOptions();
   loadHeaders();
 });
+
+// Exportar Excel
+const btnExportExcel = document.getElementById('btn-export-excel');
+if (btnExportExcel) {
+  btnExportExcel.addEventListener('click', async () => {
+    const originalText = btnExportExcel.innerHTML;
+    btnExportExcel.disabled = true;
+    btnExportExcel.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Exportando...';
+
+    try {
+      const params = new URLSearchParams({
+        page: 1,
+        limit: 100000, // buscar todos os registros correspondentes aos filtros
+        fluxo: filterFluxo.value,
+        status: filterStatus.value,
+        filial: filterFilial.value.trim(),
+        fornecedor: filterFornecedor.value.trim(),
+        numnf: filterNumnf.value.trim(),
+        emissao_de: filterEmissaoDe.value,
+        emissao_ate: filterEmissaoAte.value,
+        vencimento_de: filterVencimentoDe.value,
+        vencimento_ate: filterVencimentoAte.value,
+        xml_confco: filterXmlConfco.value
+      });
+
+      const url = `/api/notas?${params.toString()}`;
+      const res = await fetch(url);
+      const result = await res.json();
+
+      if (result.success && result.data) {
+        // Gerar CSV formatado para Excel no padrão PT-BR (delimitado por ponto e vírgula e BOM UTF-8)
+        const headers = [
+          'Dias Pend.',
+          'Status',
+          'Filial',
+          'Número NF',
+          'Fornecedor / Emitente',
+          'Emissão',
+          'Recebimento',
+          'Vencimento',
+          'Valor XML',
+          'Chave XML'
+        ];
+
+        const rows = result.data.map(row => [
+          row.DIAS || '0',
+          row.XML_STATUS || '',
+          row.XML_FIL_CALC || '',
+          row.XML_NUMNF || '',
+          row.XML_NOMEMT || '',
+          formatDateDisplay(row.XML_EMISSA),
+          formatDateDisplay(row.XML_RECEB),
+          formatDateDisplay(row.XML_DTRVLD),
+          Number(row.XML_VLRDOC || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+          row.XML_CHAVE || ''
+        ]);
+
+        // Construir string do CSV separada por ponto e vírgula
+        let csvContent = headers.join(';') + '\r\n';
+        rows.forEach(row => {
+          // Escapar aspas duplas e envolver os campos com aspas se necessário
+          const escapedFields = row.map(field => {
+            const str = String(field).replace(/"/g, '""');
+            return `"${str}"`;
+          });
+          csvContent += escapedFields.join(';') + '\r\n';
+        });
+
+        // Criar Blob com o BOM UTF-8 (\uFEFF) para garantir caracteres e acentos corretos no Excel
+        const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const urlBlob = URL.createObjectURL(blob);
+        
+        // Nome do arquivo com data da exportação
+        const dateStr = new Date().toISOString().slice(0, 10);
+        link.setAttribute('href', urlBlob);
+        link.setAttribute('download', `notas_fiscais_pendentes_${dateStr}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } else {
+        alert('Erro ao exportar dados: ' + (result.error || 'Erro desconhecido.'));
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Erro de rede ao exportar dados.');
+    } finally {
+      btnExportExcel.disabled = false;
+      btnExportExcel.innerHTML = originalText;
+    }
+  });
+}

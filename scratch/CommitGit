@@ -1,1 +1,1 @@
-git add . ; git commit -m "Ajustes classificação de Notas" ; git push origin main ;node .\scratch\run_commit_remoto.js
+git add . ; git commit -m "Adicionar Campos CC e Local na grid" ; git push origin main ;node .\scratch\run_commit_remoto.js
