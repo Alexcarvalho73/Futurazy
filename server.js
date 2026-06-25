@@ -423,6 +423,82 @@ app.get('/api/notas/:chave/itens', async (req, res) => {
   }
 });
 
+// Rota de API para buscar dados financeiros de uma nota fiscal específica (filtrada por XML_CHAVE)
+app.get('/api/notas/:chave/financeiro', async (req, res) => {
+  const chave = req.params.chave ? req.params.chave.trim() : '';
+
+  if (!chave) {
+    return res.json({ success: true, method: 'sft', data: [] });
+  }
+
+  try {
+    // 1. Buscar no Livro Fiscal (SFT020) pela chave XML da nota fiscal
+    const sqlSFT = `
+      SELECT DISTINCT 
+        FT_FILIAL, 
+        FT_SERIE, 
+        FT_NFISCAL, 
+        FT_CLIEFOR, 
+        FT_LOJA 
+      FROM PROTHEUS11.SFT020 
+      WHERE TRIM(FT_CHVNFE) = :chave 
+        AND D_E_L_E_T_ = ' '
+    `;
+    const sftRows = await db.execute(sqlSFT, { chave });
+
+    if (sftRows.length === 0) {
+      return res.json({ success: true, method: 'sft', data: [], message: 'Nota fiscal não localizada no Livro Fiscal (SFT020).' });
+    }
+
+    const sft = sftRows[0];
+
+    // 2. Buscar dados financeiros no contas a pagar (SE2020) com os campos chave mapeados do SFT020
+    const sqlSE2 = `
+      SELECT 
+        TRIM(E2_FILIAL) as E2_FILIAL,
+        TRIM(E2_NUM) as E2_NUM,
+        TRIM(E2_PREFIXO) as E2_PREFIXO,
+        TRIM(E2_PARCELA) as E2_PARCELA,
+        TRIM(E2_TIPO) as E2_TIPO,
+        TRIM(E2_FORNECE) as E2_FORNECE,
+        TRIM(E2_LOJA) as E2_LOJA,
+        TRIM(E2_NOMFOR) as E2_NOMFOR,
+        E2_EMISSAO,
+        E2_VENCTO,
+        E2_VENCREA,
+        TRIM(E2_TPGER) as E2_TPGER,
+        E2_VALOR,
+        E2_SALDO,
+        TRIM(E2_HIST) as E2_HIST,
+        TRIM(E2_FATURA) as E2_FATURA,
+        E2_BAIXA
+      FROM PROTHEUS11.SE2020
+      WHERE E2_FILIAL = :filial
+        AND E2_PREFIXO = :prefixo
+        AND E2_NUM = :num
+        AND E2_FORNECE = :fornece
+        AND E2_LOJA = :loja
+        AND D_E_L_E_T_ = ' '
+      ORDER BY E2_PARCELA ASC, E2_VENCREA ASC
+    `;
+
+    const binds = {
+      filial: sft.FT_FILIAL,
+      prefixo: sft.FT_SERIE,
+      num: sft.FT_NFISCAL,
+      fornece: sft.FT_CLIEFOR,
+      loja: sft.FT_LOJA
+    };
+
+    const financeRows = await db.execute(sqlSE2, binds);
+    res.json({ success: true, method: 'sft', data: financeRows });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, error: 'Erro ao buscar dados financeiros: ' + err.message });
+  }
+});
+
 // ============================================================
 // MÓDULO FECHAMENTO FINANCEIRO — RECEITAS
 // ============================================================

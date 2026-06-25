@@ -178,6 +178,7 @@
                 <tr>
                   <th width="110">Dias Pend.</th>
                   <th width="70" class="text-center">Status</th>
+                  <th width="60" class="text-center">Fin.</th>
                   <th width="80">Filial</th>
                   <th width="120">Número NF</th>
                   <th>Fornecedor / Emitente</th>
@@ -258,6 +259,39 @@
       </div>
 
     </main>
+  </div>
+
+  <!-- Modal Financeiro -->
+  <div id="modal-financeiro" class="modal-container hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2><i class="fa-solid fa-file-invoice-dollar modal-header-icon"></i> Financeiro da NF: <span id="fin-modal-numnf"></span></h2>
+        <button class="btn-close-modal" id="btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-info-bar">
+          <div><strong>Emitente:</strong> <span id="fin-modal-fornecedor"></span></div>
+          <div><strong>Chave XML:</strong> <span id="fin-modal-chave" class="font-numeric"></span></div>
+        </div>
+        
+        <!-- Loading State Modal -->
+        <div class="loading-overlay" id="loading-financeiro">
+          <div class="spinner"></div>
+          <p>Buscando dados financeiros no Protheus...</p>
+        </div>
+        
+        <!-- Estado Vazio / Sem Financeiro -->
+        <div class="empty-state hidden" id="empty-financeiro-message">
+          <i class="fa-solid fa-circle-info"></i>
+          <p>Nenhum registro financeiro (contas a pagar) localizado para esta Nota Fiscal.</p>
+        </div>
+        
+        <!-- Container dos Cards Financeiros -->
+        <div class="financial-cards-container" id="financial-cards-container">
+          <!-- Cards gerados dinamicamente -->
+        </div>
+      </div>
+    </div>
   </div>
 
   <script src="app_notas.js?v=3"></script>

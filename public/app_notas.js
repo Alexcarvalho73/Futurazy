@@ -227,7 +227,7 @@ function renderHeaders(data) {
   if (!data || data.length === 0) {
     masterBody.innerHTML = `
       <tr>
-        <td colspan="10" class="text-center" style="padding: 40px; color: var(--text-muted);">
+        <td colspan="11" class="text-center" style="padding: 40px; color: var(--text-muted);">
           Nenhuma nota fiscal pendente localizada.
         </td>
       </tr>
@@ -240,6 +240,15 @@ function renderHeaders(data) {
       <tr data-chave="${row.XML_CHAVE}">
         <td>${getDaysBadge(row.DIAS)}</td>
         <td class="text-center">${getHeaderStatusBadge(row)}</td>
+        <td class="text-center">
+          <button class="btn-financeiro" title="Visualizar Financeiro" 
+            data-chave="${row.XML_CHAVE}" 
+            data-numnf="${escapeHTML(row.XML_NUMNF)}" 
+            data-emit="${escapeHTML(row.XML_NOMEMT)}"
+            data-cnpj="${escapeHTML(row.XML_EMIT)}">
+            <i class="fa-solid fa-dollar-sign"></i>
+          </button>
+        </td>
         <td>${escapeHTML(row.XML_FIL_CALC)}</td>
         <td>${escapeHTML(row.XML_NUMNF)}</td>
         <td title="${escapeHTML(row.XML_NOMEMT)}">${escapeHTML(row.XML_NOMEMT)}</td>
@@ -257,7 +266,11 @@ function renderHeaders(data) {
   // Setup click row events
   const rows = masterBody.querySelectorAll('tr');
   rows.forEach(row => {
-    row.addEventListener('click', () => {
+    row.addEventListener('click', (e) => {
+      // Se o clique foi no botão financeiro, não selecionar a linha para itens
+      if (e.target.closest('.btn-financeiro')) {
+        return;
+      }
       // Remover seleção anterior
       rows.forEach(r => r.classList.remove('row-selected'));
       // Selecionar atual
@@ -268,6 +281,18 @@ function renderHeaders(data) {
       selectedChave = chave;
       loadItems(chave);
     });
+
+    // Evento para botão financeiro individual
+    const btnFin = row.querySelector('.btn-financeiro');
+    if (btnFin) {
+      btnFin.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const chave = btnFin.getAttribute('data-chave');
+        const numnf = btnFin.getAttribute('data-numnf');
+        const emit = btnFin.getAttribute('data-emit');
+        openFinanceiroModal(chave, numnf, emit);
+      });
+    }
   });
 }
 
@@ -552,4 +577,141 @@ if (btnExportExcel) {
       btnExportExcel.innerHTML = originalText;
     }
   });
+}
+
+// ==========================================================================
+// CONTROLES DO MODAL E BUSCA FINANCEIRA
+// ==========================================================================
+
+const modalFinanceiro = document.getElementById('modal-financeiro');
+const btnCloseModal = document.getElementById('btn-close-modal');
+const loadingFinanceiro = document.getElementById('loading-financeiro');
+const emptyFinanceiroMessage = document.getElementById('empty-financeiro-message');
+const financialCardsContainer = document.getElementById('financial-cards-container');
+
+if (modalFinanceiro && btnCloseModal) {
+  btnCloseModal.addEventListener('click', () => {
+    modalFinanceiro.classList.add('hidden');
+  });
+
+  modalFinanceiro.addEventListener('click', (e) => {
+    if (e.target === modalFinanceiro) {
+      modalFinanceiro.classList.add('hidden');
+    }
+  });
+}
+
+function openFinanceiroModal(chave, numnf, emitente) {
+  const cleanChave = (chave || '').trim();
+  document.getElementById('fin-modal-numnf').textContent = numnf;
+  document.getElementById('fin-modal-fornecedor').textContent = emitente;
+  document.getElementById('fin-modal-chave').textContent = cleanChave;
+
+  modalFinanceiro.classList.remove('hidden');
+  loadFinanceiro(cleanChave);
+}
+
+async function loadFinanceiro(chave) {
+  const cleanChave = (chave || '').trim();
+  loadingFinanceiro.classList.add('active');
+  emptyFinanceiroMessage.classList.add('hidden');
+  financialCardsContainer.innerHTML = '';
+
+  try {
+    const res = await fetch(`/api/notas/${cleanChave}/financeiro`);
+    const result = await res.json();
+
+    if (result.success) {
+      renderFinanceiroCards(result.data);
+    } else {
+      alert('Erro ao buscar dados financeiros: ' + result.error);
+    }
+  } catch (err) {
+    console.error(err);
+    alert('Erro de rede ao buscar dados financeiros do Protheus.');
+  } finally {
+    loadingFinanceiro.classList.remove('active');
+  }
+}
+
+function renderFinanceiroCards(data) {
+  if (!data || data.length === 0) {
+    emptyFinanceiroMessage.classList.remove('hidden');
+    return;
+  }
+
+  const cardsHTML = data.map(item => {
+    const valor = Number(item.E2_VALOR || 0);
+    const saldo = Number(item.E2_SALDO || 0);
+    const vencRea = item.E2_VENCREA ? item.E2_VENCREA.trim() : '';
+    const baixa = item.E2_BAIXA ? item.E2_BAIXA.trim() : '';
+
+    let statusText = 'Em Aberto';
+    let statusClass = 'status-open';
+
+    if (saldo === 0 || baixa !== '') {
+      statusText = 'Pago';
+      statusClass = 'status-paid';
+    } else if (vencRea) {
+      const hojeStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      if (vencRea < hojeStr) {
+        statusText = 'Atrasado';
+        statusClass = 'status-overdue';
+      }
+    }
+
+    const fatura = item.E2_FATURA && item.E2_FATURA.trim() !== '' ? item.E2_FATURA.trim() : 'Sem fatura vinculada';
+    const hist = item.E2_HIST ? item.E2_HIST.trim() : 'Nenhum histórico detalhado';
+    const tpGer = item.E2_TPGER ? item.E2_TPGER.trim() : 'N/A';
+    const parc = item.E2_PARCELA ? item.E2_PARCELA.trim() : 'Única';
+
+    return `
+      <div class="financial-card">
+        <div class="financial-card-header">
+          <span class="financial-card-title">Parcela: ${escapeHTML(parc)}</span>
+          <span class="financial-card-status ${statusClass}">${statusText}</span>
+        </div>
+        <div class="financial-card-grid">
+          <div class="financial-card-field">
+            <span class="financial-card-label">Valor do Título</span>
+            <span class="financial-card-value amount">${formatCurrency(valor)}</span>
+          </div>
+          <div class="financial-card-field">
+            <span class="financial-card-label">Saldo em Aberto</span>
+            <span class="financial-card-value amount highlight">${formatCurrency(saldo)}</span>
+          </div>
+          <div class="financial-card-field">
+            <span class="financial-card-label">Vencimento Real</span>
+            <span class="financial-card-value">${formatDateDisplay(vencRea)}</span>
+          </div>
+          <div class="financial-card-field">
+            <span class="financial-card-label">Vencimento Original</span>
+            <span class="financial-card-value">${formatDateDisplay(item.E2_VENCTO)}</span>
+          </div>
+          <div class="financial-card-field">
+            <span class="financial-card-label">Data de Emissão</span>
+            <span class="financial-card-value">${formatDateDisplay(item.E2_EMISSAO)}</span>
+          </div>
+          <div class="financial-card-field">
+            <span class="financial-card-label">Data de Baixa</span>
+            <span class="financial-card-value">${baixa !== '' ? formatDateDisplay(baixa) : '-'}</span>
+          </div>
+          <div class="financial-card-field">
+            <span class="financial-card-label">Tipo Gerência</span>
+            <span class="financial-card-value">${escapeHTML(tpGer)}</span>
+          </div>
+          <div class="financial-card-field">
+            <span class="financial-card-label">Fatura Gerada</span>
+            <span class="financial-card-value">${escapeHTML(fatura)}</span>
+          </div>
+          <div class="financial-card-full-field">
+            <span class="financial-card-label">Histórico</span>
+            <p class="financial-card-desc" title="${escapeHTML(hist)}">${escapeHTML(hist)}</p>
+          </div>
+        </div>
+      </div>
+    `;
+  });
+
+  financialCardsContainer.innerHTML = cardsHTML.join('');
 }
