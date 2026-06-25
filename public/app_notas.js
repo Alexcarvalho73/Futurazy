@@ -227,7 +227,7 @@ function renderHeaders(data) {
   if (!data || data.length === 0) {
     masterBody.innerHTML = `
       <tr>
-        <td colspan="9" class="text-center" style="padding: 40px; color: var(--text-muted);">
+        <td colspan="10" class="text-center" style="padding: 40px; color: var(--text-muted);">
           Nenhuma nota fiscal pendente localizada.
         </td>
       </tr>
@@ -245,6 +245,7 @@ function renderHeaders(data) {
         <td title="${escapeHTML(row.XML_NOMEMT)}">${escapeHTML(row.XML_NOMEMT)}</td>
         <td>${formatDateDisplay(row.XML_EMISSA)}</td>
         <td>${formatDateDisplay(row.XML_RECEB)}</td>
+        <td>${formatDateDisplay(row.XML_DTRVLD)}</td>
         <td class="text-right font-numeric">${formatCurrency(row.XML_VLRDOC)}</td>
         <td class="font-numeric" title="${escapeHTML(row.XML_CHAVE)}">${escapeHTML(row.XML_CHAVE)}</td>
       </tr>

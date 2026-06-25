@@ -579,39 +579,25 @@ function renderAnualTable() {
 
   const emp = state.empresaFiltro;
 
-  // ── CABEÇALHO ──────────────────────────────
-  let thHtml = `<tr><th>Métrica <span id="moeda-note" style="display:${state.moeda==='USD'?'inline-flex':'none'};align-items:center;gap:4px;background:rgba(245,158,11,.15);color:#f59e0b;font-size:10px;padding:2px 6px;border-radius:4px;font-weight:700;">US$ PTAX</span></th>`;
-  for (const m of meses) {
-    const isFuturo   = new Date(m.ano, m.mes-1, 1) > hoje;
-    const isAtual    = m.ano === mesAtual.ano   && m.mes === mesAtual.mes;
-    const isAnterior = m.ano === mesAnterior.ano && m.mes === mesAnterior.mes;
-    let cls = '';
-    if (isAtual)    cls = 'col-atual';
-    if (isAnterior) cls = 'col-anterior';
-    const label  = `${NOMES_MES[m.mes-1]}/${String(m.ano).slice(2)}`;
-    const suffix = isAtual ? ' 🟡' : isAnterior ? ' 🔴' : isFuturo ? '' : '';
-    thHtml += `<th class="${cls}" title="${m.mes}/${m.ano}" data-mes="${m.mes}" data-ano="${m.ano}">${label}${suffix}</th>`;
-  }
-  thHtml += '<th class="col-total">TOTAL</th></tr>';
-  document.getElementById('anual-thead').innerHTML = thHtml;
+
 
   // ── Helpers para obter valor do resumoAnual ──
-  function getValor(m, campo) {
+  function getValor(m, negocio, campo) {
     if (!state.resumoAnual?.meses) return null;
     const mesData = state.resumoAnual.meses.find(x => x.ano === m.ano && x.mes === m.mes);
     if (!mesData) return null;
     const dEmp = emp === 'TOTAL' ? mesData.porEmpresa['TOTAL'] : mesData.porEmpresa[emp];
-    if (!dEmp) return null;
-    return Number(dEmp[campo] ?? 0);
+    if (!dEmp || !dEmp[negocio]) return null;
+    return Number(dEmp[negocio][campo] ?? 0);
   }
 
-  function getValorUsd(m, campoUsd) {
+  function getValorUsd(m, negocio, campoUsd) {
     if (!state.resumoAnual?.meses) return null;
     const mesData = state.resumoAnual.meses.find(x => x.ano === m.ano && x.mes === m.mes);
     if (!mesData) return null;
     const dEmp = emp === 'TOTAL' ? mesData.porEmpresa['TOTAL'] : mesData.porEmpresa[emp];
-    if (!dEmp) return null;
-    return Number(dEmp[campoUsd] ?? 0);
+    if (!dEmp || !dEmp[negocio]) return null;
+    return Number(dEmp[negocio][campoUsd] ?? 0);
   }
 
   function getStatus(m) {
@@ -622,21 +608,46 @@ function renderAnualTable() {
     return dEmp?.status || mesData.status || 'futuro';
   }
 
-  // ── Métricas ──────────────────────────────
-  const metricas = [
-    { brl: 'receita',  usd: 'receitaUsd',  label: '💰 Receita Total',     format: fmtMoeda },
-    { brl: 'sacas',    usd: null,           label: '📦 Sacas',              format: fmtN     },
-    { brl: 'cabecas',  usd: null,           label: '🐄 Cabeças',            format: fmtN     },
-    { brl: 'funrural', usd: 'funruralUsd',  label: '🌿 FUNRURAL',           format: fmtMoeda },
-    { brl: 'fethab',   usd: 'fethabUsd',    label: '🚛 FETHAB',             format: fmtMoeda },
-    { brl: 'vlrFacs',  usd: 'vlrFacsUsd',  label: '📋 Vlr. FACS',          format: fmtMoeda },
-  ];
+  // ── CABEÇALHO ──────────────────────────────
+  // Primeira linha: Mês (colspan=4)
+  let thHtml = `<tr><th rowspan="2" style="vertical-align:middle; text-align:left;">Métrica <span id="moeda-note" style="display:${state.moeda==='USD'?'inline-flex':'none'};align-items:center;gap:4px;background:rgba(245,158,11,.15);color:#f59e0b;font-size:10px;padding:2px 6px;border-radius:4px;font-weight:700;">US$ PTAX</span></th>`;
+  for (const m of meses) {
+    const isAtual    = m.ano === mesAtual.ano   && m.mes === mesAtual.mes;
+    const isAnterior = m.ano === mesAnterior.ano && m.mes === mesAnterior.mes;
+    let cls = '';
+    if (isAtual)    cls = 'col-atual';
+    if (isAnterior) cls = 'col-anterior';
+    const label  = `${NOMES_MES[m.mes-1]}/${String(m.ano).slice(2)}`;
+    const suffix = isAtual ? ' 🟡' : isAnterior ? ' 🔴' : '';
+    thHtml += `<th class="${cls}" colspan="4" style="text-align:center;">${label}${suffix}</th>`;
+  }
+  thHtml += '<th colspan="4" style="text-align:center;">TOTAL SAFRA</th></tr>';
 
-  let rows = '';
+  // Segunda linha: Negócio (Pecuária, Agrícola, Outros, Total)
+  thHtml += '<tr>';
+  for (const m of meses) {
+    const isAtual    = m.ano === mesAtual.ano   && m.mes === mesAtual.mes;
+    const isAnterior = m.ano === mesAnterior.ano && m.mes === mesAnterior.mes;
+    let cls = '';
+    if (isAtual)    cls = 'col-atual';
+    if (isAnterior) cls = 'col-anterior';
+    thHtml += `<th class="${cls}" style="font-size:10px;text-align:center;background:rgba(255,255,255,0.02);">Pec.</th>`;
+    thHtml += `<th class="${cls}" style="font-size:10px;text-align:center;background:rgba(255,255,255,0.02);">Agri.</th>`;
+    thHtml += `<th class="${cls}" style="font-size:10px;text-align:center;background:rgba(255,255,255,0.02);">Outr.</th>`;
+    thHtml += `<th class="${cls}" style="font-size:10px;text-align:center;font-weight:700;background:rgba(255,255,255,0.05);">Total</th>`;
+  }
+  thHtml += `<th style="font-size:10px;text-align:center;background:rgba(255,255,255,0.02);">Pec.</th>`;
+  thHtml += `<th style="font-size:10px;text-align:center;background:rgba(255,255,255,0.02);">Agri.</th>`;
+  thHtml += `<th style="font-size:10px;text-align:center;background:rgba(255,255,255,0.02);">Outr.</th>`;
+  thHtml += `<th style="font-size:10px;text-align:center;font-weight:700;background:rgba(255,255,255,0.05);">Total</th>`;
+  thHtml += '</tr>';
+  document.getElementById('anual-thead').innerHTML = thHtml;
 
-  for (const metrica of metricas) {
-    let totalAcum = 0;
-    let rowHtml   = `<tr><td>${metrica.label}</td>`;
+  // Helper para renderizar cada linha de métrica
+  function renderMetricaRow(label, fieldBrl, fieldUsd, formatFn, isTax = false, isDollar = false) {
+    let rowHtml = `<tr><td style="font-weight:${isTax ? 'normal' : '600'}; padding-left:${isTax ? '20px' : '10px'};">${label}</td>`;
+    const segs = ['Pecuaria', 'Agricola', 'Outros', 'Total'];
+    const segmentTotals = { Pecuaria: 0, Agricola: 0, Outros: 0, Total: 0 };
 
     for (const m of meses) {
       const isFuturo   = new Date(m.ano, m.mes-1, 1) > hoje;
@@ -646,33 +657,131 @@ function renderAnualTable() {
       if (isAtual)    cls = 'col-atual';
       if (isAnterior) cls = 'col-anterior';
 
-      if (isFuturo) {
-        rowHtml += `<td class="${cls}">—</td>`;
-        continue;
-      }
-
-      let val;
-      if (state.moeda === 'USD' && metrica.usd) {
-        val = getValorUsd(m, metrica.usd);
-        if (val === null) {
-          // Mês fechado sem USD armazenado → sinalizar
-          rowHtml += `<td class="${cls}" style="text-align:right;font-size:11px;color:#64748b;font-style:italic;" title="Mês fechado — USD não disponível">BRL</td>`;
+      for (const seg of segs) {
+        if (isFuturo) {
+          rowHtml += `<td class="${cls}" style="text-align:center;color:#475569;">—</td>`;
           continue;
         }
-      } else {
-        val = getValor(m, metrica.brl);
-      }
 
-      totalAcum += Number(val || 0);
-      rowHtml += `<td class="${cls}" style="text-align:right;">${val != null ? metrica.format(val) : '—'}</td>`;
+        let val = null;
+        if (isDollar) {
+          val = getValor(m, seg, 'dolarMedio') || getValor(m, 'Total', 'dolarMedio') || 0;
+        } else if (state.moeda === 'USD' && fieldUsd) {
+          val = getValorUsd(m, seg, fieldUsd);
+        } else {
+          val = getValor(m, seg, fieldBrl);
+        }
+
+        if (!isDollar) {
+          segmentTotals[seg] += Number(val || 0);
+        }
+
+        let valStr = '—';
+        if (val !== null && val !== 0) {
+          valStr = formatFn(val);
+          if (isTax && val > 0) {
+            valStr = `-${valStr}`;
+          }
+        }
+        
+        let style = 'text-align:right;';
+        if (seg === 'Total') style += 'font-weight:700;background:rgba(255,255,255,0.03);';
+        rowHtml += `<td class="${cls}" style="${style}">${valStr}</td>`;
+      }
     }
 
-    rowHtml += `<td class="col-total">${metrica.format(totalAcum)}</td></tr>`;
-    rows += rowHtml;
+    // Totais Safra (Fim da linha)
+    for (const seg of segs) {
+      let totalVal = segmentTotals[seg];
+      if (isDollar) {
+        let sumBrl = 0;
+        let sumUsd = 0;
+        for (const m of meses) {
+          if (new Date(m.ano, m.mes-1, 1) > hoje) continue;
+          sumBrl += getValor(m, seg, 'receita') || 0;
+          sumUsd += getValorUsd(m, seg, 'receitaUsd') || 0;
+        }
+        totalVal = sumUsd > 0 ? (sumBrl / sumUsd) : 0;
+      }
+
+      let valStr = totalVal !== 0 ? formatFn(totalVal) : '—';
+      if (isTax && totalVal > 0) valStr = `-${valStr}`;
+      
+      let style = 'text-align:right;font-weight:700;background:rgba(255,255,255,0.06);';
+      if (seg === 'Total') style += 'font-weight:800;background:rgba(255,255,255,0.09);';
+      rowHtml += `<td class="col-total" style="${style}">${valStr}</td>`;
+    }
+
+    rowHtml += '</tr>';
+    return rowHtml;
   }
 
+  function renderTotalizerRow() {
+    let rowHtml = `<tr style="border-top:1.5px solid rgba(255,255,255,0.15); border-bottom:1.5px solid rgba(255,255,255,0.15); background:rgba(16,185,129,0.08);"><td style="font-weight:700;color:#10b981;padding-left:10px;">📊 Totalizador (Rec. Líquida)</td>`;
+    const segs = ['Pecuaria', 'Agricola', 'Outros', 'Total'];
+    const segmentTotals = { Pecuaria: 0, Agricola: 0, Outros: 0, Total: 0 };
+
+    for (const m of meses) {
+      const isFuturo   = new Date(m.ano, m.mes-1, 1) > hoje;
+      const isAtual    = m.ano === mesAtual.ano   && m.mes === mesAtual.mes;
+      const isAnterior = m.ano === mesAnterior.ano && m.mes === mesAnterior.mes;
+      let cls = '';
+      if (isAtual)    cls = 'col-atual';
+      if (isAnterior) cls = 'col-anterior';
+
+      for (const seg of segs) {
+        if (isFuturo) {
+          rowHtml += `<td class="${cls}" style="text-align:center;color:#475569;">—</td>`;
+          continue;
+        }
+
+        let rec, fac, fet, fun;
+        if (state.moeda === 'USD') {
+          rec = getValorUsd(m, seg, 'receitaUsd') || 0;
+          fac = getValorUsd(m, seg, 'vlrFacsUsd') || 0;
+          fet = getValorUsd(m, seg, 'fethabUsd') || 0;
+          fun = getValorUsd(m, seg, 'funruralUsd') || 0;
+        } else {
+          rec = getValor(m, seg, 'receita') || 0;
+          fac = getValor(m, seg, 'vlrFacs') || 0;
+          fet = getValor(m, seg, 'fethab') || 0;
+          fun = getValor(m, seg, 'funrural') || 0;
+        }
+
+        const net = rec - fac - fet - fun;
+        segmentTotals[seg] += net;
+
+        let style = 'text-align:right;font-weight:700;color:#10b981;';
+        if (seg === 'Total') style += 'font-weight:800;background:rgba(255,255,255,0.03);';
+        rowHtml += `<td class="${cls}" style="${style}">${net !== 0 ? fmtMoeda(net) : '—'}</td>`;
+      }
+    }
+
+    // Totais Safra para o totalizer
+    for (const seg of segs) {
+      const val = segmentTotals[seg];
+      let style = 'text-align:right;font-weight:800;color:#10b981;background:rgba(255,255,255,0.06);';
+      if (seg === 'Total') style += 'font-weight:900;background:rgba(255,255,255,0.1);';
+      rowHtml += `<td class="col-total" style="${style}">${val !== 0 ? fmtMoeda(val) : '—'}</td>`;
+    }
+
+    rowHtml += '</tr>';
+    return rowHtml;
+  }
+
+  // Montar linhas da tabela
+  let rows = '';
+  rows += renderMetricaRow('💰 Receita de Vendas', 'receita', 'receitaUsd', fmtMoeda);
+  rows += renderMetricaRow('(-) FACS', 'vlrFacs', 'vlrFacsUsd', fmtMoeda, true);
+  rows += renderMetricaRow('(-) FETHAB', 'fethab', 'fethabUsd', fmtMoeda, true);
+  rows += renderMetricaRow('(-) FUNRURAL', 'funrural', 'funruralUsd', fmtMoeda, true);
+  rows += renderTotalizerRow();
+  rows += renderMetricaRow('📦 Sacas', 'sacas', null, fmtN);
+  rows += renderMetricaRow('🐄 Cabeças', 'cabecas', null, fmtN);
+  rows += renderMetricaRow('💵 Valor Dólar', 'dolarMedio', null, v => fmtCot.format(v), false, true);
+
   // ── Linha de Status ──────────────────────────
-  rows += `<tr class="section-row"><td colspan="${meses.length + 2}">Status de Fechamento</td></tr>`;
+  rows += `<tr class="section-row"><td colspan="53" style="font-weight:700;background:rgba(255,255,255,0.02);padding:6px 10px;">Status de Fechamento</td></tr>`;
   rows += '<tr class="status-row"><td>Status</td>';
   for (const m of meses) {
     const isFuturo   = new Date(m.ano, m.mes-1, 1) > hoje;
@@ -689,9 +798,9 @@ function renderAnualTable() {
     else if (status === 'dinamico_anterior')    icon = '<span style="color:#f59e0b;font-size:12px;">🔴 Pendente</span>';
     else if (status === 'aguardando')           icon = '<span style="color:#64748b;font-size:12px;">⬜ Sem dados</span>';
 
-    rows += `<td class="${cls}" style="text-align:center;">${icon}</td>`;
+    rows += `<td class="${cls}" colspan="4" style="text-align:center;">${icon}</td>`;
   }
-  rows += '<td class="col-total">—</td></tr>';
+  rows += '<td class="col-total" colspan="4" style="text-align:center;">—</td></tr>';
 
   // ── Linha de Ações ────────────────────────────
   rows += '<tr class="action-row"><td>Ação</td>';
@@ -706,36 +815,42 @@ function renderAnualTable() {
 
     let action = '';
     if (isAnterior && status !== 'fechado') {
-      const recValor = getValor(m, 'receita') || 0;
-      const sacasVal = getValor(m, 'sacas')   || 0;
-      const cabecasVal = getValor(m, 'cabecas') || 0;
-      const nfsVal   = getValor(m, 'qtdNfs')  || 0;
-      const funVal   = getValor(m, 'funrural') || 0;
+      const recValor = getValor(m, 'Total', 'receita') || 0;
+      const sacasVal = getValor(m, 'Total', 'sacas')   || 0;
+      const cabecasVal = getValor(m, 'Total', 'cabecas') || 0;
+      const nfsVal   = getValor(m, 'Total', 'qtdNfs')  || 0;
+      const funVal   = getValor(m, 'Total', 'funrural') || 0;
       action = `<button class="btn btn-sm btn-success"
         onclick="abrirModalFechar(${m.mes},${m.ano},'${emp}',${recValor},${sacasVal},${cabecasVal},${nfsVal},${funVal})"
         style="font-size:11px;padding:4px 10px;">
         <i class="fa-solid fa-lock"></i> Fechar Mês
       </button>`;
     } else if (status === 'fechado') {
-      const recValor = getValor(m, 'receita') || 0;
-      const sacasVal = getValor(m, 'sacas')   || 0;
-      const cabecasVal = getValor(m, 'cabecas') || 0;
-      const nfsVal   = getValor(m, 'qtdNfs')  || 0;
-      const funVal   = getValor(m, 'funrural') || 0;
-      action = `
-        <div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
+      const recValor = getValor(m, 'Total', 'receita') || 0;
+      const sacasVal = getValor(m, 'Total', 'sacas')   || 0;
+      const cabecasVal = getValor(m, 'Total', 'cabecas') || 0;
+      const nfsVal   = getValor(m, 'Total', 'qtdNfs')  || 0;
+      const funVal   = getValor(m, 'Total', 'funrural') || 0;
+      if (isAnterior) {
+        action = `
+          <div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
+            <span style="font-size:11px;color:#10b981;font-weight:600;">✔ Fechado</span>
+            <button class="btn btn-sm btn-secondary"
+              onclick="abrirModalFechar(${m.mes},${m.ano},'${emp}',${recValor},${sacasVal},${cabecasVal},${nfsVal},${funVal})"
+              style="font-size:9px;padding:2px 6px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:#cbd5e1;cursor:pointer;">
+              <i class="fa-solid fa-arrows-rotate"></i> Refazer
+            </button>
+          </div>
+        `;
+      } else {
+        action = `
           <span style="font-size:11px;color:#10b981;font-weight:600;">✔ Fechado</span>
-          <button class="btn btn-sm btn-secondary"
-            onclick="abrirModalFechar(${m.mes},${m.ano},'${emp}',${recValor},${sacasVal},${cabecasVal},${nfsVal},${funVal})"
-            style="font-size:9px;padding:2px 6px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:#cbd5e1;cursor:pointer;">
-            <i class="fa-solid fa-arrows-rotate"></i> Refazer
-          </button>
-        </div>
-      `;
+        `;
+      }
     }
-    rows += `<td class="${cls}">${action}</td>`;
+    rows += `<td class="${cls}" colspan="4" style="text-align:center;">${action}</td>`;
   }
-  rows += '<td class="col-total"></td></tr>';
+  rows += '<td class="col-total" colspan="4"></td></tr>';
 
   document.getElementById('anual-tbody').innerHTML = rows;
 }

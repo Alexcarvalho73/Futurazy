@@ -68,7 +68,7 @@ app.get('/api/notas', async (req, res) => {
         TRIM(XM.XML_NOMEMT) as XML_NOMEMT,
         XM.XML_EMISSA,
         XM.XML_RECEB,
-        XM.XML_DTRVLD,
+        (SELECT MIN(XDP_VENCTO) FROM PROTHEUS11.CONDORXMLDUPL XD WHERE XD.XDP_CHAVE = XM.XML_CHAVE) as XML_DTRVLD,
         XM.XML_VLRDOC,
         TRIM(XM.XML_TIPODC) as XML_TIPODC,
         TRIM(XM.XML_OK) as XML_OK,
@@ -613,6 +613,14 @@ function getMesesCalendario(ano) {
 // Agrega linhas do SQL em totais por mês/empresa (BRL + USD)
 function agregarPorMes(rows) {
   const map = {};
+
+  function initSegment() {
+    return {
+      receita: 0, sacas: 0, cabecas: 0, funrural: 0, fethab: 0, vlrFacs: 0,
+      receitaUsd: 0, funruralUsd: 0, fethabUsd: 0, vlrFacsUsd: 0, dolarMedio: 0
+    };
+  }
+
   for (const r of rows) {
     const emissao = r.EMISSAO;
     if (!emissao) continue;
@@ -623,25 +631,72 @@ function agregarPorMes(rows) {
         empresa: r.EMPRESA,
         ano: d.getFullYear(),
         mes: d.getMonth() + 1,
-        receita: 0, sacas: 0, cabecas: 0, qtdNfs: new Set(),
-        funrural: 0, fethab: 0, vlrFacs: 0,
-        // Campos USD
-        receitaUsd: 0, funruralUsd: 0, fethabUsd: 0, vlrFacsUsd: 0
+        Pecuaria: initSegment(),
+        Agricola: initSegment(),
+        Outros: initSegment(),
+        Total: initSegment(),
+        qtdNfs: new Set()
       };
     }
-    map[key].receita     += Number(r.TOTAL         || 0);
-    map[key].sacas       += Number(r.SACAS         || 0);
-    map[key].cabecas     += Number(r.CABECAS       || 0);
-    map[key].funrural    += Number(r.VL_FUNRURAL   || 0);
-    map[key].fethab      += Number(r.VLR_FETHAB    || 0);
-    map[key].vlrFacs     += Number(r.VLR_FACS      || 0);
-    map[key].receitaUsd  += Number(r.TOTAL_USD     || 0);
-    map[key].funruralUsd += Number(r.VL_FUNRURAL_USD || 0);
-    map[key].fethabUsd   += Number(r.VLR_FETHAB_USD  || 0);
-    map[key].vlrFacsUsd  += Number(r.VLR_FACS_USD    || 0);
+
+    const negocio = r.TIPO_NEGOCIO === 'Pecuária' ? 'Pecuaria' : r.TIPO_NEGOCIO === 'Agricultura' ? 'Agricola' : 'Outros';
+    const target = map[key][negocio];
+    const tot = map[key].Total;
+
+    const valBrl = Number(r.TOTAL || 0);
+    const valUsd = Number(r.TOTAL_USD || 0);
+    const sac = Number(r.SACAS || 0);
+    const cab = Number(r.CABECAS || 0);
+    const fun = Number(r.VL_FUNRURAL || 0);
+    const funUsd = Number(r.VL_FUNRURAL_USD || 0);
+    const fet = Number(r.VLR_FETHAB || 0);
+    const fetUsd = Number(r.VLR_FETHAB_USD || 0);
+    const fac = Number(r.VLR_FACS || 0);
+    const facUsd = Number(r.VLR_FACS_USD || 0);
+
+    // Adicionar ao segmento específico
+    target.receita += valBrl;
+    target.receitaUsd += valUsd;
+    target.sacas += sac;
+    target.cabecas += cab;
+    target.funrural += fun;
+    target.funruralUsd += funUsd;
+    target.fethab += fet;
+    target.fethabUsd += fetUsd;
+    target.vlrFacs += fac;
+    target.vlrFacsUsd += facUsd;
+
+    // Adicionar ao total
+    tot.receita += valBrl;
+    tot.receitaUsd += valUsd;
+    tot.sacas += sac;
+    tot.cabecas += cab;
+    tot.funrural += fun;
+    tot.funruralUsd += funUsd;
+    tot.fethab += fet;
+    tot.fethabUsd += fetUsd;
+    tot.vlrFacs += fac;
+    tot.vlrFacsUsd += facUsd;
+
     if (r.NF) map[key].qtdNfs.add(r.NF);
   }
-  return Object.values(map).map(v => ({ ...v, qtdNfs: v.qtdNfs.size }));
+
+  return Object.values(map).map(v => {
+    for (const seg of ['Pecuaria', 'Agricola', 'Outros', 'Total']) {
+      const segment = v[seg];
+      segment.dolarMedio = segment.receitaUsd > 0 ? (segment.receita / segment.receitaUsd) : 0;
+    }
+    return {
+      empresa: v.empresa,
+      ano: v.ano,
+      mes: v.mes,
+      Pecuaria: v.Pecuaria,
+      Agricola: v.Agricola,
+      Outros: v.Outros,
+      Total: v.Total,
+      qtdNfs: v.qtdNfs.size
+    };
+  });
 }
 
 // GET /api/receita/dados — dados brutos para o cubo pivot
@@ -705,57 +760,112 @@ app.get('/api/receita/resumo-anual', async (req, res) => {
     try {
       fechados = await db.execute(fechadosSQL);
     } catch(e) {
-      // tabela pode não existir ainda
       console.warn('[resumo-anual] FECHAMENTO_RECEITA não encontrada:', e.message);
     }
 
-    // Consolidar registros por mês/filial (pois agora estão segmentados por negócio no banco)
+    function initSegment() {
+      return {
+        receita: 0, sacas: 0, cabecas: 0, funrural: 0, fethab: 0, vlrFacs: 0,
+        receitaUsd: 0, funruralUsd: 0, fethabUsd: 0, vlrFacsUsd: 0, dolarMedio: 0
+      };
+    }
+
     const fechadosMap = {};
     for (const f of fechados) {
       const key = `${f.FR_EMPRESA}_${f.FR_ANO}_${f.FR_MES}`;
       if (!fechadosMap[key]) {
         fechadosMap[key] = {
-          FR_EMPRESA: f.FR_EMPRESA,
-          FR_ANO: f.FR_ANO,
-          FR_MES: f.FR_MES,
-          FR_RECEITA_TOTAL: 0,
-          FR_SACAS: 0,
-          FR_QTD_NFS: 0,
-          FR_FUNRURAL: 0,
-          FR_FETHAB: 0,
-          FR_VLR_FACS: 0,
-          FR_AGRO_RECEITA: 0,
-          FR_AGRO_SACAS: 0,
-          FR_PEC_RECEITA: 0,
-          FR_PEC_SACAS: 0,
-          FR_OUTROS_RECEITA: 0,
-          FR_OUTROS_SACAS: 0,
-          FR_DOLAR_MEDIO: 0,
-          FR_DT_FECHAMENTO: f.FR_DT_FECHAMENTO
+          Pecuaria: initSegment(),
+          Agricola: initSegment(),
+          Outros: initSegment(),
+          Total: initSegment(),
+          dtFechamento: f.FR_DT_FECHAMENTO
         };
       }
 
-      fechadosMap[key].FR_RECEITA_TOTAL += Number(f.FR_RECEITA_TOTAL || 0);
-      fechadosMap[key].FR_SACAS         += Number(f.FR_SACAS || 0);
-      fechadosMap[key].FR_QTD_NFS       += Number(f.FR_QTD_NFS || 0);
-      fechadosMap[key].FR_FUNRURAL      += Number(f.FR_FUNRURAL || 0);
-      fechadosMap[key].FR_FETHAB        += Number(f.FR_FETHAB || 0);
-      fechadosMap[key].FR_VLR_FACS      += Number(f.FR_VLR_FACS || 0);
+      if (f.FR_NEGOCIO) {
+        // Formato multi-linhas por negócio (Histórico segmentado)
+        const negocio = f.FR_NEGOCIO === 'Pecuária' ? 'Pecuaria' : f.FR_NEGOCIO === 'Agricultura' ? 'Agricola' : 'Outros';
+        const target = fechadosMap[key][negocio];
+        const tot = fechadosMap[key].Total;
 
-      // Somar na respectiva segmentação baseado no campo FR_NEGOCIO
-      if (f.FR_NEGOCIO === 'Agricultura') {
-        fechadosMap[key].FR_AGRO_RECEITA += Number(f.FR_RECEITA_TOTAL || 0);
-        fechadosMap[key].FR_AGRO_SACAS   += Number(f.FR_SACAS || 0);
-      } else if (f.FR_NEGOCIO === 'Pecuária') {
-        fechadosMap[key].FR_PEC_RECEITA  += Number(f.FR_RECEITA_TOTAL || 0);
-        fechadosMap[key].FR_PEC_SACAS    += Number(f.FR_SACAS || 0); // cabecas
+        const valBrl = Number(f.FR_RECEITA_TOTAL || 0);
+        const sac = Number(f.FR_SACAS || 0);
+        const cab = Number(f.FR_PEC_SACAS || 0);
+        const fun = Number(f.FR_FUNRURAL || 0);
+        const fet = Number(f.FR_FETHAB || 0);
+        const fac = Number(f.FR_VLR_FACS || 0);
+        const dm = Number(f.FR_DOLAR_MEDIO || 0);
+
+        target.receita += valBrl;
+        target.sacas += sac;
+        target.cabecas += cab;
+        target.funrural += fun;
+        target.fethab += fet;
+        target.vlrFacs += fac;
+        if (dm > 0) target.dolarMedio = dm;
+
+        tot.receita += valBrl;
+        tot.sacas += sac;
+        tot.cabecas += cab;
+        tot.funrural += fun;
+        tot.fethab += fet;
+        tot.vlrFacs += fac;
+        if (dm > 0) tot.dolarMedio = dm;
       } else {
-        fechadosMap[key].FR_OUTROS_RECEITA += Number(f.FR_RECEITA_TOTAL || 0);
-        fechadosMap[key].FR_OUTROS_SACAS   += Number(f.FR_SACAS || 0);
-      }
+        // Formato consolidado de linha única
+        const tot = fechadosMap[key].Total;
+        tot.receita  = Number(f.FR_RECEITA_TOTAL || 0);
+        tot.sacas    = Number(f.FR_SACAS || 0);
+        tot.cabecas  = Number(f.FR_PEC_SACAS || 0);
+        tot.funrural = Number(f.FR_FUNRURAL || 0);
+        tot.fethab   = Number(f.FR_FETHAB || 0);
+        tot.vlrFacs  = Number(f.FR_VLR_FACS || 0);
+        tot.dolarMedio = Number(f.FR_DOLAR_MEDIO || 0);
 
-      if (f.FR_DOLAR_MEDIO > 0) {
-        fechadosMap[key].FR_DOLAR_MEDIO = Number(f.FR_DOLAR_MEDIO);
+        // Rateio Pecuária
+        const pec = fechadosMap[key].Pecuaria;
+        pec.receita = Number(f.FR_PEC_RECEITA || 0);
+        pec.sacas = 0;
+        pec.cabecas = Number(f.FR_PEC_SACAS || 0);
+        pec.funrural = tot.receita > 0 ? tot.funrural * (pec.receita / tot.receita) : 0;
+        pec.fethab = 0;
+        pec.vlrFacs = 0;
+        pec.dolarMedio = tot.dolarMedio;
+
+        // Rateio Agrícola
+        const agr = fechadosMap[key].Agricola;
+        agr.receita = Number(f.FR_AGRO_RECEITA || 0);
+        agr.sacas = Number(f.FR_AGRO_SACAS || 0);
+        agr.cabecas = 0;
+        agr.funrural = tot.receita > 0 ? tot.funrural * (agr.receita / tot.receita) : 0;
+        agr.fethab = Number(f.FR_FETHAB || 0);
+        agr.vlrFacs = Number(f.FR_VLR_FACS || 0);
+        agr.dolarMedio = tot.dolarMedio;
+
+        // Rateio Outros
+        const out = fechadosMap[key].Outros;
+        out.receita = Number(f.FR_OUTROS_RECEITA || 0);
+        out.sacas = Number(f.FR_OUTROS_SACAS || 0);
+        out.cabecas = 0;
+        out.funrural = tot.receita > 0 ? tot.funrural * (out.receita / tot.receita) : 0;
+        out.fethab = 0;
+        out.vlrFacs = 0;
+        out.dolarMedio = tot.dolarMedio;
+      }
+    }
+
+    // Calcular valores em USD para os fechadosMap
+    for (const key in fechadosMap) {
+      const monthData = fechadosMap[key];
+      const tot = monthData.Total;
+      for (const seg of ['Pecuaria', 'Agricola', 'Outros', 'Total']) {
+        const s = monthData[seg];
+        const dm = s.dolarMedio || tot.dolarMedio || 0;
+        s.receitaUsd  = dm > 0 ? s.receita / dm : 0;
+        s.funruralUsd = dm > 0 ? s.funrural / dm : 0;
+        s.fethabUsd   = dm > 0 ? s.fethab / dm : 0;
+        s.vlrFacsUsd  = dm > 0 ? s.vlrFacs / dm : 0;
       }
     }
 
@@ -769,7 +879,6 @@ app.get('/api/receita/resumo-anual', async (req, res) => {
     // 3. Buscar dados dinâmicos (um único SQL para todos os meses dinâmicos)
     let dadosDinamicos = [];
     if (dinâmicos.length > 0) {
-      // Calcular intervalo cobrindo todos os meses dinâmicos — strings 'YYYY-MM-DD'
       const timestamps = dinâmicos.map(m => new Date(m.ano, m.mes - 1, 1).getTime());
       const timestampsAte = dinâmicos.map(m => new Date(m.ano, m.mes, 0).getTime());
       const dataDe  = dateToStr(new Date(Math.min(...timestamps)));
@@ -780,13 +889,11 @@ app.get('/api/receita/resumo-anual', async (req, res) => {
     }
 
     // 4. Montar array de 12 meses
-    const empresas = ['028501', '028503', 'TOTAL'];
     const resultado = meses.map(m => {
       const isMesAtual    = m.ano === mesAtual.ano    && m.mes === mesAtual.mes;
       const isMesAnterior = m.ano === mesAnterior.ano && m.mes === mesAnterior.mes;
       const isFuturo = new Date(m.ano, m.mes - 1, 1) > hoje;
 
-      // Status padrão daquele período
       let defaultStatus = 'futuro';
       if (isMesAtual)         defaultStatus = 'dinamico_atual';
       else if (isMesAnterior) defaultStatus = 'dinamico_anterior';
@@ -802,59 +909,72 @@ app.get('/api/receita/resumo-anual', async (req, res) => {
         const f = fechadosMap[keyFech];
 
         if (f) {
-          // 1. Tem fechamento para esta filial no banco
-          const dolarMedio = f.FR_DOLAR_MEDIO || 0;
           porEmpresa[emp] = {
-            receita: f.FR_RECEITA_TOTAL, sacas: f.FR_SACAS, cabecas: f.FR_PEC_SACAS, qtdNfs: f.FR_QTD_NFS,
-            funrural: f.FR_FUNRURAL, fethab: f.FR_FETHAB, vlrFacs: f.FR_VLR_FACS,
-            agroReceita: f.FR_AGRO_RECEITA, pecReceita: f.FR_PEC_RECEITA, outrosReceita: f.FR_OUTROS_RECEITA,
-            receitaUsd: dolarMedio > 0 ? f.FR_RECEITA_TOTAL / dolarMedio : 0,
-            funruralUsd: dolarMedio > 0 ? f.FR_FUNRURAL / dolarMedio : 0,
-            fethabUsd: dolarMedio > 0 ? f.FR_FETHAB / dolarMedio : 0,
-            vlrFacsUsd: dolarMedio > 0 ? f.FR_VLR_FACS / dolarMedio : 0,
-            dolarMedio: dolarMedio,
-            status: 'fechado', dtFechamento: f.FR_DT_FECHAMENTO
+            Pecuaria: { ...f.Pecuaria },
+            Agricola: { ...f.Agricola },
+            Outros: { ...f.Outros },
+            Total: { ...f.Total },
+            status: 'fechado',
+            dtFechamento: f.dtFechamento
           };
         } else {
-          // 2. Não tem fechamento individual. Pode estar fechado consolidated (TODAS) ou em curso/pendente.
           const din = dadosDinamicos.find(d => d.empresa === emp && d.ano === m.ano && d.mes === m.mes);
-          const valBrl = din || { receita: 0, sacas: 0, cabecas: 0, qtdNfs: 0, funrural: 0, fethab: 0, vlrFacs: 0 };
-
           let empStatus = defaultStatus;
-          let dolarMedio = 0;
-          let recUsd = 0, funUsd = 0, fetUsd = 0, facsUsd = 0;
+          let pec = initSegment(), agr = initSegment(), out = initSegment(), tot = initSegment();
 
           if (isTodasClosed) {
-            // Mês fechado no consolidated (retrocompatibilidade)
             empStatus = 'fechado';
-            dolarMedio = fTodas.FR_DOLAR_MEDIO || 0;
-            recUsd  = dolarMedio > 0 ? valBrl.receita / dolarMedio : 0;
-            funUsd  = dolarMedio > 0 ? valBrl.funrural / dolarMedio : 0;
-            fetUsd  = dolarMedio > 0 ? valBrl.fethab / dolarMedio : 0;
-            facsUsd = dolarMedio > 0 ? valBrl.vlrFacs / dolarMedio : 0;
-          } else {
-            // Aberto / Em curso
-            recUsd  = din ? din.receitaUsd : 0;
-            funUsd  = din ? din.funruralUsd : 0;
-            fetUsd  = din ? din.fethabUsd : 0;
-            facsUsd = din ? din.vlrFacsUsd : 0;
+            const tTot = fTodas.Total;
+            const dinTotalBrl = din ? din.Total.receita : 0;
+            if (dinTotalBrl > 0) {
+              const ratioPec = din.Pecuaria.receita / dinTotalBrl;
+              const ratioAgr = din.Agricola.receita / dinTotalBrl;
+              const ratioOut = din.Outros.receita / dinTotalBrl;
+
+              pec.receita = tTot.receita * ratioPec;
+              pec.funrural = tTot.funrural * ratioPec;
+              pec.fethab = tTot.fethab * ratioPec;
+              pec.vlrFacs = tTot.vlrFacs * ratioPec;
+
+              agr.receita = tTot.receita * ratioAgr;
+              agr.funrural = tTot.funrural * ratioAgr;
+              agr.fethab = tTot.fethab * ratioAgr;
+              agr.vlrFacs = tTot.vlrFacs * ratioAgr;
+
+              out.receita = tTot.receita * ratioOut;
+              out.funrural = tTot.funrural * ratioOut;
+              out.fethab = tTot.fethab * ratioOut;
+              out.vlrFacs = tTot.vlrFacs * ratioOut;
+            } else {
+              out = { ...tTot };
+            }
+            tot = { ...tTot };
+          } else if (din) {
+            pec = { ...din.Pecuaria };
+            agr = { ...din.Agricola };
+            out = { ...din.Outros };
+            tot = { ...din.Total };
           }
 
           porEmpresa[emp] = {
-            receita: valBrl.receita, sacas: valBrl.sacas, cabecas: valBrl.cabecas, qtdNfs: valBrl.qtdNfs,
-            funrural: valBrl.funrural, fethab: valBrl.fethab, vlrFacs: valBrl.vlrFacs,
-            receitaUsd: recUsd, funruralUsd: funUsd, fethabUsd: fetUsd, vlrFacsUsd: facsUsd,
-            dolarMedio: dolarMedio,
+            Pecuaria: pec,
+            Agricola: agr,
+            Outros: out,
+            Total: tot,
             status: empStatus
           };
         }
       }
 
-      // Total consolidado
+      // Total consolidado das duas filiais
       let statusTotal = defaultStatus;
-      let total = {};
+      let total = {
+        Pecuaria: initSegment(),
+        Agricola: initSegment(),
+        Outros: initSegment(),
+        Total: initSegment()
+      };
 
-      // Se ambas as filiais possuem fechamento, o total está fechado
       const hasFilial1 = !!fechadosMap[`028501_${m.ano}_${m.mes}`];
       const hasFilial2 = !!fechadosMap[`028503_${m.ano}_${m.mes}`];
 
@@ -862,62 +982,51 @@ app.get('/api/receita/resumo-anual', async (req, res) => {
         statusTotal = 'fechado';
         const f1 = fechadosMap[`028501_${m.ano}_${m.mes}`];
         const f2 = fechadosMap[`028503_${m.ano}_${m.mes}`];
-        
-        // Dólar médio consolidado: média simples ou ponderada dos dois (usamos o do f1 ou f2 se houver)
-        const dolarMedio = f1.FR_DOLAR_MEDIO || f2.FR_DOLAR_MEDIO || 0;
-        
-        total = {
-          receita: f1.FR_RECEITA_TOTAL + f2.FR_RECEITA_TOTAL,
-          sacas: f1.FR_SACAS + f2.FR_SACAS,
-          cabecas: f1.FR_PEC_SACAS + f2.FR_PEC_SACAS,
-          qtdNfs: f1.FR_QTD_NFS + f2.FR_QTD_NFS,
-          funrural: f1.FR_FUNRURAL + f2.FR_FUNRURAL,
-          fethab: f1.FR_FETHAB + f2.FR_FETHAB,
-          vlrFacs: f1.FR_VLR_FACS + f2.FR_VLR_FACS,
-          agroReceita: f1.FR_AGRO_RECEITA + f2.FR_AGRO_RECEITA,
-          pecReceita: f1.FR_PEC_RECEITA + f2.FR_PEC_RECEITA,
-          outrosReceita: f1.FR_OUTROS_RECEITA + f2.FR_OUTROS_RECEITA,
-          receitaUsd: dolarMedio > 0 ? (f1.FR_RECEITA_TOTAL + f2.FR_RECEITA_TOTAL) / dolarMedio : 0,
-          funruralUsd: dolarMedio > 0 ? (f1.FR_FUNRURAL + f2.FR_FUNRURAL) / dolarMedio : 0,
-          fethabUsd: dolarMedio > 0 ? (f1.FR_FETHAB + f2.FR_FETHAB) / dolarMedio : 0,
-          vlrFacsUsd: dolarMedio > 0 ? (f1.FR_VLR_FACS + f2.FR_VLR_FACS) / dolarMedio : 0,
-          dolarMedio: dolarMedio,
-          status: 'fechado',
-          dtFechamento: f1.FR_DT_FECHAMENTO || f2.FR_DT_FECHAMENTO
-        };
+
+        for (const seg of ['Pecuaria', 'Agricola', 'Outros', 'Total']) {
+          const s1 = f1[seg];
+          const s2 = f2[seg];
+          const st = total[seg];
+          st.receita = s1.receita + s2.receita;
+          st.sacas = s1.sacas + s2.sacas;
+          st.cabecas = s1.cabecas + s2.cabecas;
+          st.funrural = s1.funrural + s2.funrural;
+          st.fethab = s1.fethab + s2.fethab;
+          st.vlrFacs = s1.vlrFacs + s2.vlrFacs;
+          st.receitaUsd = s1.receitaUsd + s2.receitaUsd;
+          st.funruralUsd = s1.funruralUsd + s2.funruralUsd;
+          st.fethabUsd = s1.fethabUsd + s2.fethabUsd;
+          st.vlrFacsUsd = s1.vlrFacsUsd + s2.vlrFacsUsd;
+          st.dolarMedio = st.receitaUsd > 0 ? st.receita / st.receitaUsd : 0;
+        }
+        total.status = 'fechado';
+        total.dtFechamento = f1.dtFechamento || f2.dtFechamento;
       } else if (isTodasClosed) {
-        // Compatibilidade retroativa para fechamento consolidado antigo (TODAS)
-        const dolarMedio = fTodas.FR_DOLAR_MEDIO || 0;
         statusTotal = 'fechado';
         total = {
-          receita: fTodas.FR_RECEITA_TOTAL, sacas: fTodas.FR_SACAS, cabecas: fTodas.FR_PEC_SACAS, qtdNfs: fTodas.FR_QTD_NFS,
-          funrural: fTodas.FR_FUNRURAL, fethab: fTodas.FR_FETHAB, vlrFacs: fTodas.FR_VLR_FACS,
-          agroReceita: fTodas.FR_AGRO_RECEITA, pecReceita: fTodas.FR_PEC_RECEITA, outrosReceita: fTodas.FR_OUTROS_RECEITA,
-          receitaUsd: dolarMedio > 0 ? fTodas.FR_RECEITA_TOTAL / dolarMedio : 0,
-          funruralUsd: dolarMedio > 0 ? fTodas.FR_FUNRURAL / dolarMedio : 0,
-          fethabUsd: dolarMedio > 0 ? fTodas.FR_FETHAB / dolarMedio : 0,
-          vlrFacsUsd: dolarMedio > 0 ? fTodas.FR_VLR_FACS / dolarMedio : 0,
-          dolarMedio: dolarMedio,
-          status: 'fechado', dtFechamento: fTodas.FR_DT_FECHAMENTO
+          Pecuaria: { ...fTodas.Pecuaria },
+          Agricola: { ...fTodas.Agricola },
+          Outros: { ...fTodas.Outros },
+          Total: { ...fTodas.Total },
+          status: 'fechado',
+          dtFechamento: fTodas.dtFechamento
         };
       } else {
-        // Caso contrário, somar individualmente as duas filiais
-        total = {
-          receita: 0, sacas: 0, cabecas: 0, qtdNfs: 0, funrural: 0, fethab: 0, vlrFacs: 0,
-          receitaUsd: 0, funruralUsd: 0, fethabUsd: 0, vlrFacsUsd: 0
-        };
-        for (const emp of ['028501','028503']) {
-          total.receita     += porEmpresa[emp].receita  || 0;
-          total.sacas       += porEmpresa[emp].sacas    || 0;
-          total.cabecas     += porEmpresa[emp].cabecas  || 0;
-          total.qtdNfs      += porEmpresa[emp].qtdNfs   || 0;
-          total.funrural    += porEmpresa[emp].funrural || 0;
-          total.fethab      += porEmpresa[emp].fethab   || 0;
-          total.vlrFacs     += porEmpresa[emp].vlrFacs  || 0;
-          total.receitaUsd  += porEmpresa[emp].receitaUsd  || 0;
-          total.funruralUsd += porEmpresa[emp].funruralUsd || 0;
-          total.fethabUsd   += porEmpresa[emp].fethabUsd   || 0;
-          total.vlrFacsUsd  += porEmpresa[emp].vlrFacsUsd  || 0;
+        for (const seg of ['Pecuaria', 'Agricola', 'Outros', 'Total']) {
+          const s1 = porEmpresa['028501'][seg];
+          const s2 = porEmpresa['028503'][seg];
+          const st = total[seg];
+          st.receita = s1.receita + s2.receita;
+          st.sacas = s1.sacas + s2.sacas;
+          st.cabecas = s1.cabecas + s2.cabecas;
+          st.funrural = s1.funrural + s2.funrural;
+          st.fethab = s1.fethab + s2.fethab;
+          st.vlrFacs = s1.vlrFacs + s2.vlrFacs;
+          st.receitaUsd = s1.receitaUsd + s2.receitaUsd;
+          st.funruralUsd = s1.funruralUsd + s2.funruralUsd;
+          st.fethabUsd = s1.fethabUsd + s2.fethabUsd;
+          st.vlrFacsUsd = s1.vlrFacsUsd + s2.vlrFacsUsd;
+          st.dolarMedio = st.receitaUsd > 0 ? st.receita / st.receitaUsd : 0;
         }
         total.status = statusTotal;
       }
@@ -932,7 +1041,6 @@ app.get('/api/receita/resumo-anual', async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 });
-
 // POST /api/receita/fechar-mes — grava fechamento do mês na tabela FECHAMENTO_RECEITA
 app.post('/api/receita/fechar-mes', async (req, res) => {
   try {
@@ -960,109 +1068,74 @@ app.post('/api/receita/fechar-mes', async (req, res) => {
     }
     const dolarMedio = totalUsd > 0 ? (totalBrl / totalUsd) : null;
 
-    // Agrupar dados por filial (EMPRESA) e negócio (TIPO_NEGOCIO)
-    const groups = {};
+    // Agregar totais consolidados para a empresa solicitada
+    let receita = 0, sacas = 0, cabecas = 0, funrural = 0, fethab = 0, vlrFacs = 0;
+    let agroReceita = 0, agroSacas = 0, pecReceita = 0, pecSacas = 0, outrosReceita = 0, outrosSacas = 0;
+    const nfsSet = new Set();
+
     for (const r of rowsEmp) {
-      const emp = r.EMPRESA;
-      const negocio = r.TIPO_NEGOCIO || 'Outros';
-      const key = `${emp}_${negocio}`;
-
-      if (!groups[key]) {
-        groups[key] = {
-          empresa: emp,
-          negocio: negocio,
-          receita: 0,
-          sacas: 0,
-          cabecas: 0,
-          funrural: 0,
-          fethab: 0,
-          vlrFacs: 0,
-          nfsSet: new Set()
-        };
-      }
-
       const tot = Number(r.TOTAL || 0);
       const sac = Number(r.SACAS || 0);
       const cab = Number(r.CABECAS || 0);
+      receita  += tot;
+      sacas    += sac;
+      cabecas  += cab;
+      funrural += Number(r.VL_FUNRURAL || 0);
+      fethab   += Number(r.VLR_FETHAB  || 0);
+      vlrFacs  += Number(r.VLR_FACS    || 0);
+      if (r.NF) nfsSet.add(r.NF);
 
-      groups[key].receita  += tot;
-      groups[key].sacas    += sac;
-      groups[key].cabecas  += cab;
-      groups[key].funrural += Number(r.VL_FUNRURAL || 0);
-      groups[key].fethab   += Number(r.VLR_FETHAB  || 0);
-      groups[key].vlrFacs  += Number(r.VLR_FACS    || 0);
-      if (r.NF) groups[key].nfsSet.add(r.NF);
+      if (r.TIPO_NEGOCIO === 'Agricultura') {
+        agroReceita += tot;
+        agroSacas   += sac;
+      } else if (r.TIPO_NEGOCIO === 'Pecuária') {
+        pecReceita += tot;
+        pecSacas   += cab; // cabecas
+      } else {
+        outrosReceita += tot;
+        outrosSacas   += sac;
+      }
     }
+    const qtdNfs = nfsSet.size;
 
-    // Deletar fechamentos existentes do período para evitar chaves duplicadas
-    if (empresa === 'TODAS') {
-      await db.execute(`
-        DELETE FROM FECHAMENTO_RECEITA 
-        WHERE FR_EMPRESA IN ('028501', '028503') 
-          AND FR_ANO = :ano 
-          AND FR_MES = :mes 
-          AND FR_RUBRICA = 'RECEITA'
-      `, { ano: parseInt(ano), mes: parseInt(mes) }, { autoCommit: true });
-    } else {
-      await db.execute(`
-        DELETE FROM FECHAMENTO_RECEITA 
-        WHERE FR_EMPRESA = :empresa 
-          AND FR_ANO = :ano 
-          AND FR_MES = :mes 
-          AND FR_RUBRICA = 'RECEITA'
-      `, { empresa, ano: parseInt(ano), mes: parseInt(mes) }, { autoCommit: true });
-    }
-
-    // Inserir cada grupo consolidado de negócio / filial
-    const insertSql = `
-      INSERT INTO FECHAMENTO_RECEITA
-        (FR_EMPRESA, FR_NEGOCIO, FR_ANO, FR_MES, FR_RUBRICA, FR_RECEITA_TOTAL, FR_SACAS, FR_QTD_NFS,
+    // MERGE INTO FECHAMENTO_RECEITA
+    const mergeSql = `
+      MERGE INTO FECHAMENTO_RECEITA fr
+      USING DUAL ON (fr.FR_EMPRESA = :empresa AND fr.FR_ANO = :ano AND fr.FR_MES = :mes AND fr.FR_RUBRICA = 'RECEITA')
+      WHEN MATCHED THEN UPDATE SET
+        fr.FR_RECEITA_TOTAL  = :receita,
+        fr.FR_SACAS          = :sacas,
+        fr.FR_QTD_NFS        = :qtdNfs,
+        fr.FR_FUNRURAL       = :funrural,
+        fr.FR_FETHAB         = :fethab,
+        fr.FR_VLR_FACS       = :vlrFacs,
+        fr.FR_AGRO_RECEITA   = :agroReceita,
+        fr.FR_AGRO_SACAS     = :agroSacas,
+        fr.FR_PEC_RECEITA    = :pecReceita,
+        fr.FR_PEC_SACAS      = :pecSacas,
+        fr.FR_OUTROS_RECEITA = :outrosReceita,
+        fr.FR_OUTROS_SACAS   = :outrosSacas,
+        fr.FR_DOLAR_MEDIO    = :dolarMedio,
+        fr.FR_DT_FECHAMENTO  = SYSDATE
+      WHEN NOT MATCHED THEN INSERT
+        (FR_EMPRESA, FR_ANO, FR_MES, FR_RUBRICA, FR_RECEITA_TOTAL, FR_SACAS, FR_QTD_NFS,
          FR_FUNRURAL, FR_FETHAB, FR_VLR_FACS,
          FR_AGRO_RECEITA, FR_AGRO_SACAS, FR_PEC_RECEITA, FR_PEC_SACAS,
          FR_OUTROS_RECEITA, FR_OUTROS_SACAS, FR_DOLAR_MEDIO, FR_DT_FECHAMENTO)
       VALUES
-        (:empresa, :negocio, :ano, :mes, 'RECEITA', :receita, :sacas, :qtdNfs,
+        (:empresa, :ano, :mes, 'RECEITA', :receita, :sacas, :qtdNfs,
          :funrural, :fethab, :vlrFacs,
          :agroReceita, :agroSacas, :pecReceita, :pecSacas,
          :outrosReceita, :outrosSacas, :dolarMedio, SYSDATE)
     `;
 
-    for (const g of Object.values(groups)) {
-      let agroReceita = 0, agroSacas = 0;
-      let pecReceita = 0, pecSacas = 0;
-      let outrosReceita = 0, outrosSacas = 0;
-
-      if (g.negocio === 'Agricultura') {
-        agroReceita = g.receita;
-        agroSacas = g.sacas;
-      } else if (g.negocio === 'Pecuária') {
-        pecReceita = g.receita;
-        pecSacas = g.cabecas; // cabeças
-      } else {
-        outrosReceita = g.receita;
-        outrosSacas = g.sacas;
-      }
-
-      await db.execute(insertSql, {
-        empresa: g.empresa,
-        negocio: g.negocio,
-        ano: parseInt(ano),
-        mes: parseInt(mes),
-        receita: g.receita,
-        sacas: g.sacas,
-        qtdNfs: g.nfsSet.size,
-        funrural: g.funrural,
-        fethab: g.fethab,
-        vlrFacs: g.vlrFacs,
-        agroReceita,
-        agroSacas,
-        pecReceita,
-        pecSacas,
-        outrosReceita,
-        outrosSacas,
-        dolarMedio
-      }, { autoCommit: true });
-    }
+    await db.execute(mergeSql, {
+      empresa, ano: parseInt(ano), mes: parseInt(mes),
+      receita, sacas, qtdNfs,
+      funrural, fethab, vlrFacs,
+      agroReceita, agroSacas, pecReceita, pecSacas, outrosReceita, outrosSacas,
+      dolarMedio
+    }, { autoCommit: true });
 
     res.json({
       success: true,
