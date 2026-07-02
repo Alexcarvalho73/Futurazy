@@ -548,10 +548,9 @@
           <div class="filter-group">
             <label for="f-tipo-negocio"><i class="fa-solid fa-tag"></i> Tipo de Negócio</label>
             <select id="f-tipo-negocio" class="form-control">
-              <option value="todos">Todos</option>
-              <option value="Pecuária">🐄 Pecuária</option>
+              <option value="todos" selected>Todos</option>
+              <option value="Pecuária">🐮 Pecuária</option>
               <option value="Agricultura">🌾 Agricultura</option>
-              <option value="Outros">📦 Outros</option>
             </select>
           </div>
           <div class="filter-group">
@@ -795,7 +794,7 @@
           </div>
 
           <h3 style="font-size: 14px; color: var(--text-white); margin-bottom: 8px; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">Segmentações por Negócio</h3>
-          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px;">
+          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px;">
             <!-- Agro -->
             <div style="border-right: 1px solid var(--border-color); padding-right: 8px;">
               <h4 style="font-size:12px; color:#10b981; margin-bottom:6px;">🌾 Agricultura</h4>
@@ -809,7 +808,7 @@
               </div>
             </div>
             <!-- Pecuária -->
-            <div style="border-right: 1px solid var(--border-color); padding-right: 8px;">
+            <div>
               <h4 style="font-size:12px; color:#f59e0b; margin-bottom:6px;">🐄 Pecuária</h4>
               <div class="filter-group" style="margin-bottom: 8px;">
                 <label>Receita</label>
@@ -820,10 +819,6 @@
                 <input type="number" step="0.0001" id="edit-fr-pec-sacas" class="form-control" required>
               </div>
             </div>
-            <!-- Outros -->
-            <div>
-              <h4 style="font-size:12px; color:#94a3b8; margin-bottom:6px;">📦 Outros</h4>
-              <div class="filter-group" style="margin-bottom: 8px;">
                 <label>Receita</label>
                 <input type="number" step="0.01" id="edit-fr-outros-receita" class="form-control" required>
               </div>

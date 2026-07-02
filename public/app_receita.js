@@ -121,10 +121,27 @@ function setupEventListeners() {
   document.getElementById('filtros-toggle-header')?.addEventListener('click', () => {
     document.getElementById('filtros-section').classList.toggle('filters-collapsed');
   });
-  document.getElementById('btn-apply-filters')?.addEventListener('click', () => {
+  document.getElementById('btn-apply-filters')?.addEventListener('click', async () => {
     const filtered = applyFilters(state.allData);
     renderCube(filtered);
     updateKpis(filtered);
+
+    const anoSafra = getSafraYear(new Date());
+    const cfop = document.getElementById('f-cfop').value.trim();
+    const produto = document.getElementById('f-produto').value.trim();
+    
+    setLoading('anual', true);
+    try {
+      const resAnual = await fetch(`/api/receita/resumo-anual?ano_safra=${anoSafra}&tipo=${state.tipoCalendario}&cfop=${cfop}&produto=${produto}`).then(r => r.json());
+      if (resAnual.success) {
+        state.resumoAnual = resAnual;
+      }
+    } catch (err) {
+      console.error('Erro ao buscar resumo anual filtrado:', err);
+    } finally {
+      setLoading('anual', false);
+      renderAnualTable();
+    }
   });
   document.getElementById('btn-clear-filters')?.addEventListener('click', () => {
     ['f-tipo-negocio','f-empresa','f-cfop','f-produto'].forEach(id => {
@@ -619,9 +636,9 @@ function renderAnualTable() {
     if (isAnterior) cls = 'col-anterior';
     const label  = `${NOMES_MES[m.mes-1]}/${String(m.ano).slice(2)}`;
     const suffix = isAtual ? ' 🟡' : isAnterior ? ' 🔴' : '';
-    thHtml += `<th class="${cls}" colspan="4" style="text-align:center;">${label}${suffix}</th>`;
+    thHtml += `<th class="${cls}" colspan="3" style="text-align:center;">${label}${suffix}</th>`;
   }
-  thHtml += '<th colspan="4" style="text-align:center;">TOTAL SAFRA</th></tr>';
+  thHtml += '<th colspan="3" style="text-align:center;">TOTAL SAFRA</th></tr>';
 
   // Segunda linha: Negócio (Pecuária, Agrícola, Outros, Total)
   thHtml += '<tr>';
@@ -633,12 +650,10 @@ function renderAnualTable() {
     if (isAnterior) cls = 'col-anterior';
     thHtml += `<th class="${cls}" style="font-size:10px;text-align:center;background:rgba(255,255,255,0.02);">Pec.</th>`;
     thHtml += `<th class="${cls}" style="font-size:10px;text-align:center;background:rgba(255,255,255,0.02);">Agri.</th>`;
-    thHtml += `<th class="${cls}" style="font-size:10px;text-align:center;background:rgba(255,255,255,0.02);">Outr.</th>`;
     thHtml += `<th class="${cls}" style="font-size:10px;text-align:center;font-weight:700;background:rgba(255,255,255,0.05);">Total</th>`;
   }
   thHtml += `<th style="font-size:10px;text-align:center;background:rgba(255,255,255,0.02);">Pec.</th>`;
   thHtml += `<th style="font-size:10px;text-align:center;background:rgba(255,255,255,0.02);">Agri.</th>`;
-  thHtml += `<th style="font-size:10px;text-align:center;background:rgba(255,255,255,0.02);">Outr.</th>`;
   thHtml += `<th style="font-size:10px;text-align:center;font-weight:700;background:rgba(255,255,255,0.05);">Total</th>`;
   thHtml += '</tr>';
   document.getElementById('anual-thead').innerHTML = thHtml;
@@ -646,8 +661,8 @@ function renderAnualTable() {
   // Helper para renderizar cada linha de métrica
   function renderMetricaRow(label, fieldBrl, fieldUsd, formatFn, isTax = false, isDollar = false) {
     let rowHtml = `<tr><td style="font-weight:${isTax ? 'normal' : '600'}; padding-left:${isTax ? '20px' : '10px'};">${label}</td>`;
-    const segs = ['Pecuaria', 'Agricola', 'Outros', 'Total'];
-    const segmentTotals = { Pecuaria: 0, Agricola: 0, Outros: 0, Total: 0 };
+    const segs = ['Pecuaria', 'Agricola', 'Total'];
+    const segmentTotals = { Pecuaria: 0, Agricola: 0, Total: 0 };
 
     for (const m of meses) {
       const isFuturo   = new Date(m.ano, m.mes-1, 1) > hoje;
@@ -718,8 +733,8 @@ function renderAnualTable() {
 
   function renderTotalizerRow() {
     let rowHtml = `<tr style="border-top:1.5px solid rgba(255,255,255,0.15); border-bottom:1.5px solid rgba(255,255,255,0.15); background:rgba(16,185,129,0.08);"><td style="font-weight:700;color:#10b981;padding-left:10px;">📊 Totalizador (Rec. Líquida)</td>`;
-    const segs = ['Pecuaria', 'Agricola', 'Outros', 'Total'];
-    const segmentTotals = { Pecuaria: 0, Agricola: 0, Outros: 0, Total: 0 };
+    const segs = ['Pecuaria', 'Agricola', 'Total'];
+    const segmentTotals = { Pecuaria: 0, Agricola: 0, Total: 0 };
 
     for (const m of meses) {
       const isFuturo   = new Date(m.ano, m.mes-1, 1) > hoje;

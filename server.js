@@ -326,13 +326,13 @@ app.get('/api/notas/:chave/itens', async (req, res) => {
     INNER JOIN PROTHEUS11.CONDORXML XM   ON XM.D_E_L_E_T_ =' '   
                              AND XML_CHAVE = XIT_CHAVE   
     LEFT JOIN PROTHEUS11.SFT020 FT       ON FT.D_E_L_E_T_ =' '   
-                             AND FT_CHVNFE = XIT_CHAVE    
                              AND FT_TIPOMOV = 'E'    
                              AND ((FT_FILIAL = SUBSTR(XIT_KEYSD1,1,6)    
                              AND FT_NFISCAL = SUBSTR(XIT_KEYSD1,7,9)    
                              AND FT_SERIE = SUBSTR(XIT_KEYSD1,16,3)    
                              AND FT_CLIEFOR = SUBSTR(XIT_KEYSD1,19,6)    
                              AND FT_LOJA = SUBSTR(XIT_KEYSD1,25,2)    
+                             AND FT_CHVNFE = XIT_CHAVE    
                              AND FT_PRODUTO = SUBSTR(XIT_KEYSD1,27,15)    
                              AND FT_ITEM = SUBSTR(XIT_KEYSD1,42,4)     ) 
                              OR     (FT_FILIAL = SUBSTR(XML_KEYF1,1,6)    
@@ -388,13 +388,13 @@ app.get('/api/notas/:chave/itens', async (req, res) => {
       XML_KEYF1, XML_CONFCO, XML_CONFIS, XML_DTRCTO, XML_DTENTG, COALESCE(FT.R_E_C_N_O_,0) FTRECNO   
     FROM PROTHEUS11.CONDORXML XM   
     LEFT JOIN PROTHEUS11.SFT020 FT     ON FT.D_E_L_E_T_ =' '   
-                           AND FT_CHVNFE = XML_CHAVE    
                            AND FT_TIPOMOV = 'E'    
                            AND FT_FILIAL = SUBSTR(XML_KEYF1,1,6)    
                            AND FT_NFISCAL = SUBSTR(XML_KEYF1,7,9)    
                            AND FT_SERIE = SUBSTR(XML_KEYF1,16,3)    
                            AND FT_CLIEFOR = SUBSTR(XML_KEYF1,19,6)    
                            AND FT_LOJA = SUBSTR(XML_KEYF1,25,2)     
+                           AND FT_CHVNFE = XML_CHAVE    
                            AND FT_ESPECIE = 'CTE'     
                            AND FT_FILIAL = TRIM(XM.XML_FIL)     
                            AND FT_CFOP <='5'    
@@ -511,7 +511,20 @@ app.get('/api/notas/:chave/financeiro', async (req, res) => {
 //      Assim garante fallback automático para qualquer dia anterior com cotação disponível.
 // NOTA: SM2020.M2_DATA assumido em formato 'YYYYMMDD' (VARCHAR2). Se for tipo DATE, remover to_char().
 // NOTA: SM2020.M2_MOEDA2 é o campo da cotação do Dólar. Verifique o nome correto no banco se necessário.
-function buildReceitaSQL() {
+function buildReceitaSQL(cfopFiltro = '', produtoFiltro = '') {
+  let extraD2 = '';
+  let extraD1 = '';
+  if (cfopFiltro) {
+    const cf = cfopFiltro.replace(/'/g, '');
+    extraD2 += ` AND UPPER(TRIM(D2_CF)) LIKE '%${cf.toUpperCase()}%'`;
+    extraD1 += ` AND UPPER(TRIM(D1_CF)) LIKE '%${cf.toUpperCase()}%'`;
+  }
+  if (produtoFiltro) {
+    const pr = produtoFiltro.replace(/'/g, '');
+    extraD2 += ` AND UPPER(SUBSTR(B1_desc,1,35)) LIKE '%${pr.toUpperCase()}%'`;
+    extraD1 += ` AND UPPER(SUBSTR(B1_desc,1,35)) LIKE '%${pr.toUpperCase()}%'`;
+  }
+
   return `
     SELECT OUTER_Q.*,
       CASE WHEN OUTER_Q.COTACAO_DOLAR > 0 THEN OUTER_Q.TOTAL       / OUTER_Q.COTACAO_DOLAR ELSE NULL END AS TOTAL_USD,
@@ -561,7 +574,6 @@ function buildReceitaSQL() {
           CASE
             WHEN TRIM(B1_GRUPO) = '0203003' THEN 'Pecuária'
             WHEN TRIM(B1_GRUPO) = '0402008' THEN 'Agricultura'
-            ELSE 'Outros'
           END                                    AS TIPO_NEGOCIO
         FROM protheus11.sc5020 c5,
              protheus11.sc6020 c6,
@@ -587,6 +599,8 @@ function buildReceitaSQL() {
           AND F2_EMISSAO <= REPLACE(:data_ate, '-', '')
           AND D2_CF NOT IN ('5949','5905','5151','5910','5201','5208')
           AND F2.F2_FILIAL IN ('028501','028503')
+          AND TRIM(B1_GRUPO) IN ('0203003', '0402008')
+          ${extraD2}
 
         UNION
 
@@ -623,7 +637,6 @@ function buildReceitaSQL() {
           CASE
             WHEN TRIM(B1_GRUPO) = '0203003' THEN 'Pecuária'
             WHEN TRIM(B1_GRUPO) = '0402008' THEN 'Agricultura'
-            ELSE 'Outros'
           END                                    AS TIPO_NEGOCIO
         FROM protheus11.sf1020 f1,
              protheus11.sd1020 d1,
@@ -641,6 +654,8 @@ function buildReceitaSQL() {
           AND F1_EMISSAO <= REPLACE(:data_ate, '-', '')
           AND D1_CF NOT IN ('1906','1151','1101','1933','1356','1922','1910','1209')
           AND f1.f1_filial IN ('028501','028503')
+          AND TRIM(B1_GRUPO) IN ('0203003', '0402008')
+          ${extraD1}
       ) MID_Q
     ) OUTER_Q
   `;
@@ -657,7 +672,7 @@ function dateToStr(d) {
 // Helper: datas do mês como strings para bind seguro
 function getMonthRange(ano, mes) {
   return {
-    dataDe:  dateToStr(new Date(ano, mes - 1, 1)),
+    dataDe: dateToStr(new Date(ano, mes - 1, 1)),
     dataAte: dateToStr(new Date(ano, mes, 0))  // último dia do mês
   };
 }
@@ -673,12 +688,12 @@ function getSafraYear(hoje = new Date()) {
 function getMesesSafra(anoSafra) {
   // Safra: Set(ano-1) → Ago(anoSafra)
   return [
-    { ano: anoSafra - 1, mes: 9  }, { ano: anoSafra - 1, mes: 10 },
+    { ano: anoSafra - 1, mes: 9 }, { ano: anoSafra - 1, mes: 10 },
     { ano: anoSafra - 1, mes: 11 }, { ano: anoSafra - 1, mes: 12 },
-    { ano: anoSafra,     mes: 1  }, { ano: anoSafra,     mes: 2  },
-    { ano: anoSafra,     mes: 3  }, { ano: anoSafra,     mes: 4  },
-    { ano: anoSafra,     mes: 5  }, { ano: anoSafra,     mes: 6  },
-    { ano: anoSafra,     mes: 7  }, { ano: anoSafra,     mes: 8  }
+    { ano: anoSafra, mes: 1 }, { ano: anoSafra, mes: 2 },
+    { ano: anoSafra, mes: 3 }, { ano: anoSafra, mes: 4 },
+    { ano: anoSafra, mes: 5 }, { ano: anoSafra, mes: 6 },
+    { ano: anoSafra, mes: 7 }, { ano: anoSafra, mes: 8 }
   ];
 }
 
@@ -786,7 +801,7 @@ app.get('/api/receita/dados', async (req, res) => {
     const currLastDate = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
 
     // Datas como string 'YYYY-MM-DD' para bind seguro com TO_DATE no Oracle
-    const dataDe  = req.query.data_de  || dateToStr(prevDate);
+    const dataDe = req.query.data_de || dateToStr(prevDate);
     const dataAte = req.query.data_ate || dateToStr(currLastDate);
 
     const sql = buildReceitaSQL();
@@ -810,16 +825,19 @@ app.get('/api/receita/dados', async (req, res) => {
 app.get('/api/receita/resumo-anual', async (req, res) => {
   try {
     const hoje = new Date();
-    const anoSafra    = parseInt(req.query.ano_safra) || getSafraYear(hoje);
-    const tipoCalend  = req.query.tipo || 'safra'; // 'safra' | 'calendario'
-    const anoCalend   = parseInt(req.query.ano)    || hoje.getFullYear();
+    const anoSafra = parseInt(req.query.ano_safra) || getSafraYear(hoje);
+    const tipoCalend = req.query.tipo || 'safra'; // 'safra' | 'calendario'
+    const anoCalend = parseInt(req.query.ano) || hoje.getFullYear();
+    const cfopFilter = (req.query.cfop || '').trim();
+    const produtoFilter = (req.query.produto || '').trim();
+    const hasDetailFilter = !!(cfopFilter || produtoFilter);
 
     const meses = tipoCalend === 'calendario'
       ? getMesesCalendario(anoCalend)
       : getMesesSafra(anoSafra);
 
     const mesAtual = { ano: hoje.getFullYear(), mes: hoje.getMonth() + 1 };
-    const prevDate  = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+    const prevDate = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
     const mesAnterior = { ano: prevDate.getFullYear(), mes: prevDate.getMonth() + 1 };
 
     // 1. Buscar meses fechados na tabela FECHAMENTO_RECEITA
@@ -835,7 +853,7 @@ app.get('/api/receita/resumo-anual', async (req, res) => {
     let fechados = [];
     try {
       fechados = await db.execute(fechadosSQL);
-    } catch(e) {
+    } catch (e) {
       console.warn('[resumo-anual] FECHAMENTO_RECEITA não encontrada:', e.message);
     }
 
@@ -891,12 +909,12 @@ app.get('/api/receita/resumo-anual', async (req, res) => {
       } else {
         // Formato consolidado de linha única
         const tot = fechadosMap[key].Total;
-        tot.receita  = Number(f.FR_RECEITA_TOTAL || 0);
-        tot.sacas    = Number(f.FR_SACAS || 0);
-        tot.cabecas  = Number(f.FR_PEC_SACAS || 0);
+        tot.receita = Number(f.FR_RECEITA_TOTAL || 0);
+        tot.sacas = Number(f.FR_SACAS || 0);
+        tot.cabecas = Number(f.FR_PEC_SACAS || 0);
         tot.funrural = Number(f.FR_FUNRURAL || 0);
-        tot.fethab   = Number(f.FR_FETHAB || 0);
-        tot.vlrFacs  = Number(f.FR_VLR_FACS || 0);
+        tot.fethab = Number(f.FR_FETHAB || 0);
+        tot.vlrFacs = Number(f.FR_VLR_FACS || 0);
         tot.dolarMedio = Number(f.FR_DOLAR_MEDIO || 0);
 
         // Rateio Pecuária
@@ -938,17 +956,20 @@ app.get('/api/receita/resumo-anual', async (req, res) => {
       for (const seg of ['Pecuaria', 'Agricola', 'Outros', 'Total']) {
         const s = monthData[seg];
         const dm = s.dolarMedio || tot.dolarMedio || 0;
-        s.receitaUsd  = dm > 0 ? s.receita / dm : 0;
+        s.receitaUsd = dm > 0 ? s.receita / dm : 0;
         s.funruralUsd = dm > 0 ? s.funrural / dm : 0;
-        s.fethabUsd   = dm > 0 ? s.fethab / dm : 0;
-        s.vlrFacsUsd  = dm > 0 ? s.vlrFacs / dm : 0;
+        s.fethabUsd = dm > 0 ? s.fethab / dm : 0;
+        s.vlrFacsUsd = dm > 0 ? s.vlrFacs / dm : 0;
       }
     }
 
-    // 2. Identificar meses dinâmicos (atual + anterior apenas)
+    // 2. Identificar meses dinâmicos
     const dinâmicos = meses.filter(m => {
-      if (m.ano === mesAtual.ano     && m.mes === mesAtual.mes)     return true;
-      if (m.ano === mesAnterior.ano  && m.mes === mesAnterior.mes)  return true;
+      const isFuturo = new Date(m.ano, m.mes - 1, 1) > hoje;
+      if (isFuturo) return false;
+      if (hasDetailFilter) return true; // Se tem filtro de detalhe, todos os meses passados/atuais são dinâmicos!
+      if (m.ano === mesAtual.ano && m.mes === mesAtual.mes) return true;
+      if (m.ano === mesAnterior.ano && m.mes === mesAnterior.mes) return true;
       return false;
     });
 
@@ -957,34 +978,34 @@ app.get('/api/receita/resumo-anual', async (req, res) => {
     if (dinâmicos.length > 0) {
       const timestamps = dinâmicos.map(m => new Date(m.ano, m.mes - 1, 1).getTime());
       const timestampsAte = dinâmicos.map(m => new Date(m.ano, m.mes, 0).getTime());
-      const dataDe  = dateToStr(new Date(Math.min(...timestamps)));
+      const dataDe = dateToStr(new Date(Math.min(...timestamps)));
       const dataAte = dateToStr(new Date(Math.max(...timestampsAte)));
-      const sqlDin = buildReceitaSQL();
+      const sqlDin = buildReceitaSQL(cfopFilter, produtoFilter);
       const rowsDin = await db.execute(sqlDin, { data_de: dataDe, data_ate: dataAte });
       dadosDinamicos = agregarPorMes(rowsDin);
     }
 
     // 4. Montar array de 12 meses
     const resultado = meses.map(m => {
-      const isMesAtual    = m.ano === mesAtual.ano    && m.mes === mesAtual.mes;
+      const isMesAtual = m.ano === mesAtual.ano && m.mes === mesAtual.mes;
       const isMesAnterior = m.ano === mesAnterior.ano && m.mes === mesAnterior.mes;
       const isFuturo = new Date(m.ano, m.mes - 1, 1) > hoje;
 
       let defaultStatus = 'futuro';
-      if (isMesAtual)         defaultStatus = 'dinamico_atual';
+      if (isMesAtual) defaultStatus = 'dinamico_atual';
       else if (isMesAnterior) defaultStatus = 'dinamico_anterior';
-      else if (!isFuturo)     defaultStatus = 'aguardando';
+      else if (!isFuturo) defaultStatus = 'aguardando';
 
       const keyTodas = `TODAS_${m.ano}_${m.mes}`;
       const isTodasClosed = !!fechadosMap[keyTodas];
       const fTodas = fechadosMap[keyTodas];
 
       const porEmpresa = {};
-      for (const emp of ['028501','028503']) {
+      for (const emp of ['028501', '028503']) {
         const keyFech = `${emp}_${m.ano}_${m.mes}`;
         const f = fechadosMap[keyFech];
 
-        if (f) {
+        if (f && !hasDetailFilter) {
           porEmpresa[emp] = {
             Pecuaria: { ...f.Pecuaria },
             Agricola: { ...f.Agricola },
@@ -1077,7 +1098,7 @@ app.get('/api/receita/resumo-anual', async (req, res) => {
         }
         total.status = 'fechado';
         total.dtFechamento = f1.dtFechamento || f2.dtFechamento;
-      } else if (isTodasClosed) {
+      } else if (isTodasClosed && !hasDetailFilter) {
         statusTotal = 'fechado';
         total = {
           Pecuaria: { ...fTodas.Pecuaria },
@@ -1153,23 +1174,23 @@ app.post('/api/receita/fechar-mes', async (req, res) => {
       const tot = Number(r.TOTAL || 0);
       const sac = Number(r.SACAS || 0);
       const cab = Number(r.CABECAS || 0);
-      receita  += tot;
-      sacas    += sac;
-      cabecas  += cab;
+      receita += tot;
+      sacas += sac;
+      cabecas += cab;
       funrural += Number(r.VL_FUNRURAL || 0);
-      fethab   += Number(r.VLR_FETHAB  || 0);
-      vlrFacs  += Number(r.VLR_FACS    || 0);
+      fethab += Number(r.VLR_FETHAB || 0);
+      vlrFacs += Number(r.VLR_FACS || 0);
       if (r.NF) nfsSet.add(r.NF);
 
       if (r.TIPO_NEGOCIO === 'Agricultura') {
         agroReceita += tot;
-        agroSacas   += sac;
+        agroSacas += sac;
       } else if (r.TIPO_NEGOCIO === 'Pecuária') {
         pecReceita += tot;
-        pecSacas   += cab; // cabecas
+        pecSacas += cab; // cabecas
       } else {
         outrosReceita += tot;
-        outrosSacas   += sac;
+        outrosSacas += sac;
       }
     }
     const qtdNfs = nfsSet.size;
@@ -1240,7 +1261,7 @@ app.get('/api/receita/fechados', async (req, res) => {
     let rows = [];
     try {
       rows = await db.execute(sql);
-    } catch(e) {
+    } catch (e) {
       console.warn('[receita/fechados] tabela não existe ainda:', e.message);
     }
     res.json({ success: true, count: rows.length, data: rows });
