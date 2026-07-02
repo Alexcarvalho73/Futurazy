@@ -1458,14 +1458,9 @@ function buildInsumosSQL(opts = {}) {
       z0.zo0_anoagr                 AS SAFRA,
       TO_DATE(z0.zo0_data, 'yyyy/mm/dd') AS DDATA,
       z0.zo0_codigo                 AS O_S,
-      CASE
-        WHEN b1_grupo in ('0201001','0201002','0201003','0201004','0201005','0201006','0201007','0201008','0202003') THEN 'DEFENSIVO'
-        WHEN b1_grupo in ('0202001','0202002') THEN 'FERTILIZANTE'
-        WHEN b1_grupo in ('0205001','0205002','0205004','0205005','0205006') THEN 'SEMENTE'
-        ELSE 'OUTROS'
-      END                           AS TIPO_PRODUTO,
+      TRIM(bm.bm_desc)              AS TIPO_PRODUTO,
       substr(b1_grupo, 1, 4)        AS GRUPO,
-      bm.bm_desc                    AS SUBGRUPO,
+      TRIM(bm.bm_desc)              AS SUBGRUPO,
       z1.zo1_codpro                 AS CODPROD,
       b1.b1_desc                    AS PRODUTO,
       u3.qt_area_prod               AS AREA_PLAN,
@@ -1872,8 +1867,6 @@ app.post('/api/insumos/fechar-mes', async (req, res) => {
 
     // Agregar por tipo + calcular PTAX médio ponderado
     const totalMap = {};
-    const TIPOS = ['DEFENSIVO','FERTILIZANTE','SEMENTE','OUTROS'];
-    for (const t of TIPOS) totalMap[t] = { brl: 0, ptaxSumPeso: 0, ptaxPeso: 0 };
     let grandBrl = 0, grandPtaxSumPeso = 0, grandPtaxPeso = 0;
 
     for (const r of rowsEmp) {
@@ -1895,7 +1888,7 @@ app.post('/api/insumos/fechar-mes', async (req, res) => {
     const empresaGravar = empresa === 'TODAS' ? 'TODAS' : empresa;
 
     // Gravar um registro por tipo + um TOTAL (com FI_PTAX)
-    const tipos_gravar = [...TIPOS.filter(t => (totalMap[t]?.brl || 0) > 0), 'TOTAL'];
+    const tipos_gravar = [...Object.keys(totalMap).filter(t => (totalMap[t]?.brl || 0) > 0), 'TOTAL'];
 
     for (const tipo of tipos_gravar) {
       const brl  = tipo === 'TOTAL' ? grandBrl : (totalMap[tipo]?.brl || 0);

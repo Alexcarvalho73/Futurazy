@@ -438,29 +438,26 @@ function renderCube(data) {
   const body = document.getElementById('cube-body');
   if (!body) return;
 
-  // Agregar: Tipo → Subgrupo → Produto
-  const tree = {}; // { tipo: { subgrupo: { produto: { rows: [...], totBrl, totUsd, totConsumo } } } }
+  // Agregar: Tipo → Produto
+  const tree = {}; // { tipo: { _brl, _usd, _consumo, produtos: { prod: { rows: [...], _brl, _usd, _consumo } } } }
 
   let grandBrl = 0, grandUsd = 0, grandConsumo = 0;
 
   for (const r of data) {
-    const tipo    = r.TIPO_PRODUTO || 'OUTROS';
-    const subgrp  = r.SUBGRUPO    || '(sem subgrupo)';
-    const prod    = r.PRODUTO     || '(sem produto)';
+    const tipo = r.TIPO_PRODUTO || 'OUTROS';
+    const prod = r.PRODUTO     || '(sem produto)';
 
-    if (!tree[tipo]) tree[tipo] = { _brl: 0, _usd: 0, _consumo: 0, subgrupos: {} };
+    if (!tree[tipo]) tree[tipo] = { _brl: 0, _usd: 0, _consumo: 0, produtos: {} };
     const T = tree[tipo];
-    if (!T.subgrupos[subgrp]) T.subgrupos[subgrp] = { _brl: 0, _usd: 0, _consumo: 0, produtos: {} };
-    const S = T.subgrupos[subgrp];
-    if (!S.produtos[prod]) S.produtos[prod] = { _brl: 0, _usd: 0, _consumo: 0, rows: [] };
-    const P = S.produtos[prod];
+    
+    if (!T.produtos[prod]) T.produtos[prod] = { _brl: 0, _usd: 0, _consumo: 0, rows: [] };
+    const P = T.produtos[prod];
 
     const brl  = Number(r.CUSTO_BRL || 0);
     const usd  = Number(r.CUSTO_USD || 0);
     const cons = Number(r.CONSUMO   || 0);
 
     T._brl     += brl; T._usd     += usd; T._consumo     += cons;
-    S._brl     += brl; S._usd     += usd; S._consumo     += cons;
     P._brl     += brl; P._usd     += usd; P._consumo     += cons;
     P.rows.push(r);
     grandBrl += brl; grandUsd += usd; grandConsumo += cons;
@@ -588,70 +585,50 @@ function renderCube(data) {
       </tr>
     `);
 
-    let sgUid = 0;
-    for (const [subgrp, S] of Object.entries(T.subgrupos)) {
-      const sgId  = `sg_${tipo}_${sgUid++}`;
-      const sgD   = state.moeda === 'USD' ? S._usd : S._brl;
-      const sgO   = state.moeda === 'USD' ? S._brl : S._usd;
+    let prUid = 0;
+    for (const [prod, P] of Object.entries(T.produtos)) {
+      const prId = `pr_${tipo}_${prUid++}`;
+      const prD  = state.moeda === 'USD' ? P._usd : P._brl;
+      const prO  = state.moeda === 'USD' ? P._brl : P._usd;
+      const exRow = P.rows[0] || {};
 
       finalRows.push(`
-        <tr class="lvl-1 row-hidden" data-parent="${tipoId}" data-id="${sgId}">
-          <td><span class="toggle-btn" onclick="toggleRows('${sgId}')">▶</span>${escHtml(subgrp)}</td>
+        <tr class="lvl-1 row-hidden" data-parent="${tipoId}" data-id="${prId}">
+          <td><span class="toggle-btn" onclick="toggleRows('${prId}')">▶</span>${escHtml(prod)}</td>
+          <td class="text-right">${escHtml(exRow.FAZENDA || '—')}</td>
+          <td class="text-right">${fmtN(P._consumo)}</td>
+          <td class="text-right">${fmtMoeda(prD)}</td>
+          <td class="text-right">${fmtMoeda(prO)}</td>
           <td class="text-right">—</td>
-          <td class="text-right">${fmtN(S._consumo)}</td>
-          <td class="text-right">${fmtMoeda(sgD)}</td>
-          <td class="text-right">${fmtMoeda(sgO)}</td>
           <td class="text-right">—</td>
-          <td class="text-right">—</td>
-          <td colspan="2">—</td>
+          <td>—</td>
+          <td>—</td>
         </tr>
       `);
 
-      let prUid = 0;
-      for (const [prod, P] of Object.entries(S.produtos)) {
-        const prId = `pr_${tipo}_${sgUid}_${prUid++}`;
-        const prD  = state.moeda === 'USD' ? P._usd : P._brl;
-        const prO  = state.moeda === 'USD' ? P._brl : P._usd;
-        const exRow = P.rows[0] || {};
-
+      for (const row of P.rows) {
+        const ddata  = row.DDATA ? formatDate(row.DDATA) : '—';
+        const cBrl   = Number(row.CUSTO_BRL || 0);
+        const cUsd   = Number(row.CUSTO_USD || 0);
+        const vBrl   = Number(row.VLR_BRL   || 0);
+        const vUsd   = Number(row.VLR_USD   || 0);
+        const dValD  = state.moeda === 'USD' ? cUsd : cBrl;
+        const dValO  = state.moeda === 'USD' ? cBrl : cUsd;
         finalRows.push(`
-          <tr class="lvl-2 row-hidden" data-parent="${sgId}" data-id="${prId}">
-            <td><span class="toggle-btn" onclick="toggleRows('${prId}')">▶</span>${escHtml(prod)}</td>
-            <td class="text-right">${escHtml(exRow.FAZENDA || '—')}</td>
-            <td class="text-right">${fmtN(P._consumo)}</td>
-            <td class="text-right">${fmtMoeda(prD)}</td>
-            <td class="text-right">${fmtMoeda(prO)}</td>
-            <td class="text-right">—</td>
-            <td class="text-right">—</td>
-            <td>—</td>
-            <td>—</td>
+          <tr class="lvl-2 row-hidden" data-parent="${prId}">
+            <td style="padding-left:100px !important; font-style:italic; color:#475569;">
+              O.S. ${escHtml(row.O_S || '—')}
+            </td>
+            <td class="text-right">${escHtml(row.FAZENDA || '—')}</td>
+            <td class="text-right">${fmtN(row.CONSUMO)}</td>
+            <td class="text-right">${fmtMoeda(dValD)}</td>
+            <td class="text-right">${fmtMoeda(dValO)}</td>
+            <td class="text-right">${fmtMoedaBrl(vBrl)}</td>
+            <td class="text-right">${fmtMoedaUsd(vUsd)}</td>
+            <td>${escHtml(row.TALHAO || '—')}</td>
+            <td>${ddata}</td>
           </tr>
         `);
-
-        for (const row of P.rows) {
-          const ddata  = row.DDATA ? formatDate(row.DDATA) : '—';
-          const cBrl   = Number(row.CUSTO_BRL || 0);
-          const cUsd   = Number(row.CUSTO_USD || 0);
-          const vBrl   = Number(row.VLR_BRL   || 0);
-          const vUsd   = Number(row.VLR_USD   || 0);
-          const dValD  = state.moeda === 'USD' ? cUsd : cBrl;
-          const dValO  = state.moeda === 'USD' ? cBrl : cUsd;
-          finalRows.push(`
-            <tr class="lvl-3 row-hidden" data-parent="${prId}">
-              <td style="padding-left:100px !important; font-style:italic; color:#475569;">
-                O.S. ${escHtml(row.O_S || '—')}
-              </td>
-              <td class="text-right">${escHtml(row.FAZENDA || '—')}</td>
-              <td class="text-right">${fmtN(row.CONSUMO)}</td>
-              <td class="text-right">${fmtMoeda(dValD)}</td>
-              <td class="text-right">${fmtMoeda(dValO)}</td>
-              <td class="text-right">${fmtMoedaBrl(vBrl)}</td>
-              <td class="text-right">${fmtMoedaUsd(vUsd)}</td>
-              <td>${escHtml(row.TALHAO || '—')}</td>
-              <td>${ddata}</td>
-            </tr>
-          `);
-        }
       }
     }
   }
@@ -726,48 +703,48 @@ function renderAnualTable() {
     </tr>
   `;
 
-  // Coletar todos os subgrupos + tipos do resumo anual
-  // O resumo anual tem: meses[i].porEmpresa[emp].subgrupos = { tipo_produto: { subgrupo: { custoBrl, custoUsd } } }
-  const allSubgrupos = new Map(); // key: "tipo||subgrupo" → { tipo, subgrupo }
+  // Coletar todos os tipos do resumo anual
+  const allTipos = new Set();
   for (const mesData of (state.resumoAnual.meses || [])) {
     const empData = mesData.porEmpresa?.[emp] || mesData.porEmpresa?.['TOTAL'] || {};
-    for (const [tipo, subs] of Object.entries(empData.subgrupos || {})) {
-      for (const sg of Object.keys(subs)) {
-        allSubgrupos.set(`${tipo}||${sg}`, { tipo, subgrupo: sg });
-      }
+    for (const tipo of Object.keys(empData.porTipo || {})) {
+      allTipos.add(tipo);
     }
-  }
-
-  // Agrupar por tipo
-  const tipoMap = {};
-  for (const { tipo, subgrupo } of allSubgrupos.values()) {
-    if (!tipoMap[tipo]) tipoMap[tipo] = [];
-    tipoMap[tipo].push(subgrupo);
   }
 
   const usarUsd = state.moeda === 'USD';
   const tbody = document.getElementById('anual-tbody');
   const bodyRows = [];
 
-  // Helper: pega valor de um mês para tipo+subgrupo
-  function getVal(mesData, tipo, sg) {
-    const empData = mesData.porEmpresa?.[emp] || mesData.porEmpresa?.['TOTAL'] || {};
-    const v = empData.subgrupos?.[tipo]?.[sg];
-    if (!v) return null;
-    return usarUsd ? (v.custoUsd || 0) : (v.custoBrl || 0);
-  }
   function getTipoVal(mesData, tipo) {
     const empData = mesData.porEmpresa?.[emp] || mesData.porEmpresa?.['TOTAL'] || {};
     const v = empData.porTipo?.[tipo];
     if (!v) return null;
-    return usarUsd ? (v.custoUsd || 0) : (v.custoBrl || 0);
+    if (usarUsd) {
+      const ptax = empData.ptaxMedio || 0;
+      return ptax > 0 ? (v.custoBrl / ptax) : 0;
+    }
+    return v.custoBrl || 0;
   }
   function getTotalVal(mesData) {
     const empData = mesData.porEmpresa?.[emp] || mesData.porEmpresa?.['TOTAL'] || {};
-    return usarUsd ? (empData.totalUsd || 0) : (empData.totalBrl || 0);
+    if (usarUsd) {
+      const ptax = empData.ptaxMedio || 0;
+      return ptax > 0 ? (empData.totalBrl / ptax) : 0;
+    }
+    return empData.totalBrl || 0;
   }
 
-  const tiposOrdem = ['DEFENSIVO','FERTILIZANTE','SEMENTE','OUTROS'].filter(t => tipoMap[t]);
+  // Ordenar tipos, dando prioridade para DEFENSIVO, FERTILIZANTE, SEMENTE
+  const defaultOrder = ['DEFENSIVO','FERTILIZANTE','SEMENTE'];
+  const tiposOrdem = [...allTipos].sort((a, b) => {
+    const idxA = defaultOrder.indexOf(a);
+    const idxB = defaultOrder.indexOf(b);
+    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+    if (idxA !== -1) return -1;
+    if (idxB !== -1) return 1;
+    return a.localeCompare(b);
+  });
 
   for (const tipo of tiposOrdem) {
     const cfg = TIPO_CONFIG[tipo] || TIPO_CONFIG['OUTROS'];
@@ -819,32 +796,6 @@ function renderAnualTable() {
         <td class="col-total">${fmtMoeda(tipoRowTotal)}</td>
       </tr>
     `);
-
-    // Linhas de subgrupos
-    for (const sg of tipoMap[tipo]) {
-      let sgTotal = 0;
-      const sgCells = meses.map((m, i) => {
-        const mesData = (state.resumoAnual.meses || []).find(md => md.ano === m.ano && md.mes === m.mes);
-        const isAtual    = m.ano === mesAtual.ano    && m.mes === mesAtual.mes;
-        const isAnterior = m.ano === mesAnterior.ano && m.mes === mesAnterior.mes;
-        const cls = isAtual ? 'col-atual' : isAnterior ? 'col-anterior' : '';
-        if (!mesData) return `<td class="${cls}">—</td>`;
-        const val = getVal(mesData, tipo, sg) || 0;
-        sgTotal += val;
-        const empData = mesData.porEmpresa?.[emp] || mesData.porEmpresa?.['TOTAL'] || {};
-        const isFuturo = (empData.status || mesData.status || '') === 'futuro';
-        const txt = val > 0 ? fmtMoeda(val) : (isFuturo ? '·' : '—');
-        return `<td class="${cls}">${txt}</td>`;
-      }).join('');
-
-      bodyRows.push(`
-        <tr>
-          <td style="padding-left:24px; color:#94a3b8; font-size:12.5px;">${escHtml(sg)}</td>
-          ${sgCells}
-          <td class="col-total" style="font-size:12px;">${fmtMoeda(sgTotal)}</td>
-        </tr>
-      `);
-    }
 
     // Se pode fechar, adicionar linha de ação para este tipo
     if (podeFechar && tipo === tiposOrdem[tiposOrdem.length - 1]) {
