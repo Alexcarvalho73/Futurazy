@@ -402,7 +402,7 @@ function applyFilters(data) {
 
   return data.filter(r => {
     if (empresa && empresa !== 'todas' && r.EMPRESA !== empresa) return false;
-    if (tipoInsumo && tipoInsumo !== 'todos' && r.TIPO_PRODUTO !== tipoInsumo) return false;
+    if (tipoInsumo && tipoInsumo !== 'todos' && r.GRUPO !== tipoInsumo) return false;
     if (fazenda && !(r.FAZENDA || '').toLowerCase().includes(fazenda)) return false;
     if (produto && !(r.PRODUTO || '').toLowerCase().includes(produto)) return false;
     return true;
@@ -453,9 +453,9 @@ function updateKpis(data) {
   const usarUsd = state.moeda === 'USD';
   set('kpi-custo-total', fmtMoeda(usarUsd ? custoUsd : custoTotal), periodoLabel);
   set('kpi-custo-usd',   'US$ ' + fmtUsd.format(custoUsd), periodoLabel);
-  set('kpi-defensivo',   fmtMoeda(usarUsd ? (porTipo['DEFENSIVO']?.usd||0) : (porTipo['DEFENSIVO']?.brl||0)), periodoLabel);
-  set('kpi-fertilizante',fmtMoeda(usarUsd ? (porTipo['FERTILIZANTE']?.usd||0) : (porTipo['FERTILIZANTE']?.brl||0)), periodoLabel);
-  set('kpi-semente',     fmtMoeda(usarUsd ? (porTipo['SEMENTE']?.usd||0) : (porTipo['SEMENTE']?.brl||0)), periodoLabel);
+  set('kpi-defensivo',   fmtMoeda(usarUsd ? (porTipo['DEFENSIVOS']?.usd||0) : (porTipo['DEFENSIVOS']?.brl||0)), periodoLabel);
+  set('kpi-fertilizante',fmtMoeda(usarUsd ? (porTipo['FERTILIZANTES']?.usd||0) : (porTipo['FERTILIZANTES']?.brl||0)), periodoLabel);
+  set('kpi-semente',     fmtMoeda(usarUsd ? (porTipo['SEMENTES']?.usd||0) : (porTipo['SEMENTES']?.brl||0)), periodoLabel);
 }
 
 // ─────────────────────────────────────────────
@@ -771,7 +771,7 @@ function renderAnualTable() {
   }
 
   // Ordenar tipos, dando prioridade para DEFENSIVO, FERTILIZANTE, SEMENTE
-  const defaultOrder = ['DEFENSIVO','FERTILIZANTE','SEMENTE'];
+  const defaultOrder = ['DEFENSIVOS','FERTILIZANTES','SEMENTES'];
   const tiposOrdem = [...allTipos].sort((a, b) => {
     const idxA = defaultOrder.indexOf(a);
     const idxB = defaultOrder.indexOf(b);

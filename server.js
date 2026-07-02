@@ -1456,8 +1456,8 @@ function buildInsumosSQL(opts = {}) {
     extraWhere += ` AND substr(b1_grupo, 1, 4) = '${tipoVal}'`;
   }
 
-  const sf_za5 = za5_safra.replace(/'/g, '');
-  const fi_za5 = za5_filial.replace(/'/g, '');
+  const sf_za5 = String(za5_safra).replace(/'/g, '');
+  const fi_za5 = String(za5_filial).replace(/'/g, '');
 
   return `
     SELECT DISTINCT
@@ -1507,7 +1507,7 @@ function buildInsumosSQL(opts = {}) {
      AND z0.zo0_codemp = '85'
      AND z0.zo0_codigo = z1.zo1_codigo
      AND z1.zo1_codpro = b1.b1_cod
-     AND substr(b1.b1_grupo,1,4)||'   ' = bm.bm_grupo
+     AND trim(substr(b1.b1_grupo, 1, 4)) = trim(bm.bm_grupo)
      AND ua.id_filial = f.id_filial
      AND f.id_empresa = e.id_empresa
      AND CAST(TRIM(z0.zo0_codagl) AS VARCHAR(6)) = ua.cd_int_erp
