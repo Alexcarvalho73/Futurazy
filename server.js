@@ -1417,7 +1417,11 @@ app.post('/api/params', (req, res) => {
 // MÓDULO FECHAMENTO FINANCEIRO — INSUMOS
 // ============================================================
 
-// Builder do SQL de Insumos (parametrizado)
+// Builder do SQL de Insumos — com outer join na ZA5020
+// Retorna VLR_RS (valor em R$, independente da moeda do produto) e PTAX
+// VLR_RS: se za5_moeda='1' (Real) → za5_vcompr; se '2' (Dólar) → za5_vcompr × za5_ptax
+// Custo final: CONSUMO × VLR_RS  (sempre em BRL)
+// USD display: CUSTO_BRL / PTAX  (calculado no JavaScript)
 function buildInsumosSQL(opts = {}) {
   const { fazendaFiltro = '', produtoFiltro = '', tipoInsumoFiltro = '', za5_safra = '20251', za5_filial = '0285' } = opts;
 
@@ -1439,11 +1443,6 @@ function buildInsumosSQL(opts = {}) {
     const cond = tipoMap[tipoInsumoFiltro];
     if (cond) extraWhere += ` AND ${cond}`;
   }
-
-  // Empresa: derivamos do cd_empresa do Protheus (codemp=85 → filiais 028501/028503)
-  // Usamos CAST(TRIM(e.cd_empresa) AS VARCHAR(6)) || TRIM(z4.zo4_codset) → via JOIN com empresa@PIMSGRAOSAGR
-  // Para identificar empresa/filial usamos: TRIM(f.cd_filial) ou similar.
-  // Simplificação: vamos retornar ua.cd_int_erp como EMPRESA_PIMS e mapear externamente.
 
   const sf_za5 = za5_safra.replace(/'/g, '');
   const fi_za5 = za5_filial.replace(/'/g, '');
@@ -1472,25 +1471,18 @@ function buildInsumosSQL(opts = {}) {
       u3.qt_area_prod               AS AREA_PLAN,
       z4.zo4_haapli                 AS AREA_APLIC,
       z1.zo1_qtdcon                 AS CONSUMO,
-      (SELECT CASE za.za5_moeda WHEN '2' THEN 0 WHEN '1' THEN za.za5_vcompr ELSE 0 END
-         FROM protheus11.za5020 za
-        WHERE za.d_e_l_e_t_ = ' '
-          AND za.za5_safra = '${sf_za5}'
-          AND za5_filial = '${fi_za5}'
-          AND z1.zo1_codpro = za.za5_produt
-          AND ROWNUM = 1)           AS VLR_BRL,
-      (SELECT CASE za.za5_moeda WHEN '1' THEN 0 WHEN '2' THEN za.za5_vcompr ELSE 0 END
-         FROM protheus11.za5020 za
-        WHERE za.d_e_l_e_t_ = ' '
-          AND za.za5_safra = '${sf_za5}'
-          AND za5_filial = '${fi_za5}'
-          AND z1.zo1_codpro = za.za5_produt
-          AND ROWNUM = 1)           AS VLR_USD
+      za.za5_moeda                  AS ZA5_MOEDA,
+      CASE za.za5_moeda
+        WHEN '1' THEN NVL(za.za5_vcompr, 0)
+        ELSE NVL(za.za5_vcompr, 0) * NVL(za.za5_ptax, 1)
+      END                           AS VLR_RS,
+      NVL(za.za5_ptax, 0)          AS PTAX
     FROM protheus11.zo4020         z4,
          protheus11.zo1020         z1,
          protheus11.zo0020         z0,
          protheus11.sb1020         b1,
          protheus11.sbm020         bm,
+         protheus11.za5020         za,
          unidadeadm@PIMSGRAOSAGR   ua,
          upnivel2@PIMSGRAOSAGR     u2,
          upnivel1@PIMSGRAOSAGR     u1,
@@ -1521,6 +1513,10 @@ function buildInsumosSQL(opts = {}) {
      AND z1.zo1_qtdcon <> 0
      AND ((trim(TO_CHAR(nvl(u3.cd_upnivel3, 0))) = trim(nvl(z4.zo4_codtal, ' ')))
           OR (TRIM(u3.id_upnivel3) = TRIM(z4.zo4_idupn3)))
+     AND ' '         = za.d_e_l_e_t_(+)
+     AND '${sf_za5}' = za.za5_safra(+)
+     AND '${fi_za5}' = za.za5_filial(+)
+     AND z1.zo1_codpro = za.za5_produt(+)
      AND z4.d_e_l_e_t_ = ' '
      AND z1.d_e_l_e_t_ = ' '
      AND z0.d_e_l_e_t_ = ' '
@@ -1548,17 +1544,27 @@ function mapEmpresaCod(cod) {
   return str || '028501';
 }
 
-// Calcula custo: consumo × vlr_brl e consumo × vlr_usd
+// Calcula custo em BRL: consumo × VLR_RS (já convertido para R$ no SQL)
+// USD display: custo_brl / ptax (calculado dinamicamente no frontend)
 function calcCustos(rows) {
-  return rows.map(r => ({
-    ...r,
-    EMPRESA: mapEmpresaCod(r.EMPRESA_COD),
-    CUSTO_BRL: Number(r.CONSUMO || 0) * Number(r.VLR_BRL || 0),
-    CUSTO_USD: Number(r.CONSUMO || 0) * Number(r.VLR_USD || 0),
-  }));
+  return rows.map(r => {
+    const consumo  = Number(r.CONSUMO || 0);
+    const vlrRs   = Number(r.VLR_RS  || 0);
+    const ptax    = Number(r.PTAX    || 0);
+    const custoBrl = consumo * vlrRs;
+    const custoUsd = (ptax > 0) ? (custoBrl / ptax) : 0;
+    return {
+      ...r,
+      EMPRESA:   mapEmpresaCod(r.EMPRESA_COD),
+      CUSTO_BRL: custoBrl,
+      CUSTO_USD: custoUsd,
+      PTAX:      ptax,
+    };
+  });
 }
 
 // Agrega por mês/empresa/tipo/subgrupo para o resumo anual
+// Guarda totalBrl (gravado no fechamento) e ptaxMedio (ponderado pelo custo)
 function agregarInsumosPorMes(rows) {
   const map = {};
 
@@ -1566,35 +1572,46 @@ function agregarInsumosPorMes(rows) {
     const ddata = r.DDATA instanceof Date ? r.DDATA : (r.DDATA ? new Date(r.DDATA) : null);
     if (!ddata || isNaN(ddata)) continue;
 
-    const emp     = r.EMPRESA || '028501';
-    const ano     = ddata.getFullYear();
-    const mes     = ddata.getMonth() + 1;
-    const tipo    = r.TIPO_PRODUTO || 'OUTROS';
-    const subgrp  = r.SUBGRUPO    || '(sem subgrupo)';
+    const emp    = r.EMPRESA || '028501';
+    const ano    = ddata.getFullYear();
+    const mes    = ddata.getMonth() + 1;
+    const tipo   = r.TIPO_PRODUTO || 'OUTROS';
+    const subgrp = r.SUBGRUPO    || '(sem subgrupo)';
 
     const key = `${emp}_${ano}_${mes}`;
     if (!map[key]) {
-      map[key] = { empresa: emp, ano, mes, totalBrl: 0, totalUsd: 0, porTipo: {}, subgrupos: {} };
+      map[key] = {
+        empresa: emp, ano, mes,
+        totalBrl: 0, ptaxSumPeso: 0, ptaxPeso: 0, // para média ponderada
+        porTipo: {}, subgrupos: {}
+      };
     }
     const M = map[key];
 
     const brl  = Number(r.CUSTO_BRL || 0);
-    const usd  = Number(r.CUSTO_USD || 0);
+    const ptax = Number(r.PTAX || 0);
 
     M.totalBrl += brl;
-    M.totalUsd += usd;
+    // Média ponderada de PTAX pelo custo BRL
+    if (ptax > 0 && brl > 0) {
+      M.ptaxSumPeso += brl;       // soma dos pesos
+      M.ptaxPeso    += brl * ptax; // soma ponderada
+    }
 
-    if (!M.porTipo[tipo])  M.porTipo[tipo]  = { custoBrl: 0, custoUsd: 0 };
+    if (!M.porTipo[tipo])  M.porTipo[tipo]  = { custoBrl: 0 };
     M.porTipo[tipo].custoBrl += brl;
-    M.porTipo[tipo].custoUsd += usd;
 
     if (!M.subgrupos[tipo]) M.subgrupos[tipo] = {};
-    if (!M.subgrupos[tipo][subgrp]) M.subgrupos[tipo][subgrp] = { custoBrl: 0, custoUsd: 0 };
+    if (!M.subgrupos[tipo][subgrp]) M.subgrupos[tipo][subgrp] = { custoBrl: 0 };
     M.subgrupos[tipo][subgrp].custoBrl += brl;
-    M.subgrupos[tipo][subgrp].custoUsd += usd;
   }
 
-  return Object.values(map);
+  // Calcular ptaxMedio para cada mês
+  return Object.values(map).map(m => ({
+    ...m,
+    ptaxMedio: m.ptaxSumPeso > 0 ? (m.ptaxPeso / m.ptaxSumPeso) : 0,
+    totalUsd:  m.ptaxSumPeso > 0 ? (m.totalBrl / (m.ptaxPeso / m.ptaxSumPeso)) : 0,
+  }));
 }
 
 // Helper safra year (já existe no módulo Receitas, repetimos para independência)
@@ -1853,43 +1870,49 @@ app.post('/api/insumos/fechar-mes', async (req, res) => {
 
     const rowsEmp = empresa === 'TODAS' ? rows : rows.filter(r => r.EMPRESA === empresa);
 
-    // Agregar por tipo
+    // Agregar por tipo + calcular PTAX médio ponderado
     const totalMap = {};
     const TIPOS = ['DEFENSIVO','FERTILIZANTE','SEMENTE','OUTROS'];
-    for (const t of TIPOS) totalMap[t] = { brl: 0, usd: 0 };
-    let grandBrl = 0, grandUsd = 0;
+    for (const t of TIPOS) totalMap[t] = { brl: 0, ptaxSumPeso: 0, ptaxPeso: 0 };
+    let grandBrl = 0, grandPtaxSumPeso = 0, grandPtaxPeso = 0;
 
     for (const r of rowsEmp) {
       const tipo = r.TIPO_PRODUTO || 'OUTROS';
       const brl  = Number(r.CUSTO_BRL || 0);
-      const usd  = Number(r.CUSTO_USD || 0);
-      if (!totalMap[tipo]) totalMap[tipo] = { brl: 0, usd: 0 };
+      const ptax = Number(r.PTAX || 0);
+      if (!totalMap[tipo]) totalMap[tipo] = { brl: 0, ptaxSumPeso: 0, ptaxPeso: 0 };
       totalMap[tipo].brl += brl;
-      totalMap[tipo].usd += usd;
       grandBrl += brl;
-      grandUsd += usd;
+      if (ptax > 0 && brl > 0) {
+        totalMap[tipo].ptaxSumPeso += brl;
+        totalMap[tipo].ptaxPeso    += brl * ptax;
+        grandPtaxSumPeso += brl;
+        grandPtaxPeso    += brl * ptax;
+      }
     }
+    const grandPtax = grandPtaxSumPeso > 0 ? (grandPtaxPeso / grandPtaxSumPeso) : 0;
 
     const empresaGravar = empresa === 'TODAS' ? 'TODAS' : empresa;
 
-    // Gravar um registro por tipo + um TOTAL
+    // Gravar um registro por tipo + um TOTAL (com FI_PTAX)
     const tipos_gravar = [...TIPOS.filter(t => (totalMap[t]?.brl || 0) > 0), 'TOTAL'];
 
     for (const tipo of tipos_gravar) {
-      const brl = tipo === 'TOTAL' ? grandBrl : (totalMap[tipo]?.brl || 0);
-      const usd = tipo === 'TOTAL' ? grandUsd : (totalMap[tipo]?.usd || 0);
+      const brl  = tipo === 'TOTAL' ? grandBrl : (totalMap[tipo]?.brl || 0);
+      const ptaxT = tipo === 'TOTAL' ? grandPtax
+        : (totalMap[tipo]?.ptaxSumPeso > 0 ? (totalMap[tipo].ptaxPeso / totalMap[tipo].ptaxSumPeso) : 0);
 
       const mergeSql = `
         MERGE INTO FECHAMENTO_INSUMOS fi
         USING DUAL ON (fi.FI_EMPRESA = :empresa AND fi.FI_ANO = :ano AND fi.FI_MES = :mes AND fi.FI_TIPO_INSUMO = :tipo)
         WHEN MATCHED THEN UPDATE SET
           fi.FI_CUSTO_TOTAL    = :custoBrl,
-          fi.FI_CUSTO_USD      = :custoUsd,
+          fi.FI_PTAX           = :ptaxVal,
           fi.FI_DT_FECHAMENTO  = SYSDATE
         WHEN NOT MATCHED THEN INSERT
-          (FI_EMPRESA, FI_ANO, FI_MES, FI_TIPO_INSUMO, FI_CUSTO_TOTAL, FI_CUSTO_USD, FI_DT_FECHAMENTO)
+          (FI_EMPRESA, FI_ANO, FI_MES, FI_TIPO_INSUMO, FI_CUSTO_TOTAL, FI_PTAX, FI_DT_FECHAMENTO)
         VALUES
-          (:empresa, :ano, :mes, :tipo, :custoBrl, :custoUsd, SYSDATE)
+          (:empresa, :ano, :mes, :tipo, :custoBrl, :ptaxVal, SYSDATE)
       `;
       await db.execute(mergeSql, {
         empresa: empresaGravar,
@@ -1897,14 +1920,14 @@ app.post('/api/insumos/fechar-mes', async (req, res) => {
         mes: parseInt(mes),
         tipo,
         custoBrl: brl,
-        custoUsd: usd
+        ptaxVal: ptaxT || null
       }, { autoCommit: true });
     }
 
     res.json({
       success: true,
       mensagem: `Mês ${mes}/${ano} fechado com sucesso para empresa ${empresaGravar}.`,
-      dados: { empresa: empresaGravar, ano, mes, grandBrl, grandUsd }
+      dados: { empresa: empresaGravar, ano, mes, grandBrl, grandPtax }
     });
   } catch (err) {
     console.error('[insumos/fechar-mes]', err);
@@ -1925,7 +1948,7 @@ app.get('/api/insumos/fechados', async (req, res) => {
 
     const sql = `
       SELECT FI_ID, FI_EMPRESA, FI_ANO, FI_MES, FI_TIPO_INSUMO,
-             FI_CUSTO_TOTAL, FI_CUSTO_USD, FI_DT_FECHAMENTO, FI_USUARIO, FI_OBS
+             FI_CUSTO_TOTAL, FI_PTAX, FI_DT_FECHAMENTO, FI_USUARIO, FI_OBS
       FROM FECHAMENTO_INSUMOS
       ${where}
       ORDER BY FI_ANO DESC, FI_MES DESC, FI_EMPRESA, FI_TIPO_INSUMO
@@ -1947,11 +1970,11 @@ app.get('/api/insumos/fechados', async (req, res) => {
 app.put('/api/insumos/fechamento/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { custoBrl, custoUsd, obs } = req.body;
+    const { custoBrl, ptaxVal, obs } = req.body;
     const sql = `
       UPDATE FECHAMENTO_INSUMOS SET
         FI_CUSTO_TOTAL   = :custoBrl,
-        FI_CUSTO_USD     = :custoUsd,
+        FI_PTAX          = :ptaxVal,
         FI_OBS           = :obs,
         FI_DT_FECHAMENTO = SYSDATE
       WHERE FI_ID = :id
@@ -1959,7 +1982,7 @@ app.put('/api/insumos/fechamento/:id', async (req, res) => {
     await db.execute(sql, {
       id: parseInt(id),
       custoBrl: Number(custoBrl || 0),
-      custoUsd: Number(custoUsd || 0),
+      ptaxVal:  ptaxVal ? Number(ptaxVal) : null,
       obs: obs || ''
     }, { autoCommit: true });
     res.json({ success: true, mensagem: 'Fechamento atualizado com sucesso.' });
@@ -1972,7 +1995,7 @@ app.put('/api/insumos/fechamento/:id', async (req, res) => {
 // POST /api/insumos/fechamento — inclui novo registro manual
 app.post('/api/insumos/fechamento', async (req, res) => {
   try {
-    const { periodo, filial, tipo, custoBrl, custoUsd, obs } = req.body;
+    const { periodo, filial, tipo, custoBrl, ptaxVal, obs } = req.body;
     if (!periodo || !filial || !tipo) {
       return res.status(400).json({ success: false, error: 'Período, filial e tipo são obrigatórios.' });
     }
@@ -1989,14 +2012,14 @@ app.post('/api/insumos/fechamento', async (req, res) => {
 
     const sql = `
       INSERT INTO FECHAMENTO_INSUMOS
-        (FI_EMPRESA, FI_ANO, FI_MES, FI_TIPO_INSUMO, FI_CUSTO_TOTAL, FI_CUSTO_USD, FI_OBS, FI_DT_FECHAMENTO)
+        (FI_EMPRESA, FI_ANO, FI_MES, FI_TIPO_INSUMO, FI_CUSTO_TOTAL, FI_PTAX, FI_OBS, FI_DT_FECHAMENTO)
       VALUES
-        (:filial, :ano, :mes, :tipo, :custoBrl, :custoUsd, :obs, SYSDATE)
+        (:filial, :ano, :mes, :tipo, :custoBrl, :ptaxVal, :obs, SYSDATE)
     `;
     await db.execute(sql, {
       filial, ano: parseInt(ano), mes: parseInt(mes), tipo,
       custoBrl: Number(custoBrl || 0),
-      custoUsd: Number(custoUsd || 0),
+      ptaxVal:  ptaxVal ? Number(ptaxVal) : null,
       obs: obs || ''
     }, { autoCommit: true });
     res.json({ success: true, mensagem: 'Fechamento incluído com sucesso.' });

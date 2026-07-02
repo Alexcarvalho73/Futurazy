@@ -928,9 +928,8 @@ function openModalFechar(mes, ano, empresa) {
   const empKey  = empresa === 'TODAS' ? 'TOTAL' : empresa;
   const empData = mesData.porEmpresa?.[empKey] || mesData.porEmpresa?.['TOTAL'] || {};
 
-  const usarUsd = false; // Modal sempre mostra BRL e USD
   const custoB  = empData.totalBrl || 0;
-  const custoU  = empData.totalUsd || 0;
+  const ptaxMed = empData.ptaxMedio || 0;
 
   // Subgrupos por tipo
   let defBrl = 0, fertBrl = 0, semBrl = 0;
@@ -944,11 +943,11 @@ function openModalFechar(mes, ano, empresa) {
 
   state.fecharPending = { mes, ano, empresa };
 
-  document.getElementById('modal-mes-ano').textContent     = `${NOMES_MES[mes-1]}/${ano}`;
-  document.getElementById('modal-empresa').textContent     = empresa;
-  document.getElementById('modal-custo').textContent       = fmtMoedaBrl(custoB);
-  document.getElementById('modal-custo-usd').textContent   = fmtMoedaUsd(custoU);
-  document.getElementById('modal-defensivo').textContent   = fmtMoedaBrl(defBrl);
+  document.getElementById('modal-mes-ano').textContent      = `${NOMES_MES[mes-1]}/${ano}`;
+  document.getElementById('modal-empresa').textContent      = empresa;
+  document.getElementById('modal-custo').textContent        = fmtMoedaBrl(custoB);
+  document.getElementById('modal-ptax').textContent         = ptaxMed > 0 ? `R$ ${fmtBrl.format(ptaxMed)}` : '—';
+  document.getElementById('modal-defensivo').textContent    = fmtMoedaBrl(defBrl);
   document.getElementById('modal-fertilizante').textContent = fmtMoedaBrl(fertBrl);
 
   document.getElementById('modal-fechar').classList.add('open');
@@ -1031,13 +1030,14 @@ function filterModalList() {
   body.innerHTML = filtered.map(r => {
     const per = `${String(r.FI_MES).padStart(2,'0')}/${r.FI_ANO}`;
     const dtF = r.FI_DT_FECHAMENTO ? formatDate(r.FI_DT_FECHAMENTO) : '—';
+    const ptaxFmt = r.FI_PTAX > 0 ? `R$ ${fmtBrl.format(r.FI_PTAX)}` : '—';
     return `
       <tr>
         <td>${per}</td>
         <td>${r.FI_EMPRESA}</td>
         <td>${r.FI_TIPO_INSUMO || '—'}</td>
         <td class="text-right">${fmtMoedaBrl(r.FI_CUSTO_TOTAL)}</td>
-        <td class="text-right">${fmtMoedaUsd(r.FI_CUSTO_USD)}</td>
+        <td class="text-right">${ptaxFmt}</td>
         <td>${dtF}</td>
         <td>
           <button class="btn btn-sm" style="padding:2px 8px;background:rgba(59,130,246,.15);color:#3b82f6;border:1px solid rgba(59,130,246,.3);"
@@ -1058,26 +1058,26 @@ function openEditForm(id) {
   const rec = _allFechamentos.find(r => r.FI_ID === id);
   if (!rec) return;
 
-  document.getElementById('edit-fi-id').value      = rec.FI_ID;
-  document.getElementById('edit-fi-periodo').value  = `${rec.FI_ANO}-${String(rec.FI_MES).padStart(2,'0')}`;
-  document.getElementById('edit-fi-filial').value   = rec.FI_EMPRESA;
-  document.getElementById('edit-fi-tipo').value     = rec.FI_TIPO_INSUMO || '';
-  document.getElementById('edit-fi-custo-brl').value= rec.FI_CUSTO_TOTAL || '';
-  document.getElementById('edit-fi-custo-usd').value= rec.FI_CUSTO_USD   || '';
-  document.getElementById('edit-fi-obs').value      = rec.FI_OBS         || '';
+  document.getElementById('edit-fi-id').value       = rec.FI_ID;
+  document.getElementById('edit-fi-periodo').value   = `${rec.FI_ANO}-${String(rec.FI_MES).padStart(2,'0')}`;
+  document.getElementById('edit-fi-filial').value    = rec.FI_EMPRESA;
+  document.getElementById('edit-fi-tipo').value      = rec.FI_TIPO_INSUMO || '';
+  document.getElementById('edit-fi-custo-brl').value = rec.FI_CUSTO_TOTAL || '';
+  document.getElementById('edit-fi-ptax').value      = rec.FI_PTAX         || '';
+  document.getElementById('edit-fi-obs').value       = rec.FI_OBS          || '';
 
   document.getElementById('edit-fechamento-list-view').style.display = 'none';
   document.getElementById('edit-fechamento-form-view').style.display = 'block';
 }
 
 function openNewFechamentoForm() {
-  document.getElementById('edit-fi-id').value       = '';
-  document.getElementById('edit-fi-periodo').value  = '';
-  document.getElementById('edit-fi-filial').value   = '028501';
-  document.getElementById('edit-fi-tipo').value     = 'DEFENSIVO';
-  document.getElementById('edit-fi-custo-brl').value= '';
-  document.getElementById('edit-fi-custo-usd').value= '';
-  document.getElementById('edit-fi-obs').value      = '';
+  document.getElementById('edit-fi-id').value        = '';
+  document.getElementById('edit-fi-periodo').value   = '';
+  document.getElementById('edit-fi-filial').value    = '028501';
+  document.getElementById('edit-fi-tipo').value      = 'DEFENSIVO';
+  document.getElementById('edit-fi-custo-brl').value = '';
+  document.getElementById('edit-fi-ptax').value      = '';
+  document.getElementById('edit-fi-obs').value       = '';
 
   document.getElementById('edit-fechamento-list-view').style.display = 'none';
   document.getElementById('edit-fechamento-form-view').style.display = 'block';
@@ -1088,9 +1088,9 @@ async function saveFechamentoForm() {
   const periodo = document.getElementById('edit-fi-periodo').value;
   const filial  = document.getElementById('edit-fi-filial').value;
   const tipo    = document.getElementById('edit-fi-tipo').value;
-  const custoBrl= document.getElementById('edit-fi-custo-brl').value;
-  const custoUsd= document.getElementById('edit-fi-custo-usd').value;
-  const obs     = document.getElementById('edit-fi-obs').value;
+  const custoBrl = document.getElementById('edit-fi-custo-brl').value;
+  const ptaxVal  = document.getElementById('edit-fi-ptax').value;
+  const obs      = document.getElementById('edit-fi-obs').value;
 
   if (!periodo || !filial || !tipo) {
     alert('Preencha Período, Filial e Tipo.');
@@ -1107,13 +1107,13 @@ async function saveFechamentoForm() {
       res = await fetch(`/api/insumos/fechamento/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ custoBrl, custoUsd, obs })
+        body: JSON.stringify({ custoBrl, ptaxVal, obs })
       }).then(r => r.json());
     } else {
       res = await fetch('/api/insumos/fechamento', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ periodo, filial, tipo, custoBrl, custoUsd, obs })
+        body: JSON.stringify({ periodo, filial, tipo, custoBrl, ptaxVal, obs })
       }).then(r => r.json());
     }
 
