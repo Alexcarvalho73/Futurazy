@@ -546,8 +546,13 @@ if (btnExportExcel) {
         let csvContent = headers.join(';') + '\r\n';
         rows.forEach(row => {
           // Escapar aspas duplas e envolver os campos com aspas se necessário
-          const escapedFields = row.map(field => {
+          const escapedFields = row.map((field, index) => {
             const str = String(field).replace(/"/g, '""');
+            // Índices: 2 (Filial), 3 (Número NF), 4 (Fornecedor/Emitente), 9 (Chave XML)
+            // Usar ="valor" para forçar o Excel a tratar como texto e não notação científica ou perder zeros à esquerda
+            if (index === 2 || index === 3 || index === 4 || index === 9) {
+              return `="${str}"`;
+            }
             return `"${str}"`;
           });
           csvContent += escapedFields.join(';') + '\r\n';
