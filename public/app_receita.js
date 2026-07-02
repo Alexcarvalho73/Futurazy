@@ -143,7 +143,7 @@ function setupEventListeners() {
       
       // Sincronizar aba do Resumo Anual com o filtro de Empresa
       const empFilter = document.getElementById('f-empresa').value;
-      const targetEmp = (empFilter && empFilter !== 'Todas') ? empFilter : 'TOTAL';
+      const targetEmp = (empFilter && empFilter !== 'todas') ? empFilter : 'TOTAL';
       document.querySelectorAll('.empresa-tab').forEach(t => t.classList.remove('active'));
       const tab = document.querySelector(`.empresa-tab[data-emp="${targetEmp}"]`);
       if (tab) tab.classList.add('active');
@@ -169,6 +169,7 @@ function setupEventListeners() {
 
     renderCube(state.allData);
     updateKpis(state.allData);
+    renderAnualTable();
   });
 
   // Expand / Collapse cubo
