@@ -789,20 +789,22 @@ function renderAnualTable() {
           continue;
         }
 
-        let rec, fac, fet, fun;
+        let rec, fac, fet, fun, gta;
         if (state.moeda === 'USD') {
           rec = getValorUsd(m, seg, 'receitaUsd') || 0;
           fac = getValorUsd(m, seg, 'vlrFacsUsd') || 0;
           fet = getValorUsd(m, seg, 'fethabUsd') || 0;
           fun = getValorUsd(m, seg, 'funruralUsd') || 0;
+          gta = getValorUsd(m, seg, 'gtaUsd') || 0;
         } else {
           rec = getValor(m, seg, 'receita') || 0;
           fac = getValor(m, seg, 'vlrFacs') || 0;
           fet = getValor(m, seg, 'fethab') || 0;
           fun = getValor(m, seg, 'funrural') || 0;
+          gta = getValor(m, seg, 'gta') || 0;
         }
 
-        const net = rec - fac - fet - fun;
+        const net = rec - fac - fet - fun - gta;
         segmentTotals[seg] += net;
 
         let style = 'text-align:right;font-weight:700;color:#10b981;';
@@ -829,6 +831,7 @@ function renderAnualTable() {
   rows += renderMetricaRow('(-) FACS', 'vlrFacs', 'vlrFacsUsd', fmtMoeda, true);
   rows += renderMetricaRow('(-) FETHAB', 'fethab', 'fethabUsd', fmtMoeda, true);
   rows += renderMetricaRow('(-) FUNRURAL', 'funrural', 'funruralUsd', fmtMoeda, true);
+  rows += renderMetricaRow('(-) GTA', 'gta', 'gtaUsd', fmtMoeda, true);
   rows += renderTotalizerRow();
   rows += renderMetricaRow('📦 Sacas', 'sacas', null, fmtN);
   rows += renderMetricaRow('🐄 Cabeças', 'cabecas', null, fmtN);
@@ -1120,6 +1123,7 @@ window.openEditForm = function(id) {
   document.getElementById('edit-fr-sacas').value = item.FR_SACAS || 0;
   document.getElementById('edit-fr-dolar').value = item.FR_DOLAR_MEDIO || 0;
   document.getElementById('edit-fr-funrural').value = item.FR_FUNRURAL || 0;
+  document.getElementById('edit-fr-gta').value = item.FR_GTA || 0;
   document.getElementById('edit-fr-fethab').value = item.FR_FETHAB || 0;
   document.getElementById('edit-fr-facs').value = item.FR_VLR_FACS || 0;
   document.getElementById('edit-fr-nfs').value = item.FR_QTD_NFS || 0;
@@ -1159,6 +1163,7 @@ async function saveFechamentoForm() {
     sacas: Number(document.getElementById('edit-fr-sacas').value || 0),
     dolarMedio: Number(document.getElementById('edit-fr-dolar').value || 0),
     funrural: Number(document.getElementById('edit-fr-funrural').value || 0),
+    gta: Number(document.getElementById('edit-fr-gta').value || 0),
     fethab: Number(document.getElementById('edit-fr-fethab').value || 0),
     vlrFacs: Number(document.getElementById('edit-fr-facs').value || 0),
     qtdNfs: parseInt(document.getElementById('edit-fr-nfs').value || 0, 10),

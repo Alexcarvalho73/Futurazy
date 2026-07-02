@@ -841,7 +841,7 @@ app.get('/api/receita/resumo-anual', async (req, res) => {
     // 1. Buscar meses fechados na tabela FECHAMENTO_RECEITA
     const fechadosSQL = `
       SELECT FR_EMPRESA, FR_ANO, FR_MES, FR_RECEITA_TOTAL, FR_SACAS,
-             FR_QTD_NFS, FR_FUNRURAL, FR_FETHAB, FR_VLR_FACS,
+             FR_QTD_NFS, FR_FUNRURAL, FR_GTA, FR_FETHAB, FR_VLR_FACS,
              FR_DOLAR_MEDIO, FR_NEGOCIO, FR_DT_FECHAMENTO
       FROM FECHAMENTO_RECEITA
       WHERE FR_RUBRICA = 'RECEITA'
@@ -856,8 +856,8 @@ app.get('/api/receita/resumo-anual', async (req, res) => {
 
     function initSegment() {
       return {
-        receita: 0, sacas: 0, cabecas: 0, funrural: 0, fethab: 0, vlrFacs: 0,
-        receitaUsd: 0, funruralUsd: 0, fethabUsd: 0, vlrFacsUsd: 0, dolarMedio: 0
+        receita: 0, sacas: 0, cabecas: 0, funrural: 0, gta: 0, fethab: 0, vlrFacs: 0,
+        receitaUsd: 0, funruralUsd: 0, gtaUsd: 0, fethabUsd: 0, vlrFacsUsd: 0, dolarMedio: 0
       };
     }
 
@@ -892,6 +892,7 @@ app.get('/api/receita/resumo-anual', async (req, res) => {
         }
 
         const fun = Number(f.FR_FUNRURAL || 0);
+        const gta = Number(f.FR_GTA || 0);
         const fet = Number(f.FR_FETHAB || 0);
         const fac = Number(f.FR_VLR_FACS || 0);
         const dm = Number(f.FR_DOLAR_MEDIO || 0);
@@ -900,6 +901,7 @@ app.get('/api/receita/resumo-anual', async (req, res) => {
         target.sacas += sac;
         target.cabecas += cab;
         target.funrural += fun;
+        target.gta += gta;
         target.fethab += fet;
         target.vlrFacs += fac;
         if (dm > 0) target.dolarMedio = dm;
@@ -908,6 +910,7 @@ app.get('/api/receita/resumo-anual', async (req, res) => {
         tot.sacas += sac;
         tot.cabecas += cab;
         tot.funrural += fun;
+        tot.gta += gta;
         tot.fethab += fet;
         tot.vlrFacs += fac;
         if (dm > 0) tot.dolarMedio = dm;
@@ -918,6 +921,7 @@ app.get('/api/receita/resumo-anual', async (req, res) => {
         tot.sacas = Number(f.FR_SACAS || 0); // Assumimos tudo sacas já que não sabemos
         tot.cabecas = 0; 
         tot.funrural = Number(f.FR_FUNRURAL || 0);
+        tot.gta = Number(f.FR_GTA || 0);
         tot.fethab = Number(f.FR_FETHAB || 0);
         tot.vlrFacs = Number(f.FR_VLR_FACS || 0);
         tot.dolarMedio = Number(f.FR_DOLAR_MEDIO || 0);
@@ -933,6 +937,7 @@ app.get('/api/receita/resumo-anual', async (req, res) => {
         const dm = s.dolarMedio || tot.dolarMedio || 0;
         s.receitaUsd = dm > 0 ? s.receita / dm : 0;
         s.funruralUsd = dm > 0 ? s.funrural / dm : 0;
+        s.gtaUsd = dm > 0 ? s.gta / dm : 0;
         s.fethabUsd = dm > 0 ? s.fethab / dm : 0;
         s.vlrFacsUsd = dm > 0 ? s.vlrFacs / dm : 0;
       }
@@ -1005,16 +1010,19 @@ app.get('/api/receita/resumo-anual', async (req, res) => {
 
               pec.receita = tTot.receita * ratioPec;
               pec.funrural = tTot.funrural * ratioPec;
+              pec.gta = tTot.gta * ratioPec;
               pec.fethab = tTot.fethab * ratioPec;
               pec.vlrFacs = tTot.vlrFacs * ratioPec;
 
               agr.receita = tTot.receita * ratioAgr;
               agr.funrural = tTot.funrural * ratioAgr;
+              agr.gta = tTot.gta * ratioAgr;
               agr.fethab = tTot.fethab * ratioAgr;
               agr.vlrFacs = tTot.vlrFacs * ratioAgr;
 
               out.receita = tTot.receita * ratioOut;
               out.funrural = tTot.funrural * ratioOut;
+              out.gta = tTot.gta * ratioOut;
               out.fethab = tTot.fethab * ratioOut;
               out.vlrFacs = tTot.vlrFacs * ratioOut;
             } else {
@@ -1063,10 +1071,12 @@ app.get('/api/receita/resumo-anual', async (req, res) => {
           st.sacas = s1.sacas + s2.sacas;
           st.cabecas = s1.cabecas + s2.cabecas;
           st.funrural = s1.funrural + s2.funrural;
+          st.gta = s1.gta + s2.gta;
           st.fethab = s1.fethab + s2.fethab;
           st.vlrFacs = s1.vlrFacs + s2.vlrFacs;
           st.receitaUsd = s1.receitaUsd + s2.receitaUsd;
           st.funruralUsd = s1.funruralUsd + s2.funruralUsd;
+          st.gtaUsd = s1.gtaUsd + s2.gtaUsd;
           st.fethabUsd = s1.fethabUsd + s2.fethabUsd;
           st.vlrFacsUsd = s1.vlrFacsUsd + s2.vlrFacsUsd;
           st.dolarMedio = st.receitaUsd > 0 ? st.receita / st.receitaUsd : 0;
@@ -1092,10 +1102,12 @@ app.get('/api/receita/resumo-anual', async (req, res) => {
           st.sacas = s1.sacas + s2.sacas;
           st.cabecas = s1.cabecas + s2.cabecas;
           st.funrural = s1.funrural + s2.funrural;
+          st.gta = s1.gta + s2.gta;
           st.fethab = s1.fethab + s2.fethab;
           st.vlrFacs = s1.vlrFacs + s2.vlrFacs;
           st.receitaUsd = s1.receitaUsd + s2.receitaUsd;
           st.funruralUsd = s1.funruralUsd + s2.funruralUsd;
+          st.gtaUsd = s1.gtaUsd + s2.gtaUsd;
           st.fethabUsd = s1.fethabUsd + s2.fethabUsd;
           st.vlrFacsUsd = s1.vlrFacsUsd + s2.vlrFacsUsd;
           st.dolarMedio = st.receitaUsd > 0 ? st.receita / st.receitaUsd : 0;
@@ -1141,7 +1153,7 @@ app.post('/api/receita/fechar-mes', async (req, res) => {
     const dolarMedio = totalUsd > 0 ? (totalBrl / totalUsd) : null;
 
     // Agregar totais consolidados para a empresa solicitada
-    let receita = 0, sacas = 0, cabecas = 0, funrural = 0, fethab = 0, vlrFacs = 0;
+    let receita = 0, sacas = 0, cabecas = 0, funrural = 0, gta = 0, fethab = 0, vlrFacs = 0;
     const nfsSet = new Set();
 
     for (const r of rowsEmp) {
@@ -1152,6 +1164,7 @@ app.post('/api/receita/fechar-mes', async (req, res) => {
       sacas += sac;
       cabecas += cab;
       funrural += Number(r.VL_FUNRURAL || 0);
+      gta += 0; // GTA não vem da view de fechamento dinâmico
       fethab += Number(r.VLR_FETHAB || 0);
       vlrFacs += Number(r.VLR_FACS || 0);
       if (r.NF) nfsSet.add(r.NF);
@@ -1167,22 +1180,23 @@ app.post('/api/receita/fechar-mes', async (req, res) => {
         fr.FR_SACAS          = :sacas,
         fr.FR_QTD_NFS        = :qtdNfs,
         fr.FR_FUNRURAL       = :funrural,
+        fr.FR_GTA            = :gta,
         fr.FR_FETHAB         = :fethab,
         fr.FR_VLR_FACS       = :vlrFacs,
         fr.FR_DOLAR_MEDIO    = :dolarMedio,
         fr.FR_DT_FECHAMENTO  = SYSDATE
       WHEN NOT MATCHED THEN INSERT
         (FR_EMPRESA, FR_ANO, FR_MES, FR_RUBRICA, FR_RECEITA_TOTAL, FR_SACAS, FR_QTD_NFS,
-         FR_FUNRURAL, FR_FETHAB, FR_VLR_FACS, FR_DOLAR_MEDIO, FR_DT_FECHAMENTO)
+         FR_FUNRURAL, FR_GTA, FR_FETHAB, FR_VLR_FACS, FR_DOLAR_MEDIO, FR_DT_FECHAMENTO)
       VALUES
         (:empresa, :ano, :mes, 'RECEITA', :receita, :sacas, :qtdNfs,
-         :funrural, :fethab, :vlrFacs, :dolarMedio, SYSDATE)
+         :funrural, :gta, :fethab, :vlrFacs, :dolarMedio, SYSDATE)
     `;
 
     await db.execute(mergeSql, {
       empresa, ano: parseInt(ano), mes: parseInt(mes),
       receita, sacas, qtdNfs,
-      funrural, fethab, vlrFacs,
+      funrural, gta, fethab, vlrFacs,
       dolarMedio
     }, { autoCommit: true });
 
@@ -1223,7 +1237,7 @@ app.get('/api/receita/fechados', async (req, res) => {
 
     const sql = `
       SELECT FR_ID, FR_EMPRESA, FR_ANO, FR_MES, FR_RUBRICA,
-             FR_RECEITA_TOTAL, FR_SACAS, FR_QTD_NFS, FR_FUNRURAL, FR_FETHAB, FR_VLR_FACS,
+             FR_RECEITA_TOTAL, FR_SACAS, FR_QTD_NFS, FR_FUNRURAL, FR_GTA, FR_FETHAB, FR_VLR_FACS,
              FR_DOLAR_MEDIO, FR_NEGOCIO,
              FR_DT_FECHAMENTO, FR_USUARIO, FR_OBS
       FROM FECHAMENTO_RECEITA
@@ -1248,7 +1262,7 @@ app.put('/api/receita/fechamento/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const {
-      receitaTotal, sacas, qtdNfs, funrural, fethab, vlrFacs,
+      receitaTotal, sacas, qtdNfs, funrural, gta, fethab, vlrFacs,
       dolarMedio, obs
     } = req.body;
 
@@ -1258,6 +1272,7 @@ app.put('/api/receita/fechamento/:id', async (req, res) => {
         FR_SACAS          = :sacas,
         FR_QTD_NFS        = :qtdNfs,
         FR_FUNRURAL       = :funrural,
+        FR_GTA            = :gta,
         FR_FETHAB         = :fethab,
         FR_VLR_FACS       = :vlrFacs,
         FR_DOLAR_MEDIO    = :dolarMedio,
@@ -1272,6 +1287,7 @@ app.put('/api/receita/fechamento/:id', async (req, res) => {
       sacas: Number(sacas || 0),
       qtdNfs: parseInt(qtdNfs || 0),
       funrural: Number(funrural || 0),
+      gta: Number(gta || 0),
       fethab: Number(fethab || 0),
       vlrFacs: Number(vlrFacs || 0),
       dolarMedio: dolarMedio ? Number(dolarMedio) : null,
@@ -1290,7 +1306,7 @@ app.post('/api/receita/fechamento', async (req, res) => {
   try {
     const {
       periodo, filial, negocio, // "periodo" = YYYY-MM
-      receitaTotal, sacas, qtdNfs, funrural, fethab, vlrFacs,
+      receitaTotal, sacas, qtdNfs, funrural, gta, fethab, vlrFacs,
       dolarMedio, obs
     } = req.body;
 
@@ -1313,11 +1329,11 @@ app.post('/api/receita/fechamento', async (req, res) => {
     const sql = `
       INSERT INTO FECHAMENTO_RECEITA (
         FR_EMPRESA, FR_ANO, FR_MES, FR_NEGOCIO, FR_RUBRICA,
-        FR_RECEITA_TOTAL, FR_SACAS, FR_QTD_NFS, FR_FUNRURAL, FR_FETHAB, FR_VLR_FACS,
+        FR_RECEITA_TOTAL, FR_SACAS, FR_QTD_NFS, FR_FUNRURAL, FR_GTA, FR_FETHAB, FR_VLR_FACS,
         FR_DOLAR_MEDIO, FR_OBS, FR_DT_FECHAMENTO
       ) VALUES (
         :filial, :ano, :mes, :negocio, 'RECEITA',
-        :receitaTotal, :sacas, :qtdNfs, :funrural, :fethab, :vlrFacs,
+        :receitaTotal, :sacas, :qtdNfs, :funrural, :gta, :fethab, :vlrFacs,
         :dolarMedio, :obs, SYSDATE
       )
     `;
