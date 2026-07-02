@@ -1165,7 +1165,6 @@ app.post('/api/receita/fechar-mes', async (req, res) => {
 
     // Agregar totais consolidados para a empresa solicitada
     let receita = 0, sacas = 0, cabecas = 0, funrural = 0, fethab = 0, vlrFacs = 0;
-    let agroReceita = 0, agroSacas = 0, pecReceita = 0, pecSacas = 0, outrosReceita = 0, outrosSacas = 0;
     const nfsSet = new Set();
 
     for (const r of rowsEmp) {
@@ -1179,17 +1178,6 @@ app.post('/api/receita/fechar-mes', async (req, res) => {
       fethab += Number(r.VLR_FETHAB || 0);
       vlrFacs += Number(r.VLR_FACS || 0);
       if (r.NF) nfsSet.add(r.NF);
-
-      if (r.TIPO_NEGOCIO === 'Agricultura') {
-        agroReceita += tot;
-        agroSacas += sac;
-      } else if (r.TIPO_NEGOCIO === 'Pecuária') {
-        pecReceita += tot;
-        pecSacas += cab; // cabecas
-      } else {
-        outrosReceita += tot;
-        outrosSacas += sac;
-      }
     }
     const qtdNfs = nfsSet.size;
 
@@ -1204,31 +1192,20 @@ app.post('/api/receita/fechar-mes', async (req, res) => {
         fr.FR_FUNRURAL       = :funrural,
         fr.FR_FETHAB         = :fethab,
         fr.FR_VLR_FACS       = :vlrFacs,
-        fr.FR_AGRO_RECEITA   = :agroReceita,
-        fr.FR_AGRO_SACAS     = :agroSacas,
-        fr.FR_PEC_RECEITA    = :pecReceita,
-        fr.FR_PEC_SACAS      = :pecSacas,
-        fr.FR_OUTROS_RECEITA = :outrosReceita,
-        fr.FR_OUTROS_SACAS   = :outrosSacas,
         fr.FR_DOLAR_MEDIO    = :dolarMedio,
         fr.FR_DT_FECHAMENTO  = SYSDATE
       WHEN NOT MATCHED THEN INSERT
         (FR_EMPRESA, FR_ANO, FR_MES, FR_RUBRICA, FR_RECEITA_TOTAL, FR_SACAS, FR_QTD_NFS,
-         FR_FUNRURAL, FR_FETHAB, FR_VLR_FACS,
-         FR_AGRO_RECEITA, FR_AGRO_SACAS, FR_PEC_RECEITA, FR_PEC_SACAS,
-         FR_OUTROS_RECEITA, FR_OUTROS_SACAS, FR_DOLAR_MEDIO, FR_DT_FECHAMENTO)
+         FR_FUNRURAL, FR_FETHAB, FR_VLR_FACS, FR_DOLAR_MEDIO, FR_DT_FECHAMENTO)
       VALUES
         (:empresa, :ano, :mes, 'RECEITA', :receita, :sacas, :qtdNfs,
-         :funrural, :fethab, :vlrFacs,
-         :agroReceita, :agroSacas, :pecReceita, :pecSacas,
-         :outrosReceita, :outrosSacas, :dolarMedio, SYSDATE)
+         :funrural, :fethab, :vlrFacs, :dolarMedio, SYSDATE)
     `;
 
     await db.execute(mergeSql, {
       empresa, ano: parseInt(ano), mes: parseInt(mes),
       receita, sacas, qtdNfs,
       funrural, fethab, vlrFacs,
-      agroReceita, agroSacas, pecReceita, pecSacas, outrosReceita, outrosSacas,
       dolarMedio
     }, { autoCommit: true });
 
@@ -1249,8 +1226,7 @@ app.get('/api/receita/fechados', async (req, res) => {
     const sql = `
       SELECT FR_ID, FR_EMPRESA, FR_ANO, FR_MES, FR_RUBRICA,
              FR_RECEITA_TOTAL, FR_SACAS, FR_QTD_NFS, FR_FUNRURAL, FR_FETHAB, FR_VLR_FACS,
-             FR_AGRO_RECEITA, FR_AGRO_SACAS, FR_PEC_RECEITA, FR_PEC_SACAS,
-             FR_OUTROS_RECEITA, FR_OUTROS_SACAS, FR_DOLAR_MEDIO, FR_NEGOCIO,
+             FR_DOLAR_MEDIO, FR_NEGOCIO,
              FR_DT_FECHAMENTO, FR_USUARIO, FR_OBS
       FROM FECHAMENTO_RECEITA
       WHERE FR_RUBRICA = 'RECEITA'
@@ -1275,7 +1251,7 @@ app.put('/api/receita/fechamento/:id', async (req, res) => {
     const { id } = req.params;
     const {
       receitaTotal, sacas, qtdNfs, funrural, fethab, vlrFacs,
-      agroReceita, agroSacas, pecReceita, pecSacas, outrosReceita, outrosSacas, dolarMedio, obs
+      dolarMedio, obs
     } = req.body;
 
     const sql = `
@@ -1286,12 +1262,6 @@ app.put('/api/receita/fechamento/:id', async (req, res) => {
         FR_FUNRURAL       = :funrural,
         FR_FETHAB         = :fethab,
         FR_VLR_FACS       = :vlrFacs,
-        FR_AGRO_RECEITA   = :agroReceita,
-        FR_AGRO_SACAS     = :agroSacas,
-        FR_PEC_RECEITA    = :pecReceita,
-        FR_PEC_SACAS      = :pecSacas,
-        FR_OUTROS_RECEITA = :outrosReceita,
-        FR_OUTROS_SACAS   = :outrosSacas,
         FR_DOLAR_MEDIO    = :dolarMedio,
         FR_OBS            = :obs,
         FR_DT_FECHAMENTO  = SYSDATE
@@ -1306,12 +1276,6 @@ app.put('/api/receita/fechamento/:id', async (req, res) => {
       funrural: Number(funrural || 0),
       fethab: Number(fethab || 0),
       vlrFacs: Number(vlrFacs || 0),
-      agroReceita: Number(agroReceita || 0),
-      agroSacas: Number(agroSacas || 0),
-      pecReceita: Number(pecReceita || 0),
-      pecSacas: Number(pecSacas || 0),
-      outrosReceita: Number(outrosReceita || 0),
-      outrosSacas: Number(outrosSacas || 0),
       dolarMedio: dolarMedio ? Number(dolarMedio) : null,
       obs: obs || ''
     }, { autoCommit: true });
@@ -1319,6 +1283,75 @@ app.put('/api/receita/fechamento/:id', async (req, res) => {
     res.json({ success: true, mensagem: 'Fechamento updated com sucesso.' });
   } catch (err) {
     console.error('[receita/fechamento/update]', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/receita/fechamento — inclui um novo fechamento manual
+app.post('/api/receita/fechamento', async (req, res) => {
+  try {
+    const {
+      periodo, filial, negocio, // "periodo" = YYYY-MM
+      receitaTotal, sacas, qtdNfs, funrural, fethab, vlrFacs,
+      dolarMedio, obs
+    } = req.body;
+
+    if (!periodo || !filial || !negocio) {
+      return res.status(400).json({ success: false, error: 'Período, filial e negócio são obrigatórios.' });
+    }
+
+    const [ano, mes] = periodo.split('-');
+    
+    // Controle de integridade
+    const checkSql = `
+      SELECT COUNT(*) as QTD FROM FECHAMENTO_RECEITA
+      WHERE FR_EMPRESA = :filial AND FR_ANO = :ano AND FR_MES = :mes AND FR_NEGOCIO = :negocio AND FR_RUBRICA = 'RECEITA'
+    `;
+    const checkResult = await db.execute(checkSql, { filial, ano: parseInt(ano), mes: parseInt(mes), negocio });
+    if (checkResult[0] && checkResult[0].QTD > 0) {
+      return res.status(400).json({ success: false, error: 'Já existe um fechamento para esta Filial, Mês/Ano e Negócio.' });
+    }
+
+    const sql = `
+      INSERT INTO FECHAMENTO_RECEITA (
+        FR_EMPRESA, FR_ANO, FR_MES, FR_NEGOCIO, FR_RUBRICA,
+        FR_RECEITA_TOTAL, FR_SACAS, FR_QTD_NFS, FR_FUNRURAL, FR_FETHAB, FR_VLR_FACS,
+        FR_DOLAR_MEDIO, FR_OBS, FR_DT_FECHAMENTO
+      ) VALUES (
+        :filial, :ano, :mes, :negocio, 'RECEITA',
+        :receitaTotal, :sacas, :qtdNfs, :funrural, :fethab, :vlrFacs,
+        :dolarMedio, :obs, SYSDATE
+      )
+    `;
+
+    await db.execute(sql, {
+      filial, ano: parseInt(ano), mes: parseInt(mes), negocio,
+      receitaTotal: Number(receitaTotal || 0),
+      sacas: Number(sacas || 0),
+      qtdNfs: parseInt(qtdNfs || 0),
+      funrural: Number(funrural || 0),
+      fethab: Number(fethab || 0),
+      vlrFacs: Number(vlrFacs || 0),
+      dolarMedio: dolarMedio ? Number(dolarMedio) : null,
+      obs: obs || ''
+    }, { autoCommit: true });
+
+    res.json({ success: true, mensagem: 'Fechamento incluído com sucesso.' });
+  } catch (err) {
+    console.error('[receita/fechamento/insert]', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// DELETE /api/receita/fechamento/:id — exclui um fechamento manual
+app.delete('/api/receita/fechamento/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const sql = `DELETE FROM FECHAMENTO_RECEITA WHERE FR_ID = :id`;
+    await db.execute(sql, { id: parseInt(id) }, { autoCommit: true });
+    res.json({ success: true, mensagem: 'Fechamento excluído com sucesso.' });
+  } catch (err) {
+    console.error('[receita/fechamento/delete]', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });

@@ -1,18 +1,29 @@
 const db = require('../db.js');
 
-async function test() {
+async function executeAlter() {
   try {
     await db.initialize();
     
-    const chave = '41260643999424000114560010002857110002857115';
-    const rows = await db.execute(`SELECT * FROM PROTHEUS11.CONDORXML WHERE TRIM(XML_CHAVE) = :chave AND D_E_L_E_T_ = ' '`, { chave });
-    console.log(Object.keys(rows[0]));
+    const alterQuery = `
+      ALTER TABLE FECHAMENTO_RECEITA 
+      DROP (
+        FR_AGRO_RECEITA, 
+        FR_AGRO_SACAS, 
+        FR_PEC_RECEITA, 
+        FR_PEC_SACAS, 
+        FR_OUTROS_RECEITA, 
+        FR_OUTROS_SACAS
+      )
+    `;
+    console.log("Executando:", alterQuery);
+    await db.execute(alterQuery, {}, { autoCommit: true });
+    console.log("Colunas removidas com sucesso.");
     
   } catch (e) {
-    console.error(e);
+    console.error("Erro no drop:", e);
   } finally {
     await db.close();
   }
 }
 
-test();
+executeAlter();

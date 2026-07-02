@@ -717,9 +717,14 @@
         <h2 class="modal-title" style="margin: 0; text-align: left; display: flex; align-items: center; gap: 8px;">
           <i class="fa-solid fa-pen-to-square" style="color: #f59e0b;"></i> Ajustes Manuais - FECHAMENTO_RECEITA
         </h2>
-        <button class="toggle-btn" id="btn-close-edit-fechamento-modal" style="margin: 0; padding: 4px 8px;">
-          <i class="fa-solid fa-xmark"></i>
-        </button>
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-primary btn-sm" id="btn-new-fechamento" style="padding: 4px 10px;" onclick="openNewFechamentoForm()">
+            <i class="fa-solid fa-plus"></i> Incluir Novo
+          </button>
+          <button class="toggle-btn" id="btn-close-edit-fechamento-modal" style="margin: 0; padding: 4px 8px;">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
       </div>
 
       <!-- LISTA DE FECHAMENTOS -->
@@ -749,16 +754,23 @@
           
           <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 16px;">
             <div class="filter-group">
-              <label>Período</label>
-              <input type="text" id="edit-fr-periodo" class="form-control" readonly style="opacity: 0.6; cursor: not-allowed;">
+              <label>Período (Mês/Ano)</label>
+              <input type="month" id="edit-fr-periodo" class="form-control" required>
             </div>
             <div class="filter-group">
               <label>Filial</label>
-              <input type="text" id="edit-fr-filial" class="form-control" readonly style="opacity: 0.6; cursor: not-allowed;">
+              <select id="edit-fr-filial" class="form-control" required>
+                <option value="028501">028501</option>
+                <option value="028503">028503</option>
+              </select>
             </div>
             <div class="filter-group">
               <label>Negócio</label>
-              <input type="text" id="edit-fr-negocio" class="form-control" readonly style="opacity: 0.6; cursor: not-allowed;">
+              <select id="edit-fr-negocio" class="form-control" required>
+                <option value="Pecuária">🐮 Pecuária</option>
+                <option value="Agricultura">🌾 Agricultura</option>
+                <option value="Outros">Outros</option>
+              </select>
             </div>
           </div>
 
@@ -793,41 +805,6 @@
             </div>
           </div>
 
-          <h3 style="font-size: 14px; color: var(--text-white); margin-bottom: 8px; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">Segmentações por Negócio</h3>
-          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px;">
-            <!-- Agro -->
-            <div style="border-right: 1px solid var(--border-color); padding-right: 8px;">
-              <h4 style="font-size:12px; color:#10b981; margin-bottom:6px;">🌾 Agricultura</h4>
-              <div class="filter-group" style="margin-bottom: 8px;">
-                <label>Receita</label>
-                <input type="number" step="0.01" id="edit-fr-agro-receita" class="form-control" required>
-              </div>
-              <div class="filter-group">
-                <label>Sacas</label>
-                <input type="number" step="0.0001" id="edit-fr-agro-sacas" class="form-control" required>
-              </div>
-            </div>
-            <!-- Pecuária -->
-            <div>
-              <h4 style="font-size:12px; color:#f59e0b; margin-bottom:6px;">🐄 Pecuária</h4>
-              <div class="filter-group" style="margin-bottom: 8px;">
-                <label>Receita</label>
-                <input type="number" step="0.01" id="edit-fr-pec-receita" class="form-control" required>
-              </div>
-              <div class="filter-group">
-                <label>Cabeças</label>
-                <input type="number" step="0.0001" id="edit-fr-pec-sacas" class="form-control" required>
-              </div>
-            </div>
-                <label>Receita</label>
-                <input type="number" step="0.01" id="edit-fr-outros-receita" class="form-control" required>
-              </div>
-              <div class="filter-group">
-                <label>Quantidade</label>
-                <input type="number" step="0.0001" id="edit-fr-outros-sacas" class="form-control" required>
-              </div>
-            </div>
-          </div>
 
           <div class="filter-group" style="margin-bottom: 16px;">
             <label>Observações</label>

@@ -1006,9 +1006,12 @@ function renderClosedFechamentosList(data) {
         <td>${escapeHTML(item.FR_EMPRESA)}</td>
         <td>${escapeHTML(item.FR_NEGOCIO || '—')}</td>
         <td class="text-right">${Number(item.FR_RECEITA_TOTAL || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
-        <td>
+        <td style="display: flex; gap: 8px;">
           <button class="btn btn-sm btn-primary" onclick="openEditForm(${item.FR_ID})">
             <i class="fa-solid fa-pencil"></i> Editar
+          </button>
+          <button class="btn btn-sm" style="background:var(--color-danger);color:#fff;" onclick="deleteFechamento(${item.FR_ID})">
+            <i class="fa-solid fa-trash"></i> Excluir
           </button>
         </td>
       </tr>
@@ -1016,15 +1019,39 @@ function renderClosedFechamentosList(data) {
   }).join('');
 }
 
+window.deleteFechamento = async function(id) {
+  if (!confirm("Tem certeza que deseja excluir este fechamento definitivamente?")) return;
+  try {
+    const res = await fetch(`/api/receita/fechamento/${id}`, { method: 'DELETE' });
+    const json = await res.json();
+    if (json.success) {
+      showToast('🗑️ Fechamento excluído.', 'success');
+      loadClosedFechamentos();
+      loadAll();
+    } else {
+      showToast('❌ Erro: ' + json.error, 'error');
+    }
+  } catch(e) {
+    showToast('❌ Erro de conexão.', 'error');
+  }
+};
+
 // Global para chamar via onclick inline
 window.openEditForm = function(id) {
   const item = _closedFechamentosList.find(x => x.FR_ID === id);
   if (!item) return;
   
   document.getElementById('edit-fr-id').value = item.FR_ID;
-  document.getElementById('edit-fr-periodo').value = `${NOMES_MES[item.FR_MES - 1]}/${item.FR_ANO}`;
+  
+  const mesFormatado = String(item.FR_MES).padStart(2, '0');
+  document.getElementById('edit-fr-periodo').value = `${item.FR_ANO}-${mesFormatado}`;
+  document.getElementById('edit-fr-periodo').disabled = true;
+  
   document.getElementById('edit-fr-filial').value = item.FR_EMPRESA;
-  document.getElementById('edit-fr-negocio').value = item.FR_NEGOCIO || '—';
+  document.getElementById('edit-fr-filial').disabled = true;
+  
+  document.getElementById('edit-fr-negocio').value = item.FR_NEGOCIO || 'Pecuária';
+  document.getElementById('edit-fr-negocio').disabled = true;
   
   document.getElementById('edit-fr-receita').value = item.FR_RECEITA_TOTAL || 0;
   document.getElementById('edit-fr-sacas').value = item.FR_SACAS || 0;
@@ -1034,14 +1061,23 @@ window.openEditForm = function(id) {
   document.getElementById('edit-fr-facs').value = item.FR_VLR_FACS || 0;
   document.getElementById('edit-fr-nfs').value = item.FR_QTD_NFS || 0;
   
-  document.getElementById('edit-fr-agro-receita').value = item.FR_AGRO_RECEITA || 0;
-  document.getElementById('edit-fr-agro-sacas').value = item.FR_AGRO_SACAS || 0;
-  document.getElementById('edit-fr-pec-receita').value = item.FR_PEC_RECEITA || 0;
-  document.getElementById('edit-fr-pec-sacas').value = item.FR_PEC_SACAS || 0;
-  document.getElementById('edit-fr-outros-receita').value = item.FR_OUTROS_RECEITA || 0;
-  document.getElementById('edit-fr-outros-sacas').value = item.FR_OUTROS_SACAS || 0;
-  
   document.getElementById('edit-fr-obs').value = item.FR_OBS || '';
+  
+  document.getElementById('edit-fechamento-list-view').style.display = 'none';
+  document.getElementById('edit-fechamento-form-view').style.display = 'block';
+};
+
+window.openNewFechamentoForm = function() {
+  document.getElementById('form-edit-fechamento').reset();
+  document.getElementById('edit-fr-id').value = '';
+  
+  document.getElementById('edit-fr-periodo').disabled = false;
+  document.getElementById('edit-fr-filial').disabled = false;
+  document.getElementById('edit-fr-negocio').disabled = false;
+  
+  // Seta default para Mês Atual
+  const now = new Date();
+  document.getElementById('edit-fr-periodo').value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2, '0')}`;
   
   document.getElementById('edit-fechamento-list-view').style.display = 'none';
   document.getElementById('edit-fechamento-form-view').style.display = 'block';
@@ -1049,6 +1085,8 @@ window.openEditForm = function(id) {
 
 async function saveFechamentoForm() {
   const id = document.getElementById('edit-fr-id').value;
+  const isNew = !id;
+  
   const btnSave = document.getElementById('btn-save-edit-form');
   btnSave.disabled = true;
   btnSave.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Salvando...';
@@ -1061,24 +1099,27 @@ async function saveFechamentoForm() {
     fethab: Number(document.getElementById('edit-fr-fethab').value || 0),
     vlrFacs: Number(document.getElementById('edit-fr-facs').value || 0),
     qtdNfs: parseInt(document.getElementById('edit-fr-nfs').value || 0, 10),
-    agroReceita: Number(document.getElementById('edit-fr-agro-receita').value || 0),
-    agroSacas: Number(document.getElementById('edit-fr-agro-sacas').value || 0),
-    pecReceita: Number(document.getElementById('edit-fr-pec-receita').value || 0),
-    pecSacas: Number(document.getElementById('edit-fr-pec-sacas').value || 0),
-    outrosReceita: Number(document.getElementById('edit-fr-outros-receita').value || 0),
-    outrosSacas: Number(document.getElementById('edit-fr-outros-sacas').value || 0),
     obs: document.getElementById('edit-fr-obs').value
   };
+
+  if (isNew) {
+    payload.periodo = document.getElementById('edit-fr-periodo').value;
+    payload.filial = document.getElementById('edit-fr-filial').value;
+    payload.negocio = document.getElementById('edit-fr-negocio').value;
+  }
   
   try {
-    const res = await fetch(`/api/receita/fechamento/${id}`, {
-      method: 'PUT',
+    const url = isNew ? `/api/receita/fechamento` : `/api/receita/fechamento/${id}`;
+    const method = isNew ? 'POST' : 'PUT';
+    
+    const res = await fetch(url, {
+      method: method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
     const json = await res.json();
     if (json.success) {
-      showToast('✅ Lançamento atualizado com sucesso!', 'success');
+      showToast(isNew ? '✅ Lançamento incluído com sucesso!' : '✅ Lançamento atualizado com sucesso!', 'success');
       document.getElementById('edit-fechamento-form-view').style.display = 'none';
       document.getElementById('edit-fechamento-list-view').style.display = 'block';
       loadClosedFechamentos();
