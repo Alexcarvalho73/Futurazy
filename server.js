@@ -430,27 +430,27 @@ app.get('/api/notas/:chave/financeiro', async (req, res) => {
   }
 
   try {
-    // 1. Buscar no Livro Fiscal (SFT020) pela chave XML da nota fiscal
-    const sqlSFT = `
-      SELECT DISTINCT 
-        FT_FILIAL, 
-        FT_SERIE, 
-        FT_NFISCAL, 
-        FT_CLIEFOR, 
-        FT_LOJA 
-      FROM PROTHEUS11.SFT020 
-      WHERE TRIM(FT_CHVNFE) = :chave 
+    // 1. Buscar no CONDORXML pela chave para extrair o relacionamento único (XML_KEYF1)
+    const sqlXML = `
+      SELECT XML_KEYF1 
+      FROM PROTHEUS11.CONDORXML 
+      WHERE TRIM(XML_CHAVE) = :chave 
         AND D_E_L_E_T_ = ' '
     `;
-    const sftRows = await db.execute(sqlSFT, { chave });
+    const xmlRows = await db.execute(sqlXML, { chave });
 
-    if (sftRows.length === 0) {
-      return res.json({ success: true, method: 'sft', data: [], message: 'Nota fiscal não localizada no Livro Fiscal (SFT020).' });
+    if (xmlRows.length === 0 || !xmlRows[0].XML_KEYF1 || xmlRows[0].XML_KEYF1.trim() === '') {
+      return res.json({ success: true, method: 'condor', data: [], message: 'Nota fiscal não localizada no Condor ou sem relacionamento estabelecido (XML_KEYF1 vazio).' });
     }
 
-    const sft = sftRows[0];
+    const xmlKey = xmlRows[0].XML_KEYF1;
+    const filial = xmlKey.substring(0, 6).trim();
+    const nfiscal = xmlKey.substring(6, 15).trim();
+    const serie = xmlKey.substring(15, 18).trim();
+    const fornec = xmlKey.substring(18, 24).trim();
+    const loja = xmlKey.substring(24, 26).trim();
 
-    // 2. Buscar dados financeiros no contas a pagar (SE2020) com os campos chave mapeados do SFT020
+    // 2. Buscar dados financeiros no contas a pagar (SE2020) com os campos chave extraídos
     const sqlSE2 = `
       SELECT 
         TRIM(E2_FILIAL) as E2_FILIAL,
@@ -481,15 +481,15 @@ app.get('/api/notas/:chave/financeiro', async (req, res) => {
     `;
 
     const binds = {
-      filial: sft.FT_FILIAL,
-      prefixo: sft.FT_SERIE,
-      num: sft.FT_NFISCAL,
-      fornece: sft.FT_CLIEFOR,
-      loja: sft.FT_LOJA
+      filial: filial,
+      prefixo: serie,
+      num: nfiscal,
+      fornece: fornec,
+      loja: loja
     };
 
     const financeRows = await db.execute(sqlSE2, binds);
-    res.json({ success: true, method: 'sft', data: financeRows });
+    res.json({ success: true, method: 'condor', data: financeRows });
 
   } catch (err) {
     console.error(err);
