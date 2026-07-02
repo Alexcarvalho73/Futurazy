@@ -1024,12 +1024,24 @@ async function loadClosedFechamentos() {
   const body = document.getElementById('edit-fechamento-list-body');
   body.innerHTML = `<tr><td colspan="5" class="text-center"><i class="fa-solid fa-spinner fa-spin"></i> Carregando...</td></tr>`;
   
+  const periodo = document.getElementById('filter-modal-periodo').value;
+  const filial = document.getElementById('filter-modal-filial').value;
+  const negocio = document.getElementById('filter-modal-negocio').value;
+  
+  let url = '/api/receita/fechados?';
+  if (periodo) {
+    const [y, m] = periodo.split('-');
+    url += `ano=${y}&mes=${m}&`;
+  }
+  if (filial) url += `filial=${encodeURIComponent(filial)}&`;
+  if (negocio) url += `negocio=${encodeURIComponent(negocio)}`;
+
   try {
-    const res = await fetch('/api/receita/fechados');
+    const res = await fetch(url);
     const json = await res.json();
     if (json.success) {
       _closedFechamentosList = json.data;
-      filterModalList();
+      renderClosedFechamentosList(json.data);
     } else {
       body.innerHTML = `<tr><td colspan="5" class="text-center" style="color:var(--color-danger)">Erro: ${json.error}</td></tr>`;
     }
@@ -1039,23 +1051,7 @@ async function loadClosedFechamentos() {
 }
 
 window.filterModalList = function() {
-  const periodo = document.getElementById('filter-modal-periodo').value;
-  const filial = document.getElementById('filter-modal-filial').value;
-  const negocio = document.getElementById('filter-modal-negocio').value;
-  
-  if (!_closedFechamentosList) return;
-  
-  const filtered = _closedFechamentosList.filter(item => {
-    if (periodo) {
-      const [y, m] = periodo.split('-');
-      if (item.FR_ANO != Number(y) || item.FR_MES != Number(m)) return false;
-    }
-    if (filial && item.FR_EMPRESA !== filial) return false;
-    if (negocio && (item.FR_NEGOCIO || 'Pecuária') !== negocio) return false;
-    return true;
-  });
-  
-  renderClosedFechamentosList(filtered);
+  loadClosedFechamentos();
 };
 
 function renderClosedFechamentosList(data) {

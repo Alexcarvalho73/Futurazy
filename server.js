@@ -1200,18 +1200,39 @@ app.post('/api/receita/fechar-mes', async (req, res) => {
 // GET /api/receita/fechados — lista de meses fechados gravados
 app.get('/api/receita/fechados', async (req, res) => {
   try {
+    const { ano, mes, filial, negocio } = req.query;
+    let whereClause = "WHERE FR_RUBRICA = 'RECEITA'";
+    let binds = {};
+
+    if (ano) {
+      whereClause += " AND FR_ANO = :ano";
+      binds.ano = parseInt(ano);
+    }
+    if (mes) {
+      whereClause += " AND FR_MES = :mes";
+      binds.mes = parseInt(mes);
+    }
+    if (filial) {
+      whereClause += " AND FR_EMPRESA = :filial";
+      binds.filial = filial;
+    }
+    if (negocio) {
+      whereClause += " AND FR_NEGOCIO = :negocio";
+      binds.negocio = negocio;
+    }
+
     const sql = `
       SELECT FR_ID, FR_EMPRESA, FR_ANO, FR_MES, FR_RUBRICA,
              FR_RECEITA_TOTAL, FR_SACAS, FR_QTD_NFS, FR_FUNRURAL, FR_FETHAB, FR_VLR_FACS,
              FR_DOLAR_MEDIO, FR_NEGOCIO,
              FR_DT_FECHAMENTO, FR_USUARIO, FR_OBS
       FROM FECHAMENTO_RECEITA
-      WHERE FR_RUBRICA = 'RECEITA'
-      ORDER BY FR_ANO, FR_MES, FR_EMPRESA
+      ${whereClause}
+      ORDER BY FR_ANO DESC, FR_MES DESC, FR_EMPRESA
     `;
     let rows = [];
     try {
-      rows = await db.execute(sql);
+      rows = await db.execute(sql, binds);
     } catch (e) {
       console.warn('[receita/fechados] tabela não existe ainda:', e.message);
     }
