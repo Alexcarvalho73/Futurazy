@@ -140,6 +140,15 @@ function setupEventListeners() {
       console.error('Erro ao buscar resumo anual filtrado:', err);
     } finally {
       setLoading('anual', false);
+      
+      // Sincronizar aba do Resumo Anual com o filtro de Empresa
+      const empFilter = document.getElementById('f-empresa').value;
+      const targetEmp = (empFilter && empFilter !== 'Todas') ? empFilter : 'TOTAL';
+      document.querySelectorAll('.empresa-tab').forEach(t => t.classList.remove('active'));
+      const tab = document.querySelector(`.empresa-tab[data-emp="${targetEmp}"]`);
+      if (tab) tab.classList.add('active');
+      state.empresaFiltro = targetEmp;
+
       renderAnualTable();
     }
   });
@@ -151,6 +160,13 @@ function setupEventListeners() {
         else el.value = '';
       }
     });
+    
+    // Voltar Resumo Anual para Consolidado (TOTAL)
+    document.querySelectorAll('.empresa-tab').forEach(t => t.classList.remove('active'));
+    const tabTotal = document.querySelector('.empresa-tab[data-emp="TOTAL"]');
+    if (tabTotal) tabTotal.classList.add('active');
+    state.empresaFiltro = 'TOTAL';
+
     renderCube(state.allData);
     updateKpis(state.allData);
   });
@@ -868,6 +884,14 @@ function renderAnualTable() {
   rows += '<td class="col-total" colspan="4"></td></tr>';
 
   document.getElementById('anual-tbody').innerHTML = rows;
+
+  // Rolar a tabela horizontalmente para o final (direita)
+  setTimeout(() => {
+    const wrap = document.querySelector('.anual-table-wrap');
+    if (wrap) {
+      wrap.scrollTo({ left: wrap.scrollWidth, behavior: 'smooth' });
+    }
+  }, 100);
 }
 
 // ─────────────────────────────────────────────
