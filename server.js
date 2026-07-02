@@ -1,6 +1,22 @@
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const db = require('./db');
+
+// ─── Parâmetros persistidos em arquivo (params.json) ───────────────────────
+const PARAMS_FILE = path.join(__dirname, 'params.json');
+
+function loadParamsFile() {
+  try {
+    return JSON.parse(fs.readFileSync(PARAMS_FILE, 'utf8'));
+  } catch {
+    return { insumos: { za5_safra: '20251', za5_filial: '0285', descricao: '' } };
+  }
+}
+
+function saveParamsFile(data) {
+  fs.writeFileSync(PARAMS_FILE, JSON.stringify(data, null, 2), 'utf8');
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -1367,6 +1383,637 @@ app.delete('/api/receita/fechamento/:id', async (req, res) => {
     res.json({ success: true, mensagem: 'Fechamento excluído com sucesso.' });
   } catch (err) {
     console.error('[receita/fechamento/delete]', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ============================================================
+// ROTAS DE PARÂMETROS — params.json
+// ============================================================
+
+// GET /api/params — retorna parâmetros do arquivo
+app.get('/api/params', (req, res) => {
+  try {
+    const data = loadParamsFile();
+    res.json({ success: true, data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/params — salva parâmetros no arquivo
+app.post('/api/params', (req, res) => {
+  try {
+    const current = loadParamsFile();
+    const updated = { ...current, ...req.body };
+    saveParamsFile(updated);
+    res.json({ success: true, mensagem: 'Parâmetros salvos com sucesso.' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ============================================================
+// MÓDULO FECHAMENTO FINANCEIRO — INSUMOS
+// ============================================================
+
+// Builder do SQL de Insumos (parametrizado)
+function buildInsumosSQL(opts = {}) {
+  const { fazendaFiltro = '', produtoFiltro = '', tipoInsumoFiltro = '', za5_safra = '20251', za5_filial = '0285' } = opts;
+
+  let extraWhere = '';
+  if (fazendaFiltro) {
+    const fz = fazendaFiltro.replace(/'/g, '');
+    extraWhere += ` AND UPPER(u1.de_upnivel1) LIKE '%${fz.toUpperCase()}%'`;
+  }
+  if (produtoFiltro) {
+    const pr = produtoFiltro.replace(/'/g, '');
+    extraWhere += ` AND UPPER(b1.b1_desc) LIKE '%${pr.toUpperCase()}%'`;
+  }
+  if (tipoInsumoFiltro && tipoInsumoFiltro !== 'todos') {
+    const tipoMap = {
+      'DEFENSIVO':    "b1_grupo in ('0201001','0201002','0201003','0201004','0201005','0201006','0201007','0201008','0202003')",
+      'FERTILIZANTE': "b1_grupo in ('0202001','0202002')",
+      'SEMENTE':      "b1_grupo in ('0205001','0205002','0205004','0205005','0205006')",
+    };
+    const cond = tipoMap[tipoInsumoFiltro];
+    if (cond) extraWhere += ` AND ${cond}`;
+  }
+
+  // Empresa: derivamos do cd_empresa do Protheus (codemp=85 → filiais 028501/028503)
+  // Usamos CAST(TRIM(e.cd_empresa) AS VARCHAR(6)) || TRIM(z4.zo4_codset) → via JOIN com empresa@PIMSGRAOSAGR
+  // Para identificar empresa/filial usamos: TRIM(f.cd_filial) ou similar.
+  // Simplificação: vamos retornar ua.cd_int_erp como EMPRESA_PIMS e mapear externamente.
+
+  const sf_za5 = za5_safra.replace(/'/g, '');
+  const fi_za5 = za5_filial.replace(/'/g, '');
+
+  return `
+    SELECT DISTINCT
+      TRIM(e.cd_empresa)            AS EMPRESA_COD,
+      ua.regiao                     AS REGIAO,
+      u1.de_upnivel1                AS FAZENDA,
+      u3.cd_upnivel3                AS TALHAO,
+      ps.de_per_safra               AS PERIODO_SAFRA,
+      vr.de_variedade               AS VARIEDADE,
+      z0.zo0_anoagr                 AS SAFRA,
+      TO_DATE(z0.zo0_data, 'yyyy/mm/dd') AS DDATA,
+      z0.zo0_codigo                 AS O_S,
+      CASE
+        WHEN b1_grupo in ('0201001','0201002','0201003','0201004','0201005','0201006','0201007','0201008','0202003') THEN 'DEFENSIVO'
+        WHEN b1_grupo in ('0202001','0202002') THEN 'FERTILIZANTE'
+        WHEN b1_grupo in ('0205001','0205002','0205004','0205005','0205006') THEN 'SEMENTE'
+        ELSE 'OUTROS'
+      END                           AS TIPO_PRODUTO,
+      substr(b1_grupo, 1, 4)        AS GRUPO,
+      bm.bm_desc                    AS SUBGRUPO,
+      z1.zo1_codpro                 AS CODPROD,
+      b1.b1_desc                    AS PRODUTO,
+      u3.qt_area_prod               AS AREA_PLAN,
+      z4.zo4_haapli                 AS AREA_APLIC,
+      z1.zo1_qtdcon                 AS CONSUMO,
+      (SELECT CASE za.za5_moeda WHEN '2' THEN 0 WHEN '1' THEN za.za5_vcompr ELSE 0 END
+         FROM protheus11.za5020 za
+        WHERE za.d_e_l_e_t_ = ' '
+          AND za.za5_safra = '${sf_za5}'
+          AND za5_filial = '${fi_za5}'
+          AND z1.zo1_codpro = za.za5_produt
+          AND ROWNUM = 1)           AS VLR_BRL,
+      (SELECT CASE za.za5_moeda WHEN '1' THEN 0 WHEN '2' THEN za.za5_vcompr ELSE 0 END
+         FROM protheus11.za5020 za
+        WHERE za.d_e_l_e_t_ = ' '
+          AND za.za5_safra = '${sf_za5}'
+          AND za5_filial = '${fi_za5}'
+          AND z1.zo1_codpro = za.za5_produt
+          AND ROWNUM = 1)           AS VLR_USD
+    FROM protheus11.zo4020         z4,
+         protheus11.zo1020         z1,
+         protheus11.zo0020         z0,
+         protheus11.sb1020         b1,
+         protheus11.sbm020         bm,
+         unidadeadm@PIMSGRAOSAGR   ua,
+         upnivel2@PIMSGRAOSAGR     u2,
+         upnivel1@PIMSGRAOSAGR     u1,
+         filial@PIMSGRAOSAGR       f,
+         empresa@PIMSGRAOSAGR      e,
+         upnivel3@PIMSGRAOSAGR     u3,
+         variedade@PIMSGRAOSAGR    vr,
+         periodosafra@PIMSGRAOSAGR ps,
+         safra@PIMSGRAOSAGR        sf
+   WHERE z4.zo4_codigo = z0.zo0_codigo
+     AND z0.zo0_codemp = '85'
+     AND z0.zo0_codigo = z1.zo1_codigo
+     AND z1.zo1_codpro = b1.b1_cod
+     AND substr(b1.b1_grupo,1,4)||'   ' = bm.bm_grupo
+     AND ua.id_filial = f.id_filial
+     AND f.id_empresa = e.id_empresa
+     AND CAST(TRIM(z0.zo0_codagl) AS VARCHAR(6)) = ua.cd_int_erp
+     AND CAST(TRIM(z4.zo4_codset) AS VARCHAR(6)) = u2.cd_upnivel2
+     AND u2.id_upnivel1 = u1.id_upnivel1
+     AND u1.id_unidadeadm = ua.id_unidadeadm
+     AND u3.id_upnivel2 = u2.id_upnivel2
+     AND u3.id_periodosafra = ps.id_periodosafra
+     AND trim(TO_CHAR(ps.cd_per_safra)) = TRIM(z0.zo0_perpro)
+     AND ps.id_safra = sf.id_safra
+     AND TRIM(sf.da_safra) = TRIM(z0.zo0_anoagr)
+     AND TRIM(e.cd_empresa) = TRIM(z0.zo0_codemp)
+     AND u3.id_variedade = vr.id_variedade
+     AND z1.zo1_qtdcon <> 0
+     AND ((trim(TO_CHAR(nvl(u3.cd_upnivel3, 0))) = trim(nvl(z4.zo4_codtal, ' ')))
+          OR (TRIM(u3.id_upnivel3) = TRIM(z4.zo4_idupn3)))
+     AND z4.d_e_l_e_t_ = ' '
+     AND z1.d_e_l_e_t_ = ' '
+     AND z0.d_e_l_e_t_ = ' '
+     AND b1.d_e_l_e_t_ = ' '
+     AND bm.d_e_l_e_t_ = ' '
+     AND b1_grupo like '02%'
+     AND TO_DATE(z0.zo0_data, 'yyyy/mm/dd') >= TO_DATE(REPLACE(:data_de, '-', ''), 'yyyymmdd')
+     AND TO_DATE(z0.zo0_data, 'yyyy/mm/dd') <= TO_DATE(REPLACE(:data_ate, '-', ''), 'yyyymmdd')
+     ${extraWhere}
+  `;
+}
+
+// Mapeia EMPRESA_COD do Protheus (ex: '85') para filial ERP (ex: '028501')
+// Como o SQL retorna cd_empresa do PIMS mas não a filial Protheus diretamente,
+// usaremos a lógica: todos os registros filtrados pelo zo0_codemp='85' pertencem
+// à empresa 028501 por padrão (Futurazy Agrícola). Empresas múltiplas serão
+// diferenciadas por ua.cd_int_erp quando disponível.
+// Por ora, EMPRESA_COD retorna o código Protheus. Mapeamos:
+function mapEmpresaCod(cod) {
+  // Ajustar conforme necessidade do banco
+  const str = String(cod || '').trim();
+  if (str === '85' || str === '085') return '028501';
+  if (str === '8503') return '028503';
+  // Se o campo retornar diretamente '028501' ou similar, retorna como está
+  return str || '028501';
+}
+
+// Calcula custo: consumo × vlr_brl e consumo × vlr_usd
+function calcCustos(rows) {
+  return rows.map(r => ({
+    ...r,
+    EMPRESA: mapEmpresaCod(r.EMPRESA_COD),
+    CUSTO_BRL: Number(r.CONSUMO || 0) * Number(r.VLR_BRL || 0),
+    CUSTO_USD: Number(r.CONSUMO || 0) * Number(r.VLR_USD || 0),
+  }));
+}
+
+// Agrega por mês/empresa/tipo/subgrupo para o resumo anual
+function agregarInsumosPorMes(rows) {
+  const map = {};
+
+  for (const r of rows) {
+    const ddata = r.DDATA instanceof Date ? r.DDATA : (r.DDATA ? new Date(r.DDATA) : null);
+    if (!ddata || isNaN(ddata)) continue;
+
+    const emp     = r.EMPRESA || '028501';
+    const ano     = ddata.getFullYear();
+    const mes     = ddata.getMonth() + 1;
+    const tipo    = r.TIPO_PRODUTO || 'OUTROS';
+    const subgrp  = r.SUBGRUPO    || '(sem subgrupo)';
+
+    const key = `${emp}_${ano}_${mes}`;
+    if (!map[key]) {
+      map[key] = { empresa: emp, ano, mes, totalBrl: 0, totalUsd: 0, porTipo: {}, subgrupos: {} };
+    }
+    const M = map[key];
+
+    const brl  = Number(r.CUSTO_BRL || 0);
+    const usd  = Number(r.CUSTO_USD || 0);
+
+    M.totalBrl += brl;
+    M.totalUsd += usd;
+
+    if (!M.porTipo[tipo])  M.porTipo[tipo]  = { custoBrl: 0, custoUsd: 0 };
+    M.porTipo[tipo].custoBrl += brl;
+    M.porTipo[tipo].custoUsd += usd;
+
+    if (!M.subgrupos[tipo]) M.subgrupos[tipo] = {};
+    if (!M.subgrupos[tipo][subgrp]) M.subgrupos[tipo][subgrp] = { custoBrl: 0, custoUsd: 0 };
+    M.subgrupos[tipo][subgrp].custoBrl += brl;
+    M.subgrupos[tipo][subgrp].custoUsd += usd;
+  }
+
+  return Object.values(map);
+}
+
+// Helper safra year (já existe no módulo Receitas, repetimos para independência)
+function getSafraYearIns(hoje = new Date()) {
+  return hoje.getMonth() + 1 >= 9 ? hoje.getFullYear() + 1 : hoje.getFullYear();
+}
+function getMesesSafraIns(anoSafra) {
+  return [
+    { ano: anoSafra-1, mes:9  }, { ano: anoSafra-1, mes:10 },
+    { ano: anoSafra-1, mes:11 }, { ano: anoSafra-1, mes:12 },
+    { ano: anoSafra,   mes:1  }, { ano: anoSafra,   mes:2  },
+    { ano: anoSafra,   mes:3  }, { ano: anoSafra,   mes:4  },
+    { ano: anoSafra,   mes:5  }, { ano: anoSafra,   mes:6  },
+    { ano: anoSafra,   mes:7  }, { ano: anoSafra,   mes:8  }
+  ];
+}
+function getMesesCalendarioIns(ano) {
+  return Array.from({ length: 12 }, (_, i) => ({ ano, mes: i + 1 }));
+}
+function dateToStrIns(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+function getMonthRangeIns(ano, mes) {
+  return {
+    dataDe: dateToStrIns(new Date(ano, mes - 1, 1)),
+    dataAte: dateToStrIns(new Date(ano, mes, 0))
+  };
+}
+
+// GET /api/insumos/dados — dados brutos para o cubo drill-down
+app.get('/api/insumos/dados', async (req, res) => {
+  try {
+    const hoje     = new Date();
+    const prevDate = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+    const currLast = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
+
+    const dataDe = req.query.data_de || dateToStrIns(prevDate);
+    const dataAte = req.query.data_ate || dateToStrIns(currLast);
+
+    const params  = loadParamsFile();
+    const p       = params.insumos || {};
+
+    const sql = buildInsumosSQL({
+      fazendaFiltro:    (req.query.fazenda    || '').trim(),
+      produtoFiltro:    (req.query.produto    || '').trim(),
+      tipoInsumoFiltro: (req.query.tipo_insumo|| '').trim(),
+      za5_safra:  p.za5_safra  || '20251',
+      za5_filial: p.za5_filial || '0285',
+    });
+
+    const rows = await db.execute(sql, { data_de: dataDe, data_ate: dataAte });
+    const result = calcCustos(rows);
+
+    res.json({ success: true, count: result.length, data: result });
+  } catch (err) {
+    console.error('[insumos/dados]', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /api/insumos/resumo-anual — resumo de 12 meses (safra ou calendário)
+app.get('/api/insumos/resumo-anual', async (req, res) => {
+  try {
+    const hoje      = new Date();
+    const anoSafra  = parseInt(req.query.ano_safra) || getSafraYearIns(hoje);
+    const tipoCalend = req.query.tipo || 'safra';
+    const anoCalend  = parseInt(req.query.ano) || hoje.getFullYear();
+
+    const meses = tipoCalend === 'calendario'
+      ? getMesesCalendarioIns(anoCalend)
+      : getMesesSafraIns(anoSafra);
+
+    const mesAtual    = { ano: hoje.getFullYear(), mes: hoje.getMonth() + 1 };
+    const prevDate    = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+    const mesAnterior = { ano: prevDate.getFullYear(), mes: prevDate.getMonth() + 1 };
+
+    // 1. Buscar fechados na tabela FECHAMENTO_INSUMOS
+    const fechadosSQL = `
+      SELECT FI_EMPRESA, FI_ANO, FI_MES, FI_TIPO_INSUMO, FI_CUSTO_TOTAL, FI_CUSTO_USD, FI_DT_FECHAMENTO
+      FROM FECHAMENTO_INSUMOS
+      ORDER BY FI_ANO, FI_MES
+    `;
+    let fechados = [];
+    try {
+      fechados = await db.execute(fechadosSQL);
+    } catch (e) {
+      console.warn('[insumos/resumo-anual] FECHAMENTO_INSUMOS não encontrada:', e.message);
+    }
+
+    // Montar mapa de fechados
+    const fechadosMap = {}; // key: empresa_ano_mes → { totalBrl, totalUsd, porTipo, subgrupos, dtFechamento }
+    for (const f of fechados) {
+      const key = `${f.FI_EMPRESA}_${f.FI_ANO}_${f.FI_MES}`;
+      if (!fechadosMap[key]) {
+        fechadosMap[key] = { totalBrl: 0, totalUsd: 0, porTipo: {}, subgrupos: {}, dtFechamento: f.FI_DT_FECHAMENTO };
+      }
+      const M   = fechadosMap[key];
+      const brl = Number(f.FI_CUSTO_TOTAL || 0);
+      const usd = Number(f.FI_CUSTO_USD   || 0);
+      const tipo = (f.FI_TIPO_INSUMO || 'TOTAL').toUpperCase();
+
+      if (tipo !== 'TOTAL') {
+        M.totalBrl += brl;
+        M.totalUsd += usd;
+        if (!M.porTipo[tipo]) M.porTipo[tipo] = { custoBrl: 0, custoUsd: 0 };
+        M.porTipo[tipo].custoBrl += brl;
+        M.porTipo[tipo].custoUsd += usd;
+        // subgrupos: sem detalhamento por subgrupo nos fechados (somente por tipo)
+        if (!M.subgrupos[tipo]) M.subgrupos[tipo] = {};
+      } else {
+        // Registro consolidado
+        M.totalBrl = brl;
+        M.totalUsd = usd;
+      }
+    }
+
+    // 2. Identificar meses dinâmicos
+    const hasDetailFilter = !!(req.query.fazenda || req.query.produto || req.query.tipo_insumo);
+    const dinamicos = meses.filter(m => {
+      const isFuturo = new Date(m.ano, m.mes - 1, 1) > hoje;
+      if (isFuturo) return false;
+      if (hasDetailFilter) return true;
+      if (m.ano === mesAtual.ano    && m.mes === mesAtual.mes)    return true;
+      if (m.ano === mesAnterior.ano && m.mes === mesAnterior.mes) return true;
+      return false;
+    });
+
+    // 3. Buscar dados dinâmicos
+    let dadosDinamicos = [];
+    if (dinamicos.length > 0) {
+      const timestamps    = dinamicos.map(m => new Date(m.ano, m.mes - 1, 1).getTime());
+      const timestampsAte = dinamicos.map(m => new Date(m.ano, m.mes, 0).getTime());
+      const dataDe  = dateToStrIns(new Date(Math.min(...timestamps)));
+      const dataAte = dateToStrIns(new Date(Math.max(...timestampsAte)));
+
+      const params = loadParamsFile();
+      const p      = params.insumos || {};
+      const sql    = buildInsumosSQL({
+        fazendaFiltro:    (req.query.fazenda    || '').trim(),
+        produtoFiltro:    (req.query.produto    || '').trim(),
+        tipoInsumoFiltro: (req.query.tipo_insumo|| '').trim(),
+        za5_safra:  p.za5_safra  || '20251',
+        za5_filial: p.za5_filial || '0285',
+      });
+
+      try {
+        const rowsDin = await db.execute(sql, { data_de: dataDe, data_ate: dataAte });
+        dadosDinamicos = agregarInsumosPorMes(calcCustos(rowsDin));
+      } catch (e) {
+        console.error('[insumos/resumo-anual] SQL dinâmico:', e.message);
+      }
+    }
+
+    // 4. Montar array de 12 meses
+    function initPorEmpresa() {
+      return { totalBrl: 0, totalUsd: 0, porTipo: {}, subgrupos: {}, status: 'aguardando' };
+    }
+
+    const resultado = meses.map(m => {
+      const isMesAtual    = m.ano === mesAtual.ano    && m.mes === mesAtual.mes;
+      const isMesAnterior = m.ano === mesAnterior.ano && m.mes === mesAnterior.mes;
+      const isFuturo      = new Date(m.ano, m.mes - 1, 1) > hoje;
+
+      let defaultStatus = 'futuro';
+      if (isMesAtual)    defaultStatus = 'dinamico_atual';
+      else if (isMesAnterior) defaultStatus = 'dinamico_anterior';
+      else if (!isFuturo) defaultStatus = 'aguardando';
+
+      const porEmpresa = {};
+
+      for (const emp of ['028501', '028503']) {
+        const keyFech = `${emp}_${m.ano}_${m.mes}`;
+        const f = fechadosMap[keyFech];
+
+        if (f && !hasDetailFilter) {
+          porEmpresa[emp] = {
+            totalBrl: f.totalBrl,
+            totalUsd: f.totalUsd,
+            porTipo:  { ...f.porTipo },
+            subgrupos: { ...f.subgrupos },
+            status: 'fechado',
+            dtFechamento: f.dtFechamento
+          };
+        } else {
+          const din = dadosDinamicos.find(d => d.empresa === emp && d.ano === m.ano && d.mes === m.mes);
+          if (din) {
+            porEmpresa[emp] = {
+              totalBrl: din.totalBrl,
+              totalUsd: din.totalUsd,
+              porTipo:  din.porTipo,
+              subgrupos: din.subgrupos,
+              status: defaultStatus
+            };
+          } else {
+            porEmpresa[emp] = { ...initPorEmpresa(), status: defaultStatus };
+          }
+        }
+      }
+
+      // Consolidado TOTAL
+      const t = initPorEmpresa();
+      for (const emp of ['028501', '028503']) {
+        const e = porEmpresa[emp];
+        t.totalBrl += e.totalBrl;
+        t.totalUsd += e.totalUsd;
+        // Merge porTipo
+        for (const [tipo, v] of Object.entries(e.porTipo || {})) {
+          if (!t.porTipo[tipo]) t.porTipo[tipo] = { custoBrl: 0, custoUsd: 0 };
+          t.porTipo[tipo].custoBrl += v.custoBrl || 0;
+          t.porTipo[tipo].custoUsd += v.custoUsd || 0;
+        }
+        // Merge subgrupos
+        for (const [tipo, subs] of Object.entries(e.subgrupos || {})) {
+          if (!t.subgrupos[tipo]) t.subgrupos[tipo] = {};
+          for (const [sg, sv] of Object.entries(subs)) {
+            if (!t.subgrupos[tipo][sg]) t.subgrupos[tipo][sg] = { custoBrl: 0, custoUsd: 0 };
+            t.subgrupos[tipo][sg].custoBrl += sv.custoBrl || 0;
+            t.subgrupos[tipo][sg].custoUsd += sv.custoUsd || 0;
+          }
+        }
+      }
+      const statusSet = new Set(Object.values(porEmpresa).map(e => e.status));
+      t.status = statusSet.has('fechado') && statusSet.size === 1 ? 'fechado'
+        : statusSet.has('dinamico_atual') ? 'dinamico_atual'
+        : statusSet.has('dinamico_anterior') ? 'dinamico_anterior'
+        : defaultStatus;
+      porEmpresa['TOTAL'] = t;
+
+      return { ano: m.ano, mes: m.mes, status: t.status, porEmpresa };
+    });
+
+    res.json({ success: true, anoSafra, tipoCalend, meses: resultado });
+  } catch (err) {
+    console.error('[insumos/resumo-anual]', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/insumos/fechar-mes — grava fechamento na tabela FECHAMENTO_INSUMOS
+app.post('/api/insumos/fechar-mes', async (req, res) => {
+  try {
+    const { empresa, mes, ano } = req.body;
+    if (!empresa || !mes || !ano) {
+      return res.status(400).json({ success: false, error: 'empresa, mes e ano são obrigatórios' });
+    }
+
+    const { dataDe, dataAte } = getMonthRangeIns(parseInt(ano), parseInt(mes));
+    const params = loadParamsFile();
+    const p      = params.insumos || {};
+
+    const sql  = buildInsumosSQL({ za5_safra: p.za5_safra || '20251', za5_filial: p.za5_filial || '0285' });
+    const rows = calcCustos(await db.execute(sql, { data_de: dataDe, data_ate: dataAte }));
+
+    const rowsEmp = empresa === 'TODAS' ? rows : rows.filter(r => r.EMPRESA === empresa);
+
+    // Agregar por tipo
+    const totalMap = {};
+    const TIPOS = ['DEFENSIVO','FERTILIZANTE','SEMENTE','OUTROS'];
+    for (const t of TIPOS) totalMap[t] = { brl: 0, usd: 0 };
+    let grandBrl = 0, grandUsd = 0;
+
+    for (const r of rowsEmp) {
+      const tipo = r.TIPO_PRODUTO || 'OUTROS';
+      const brl  = Number(r.CUSTO_BRL || 0);
+      const usd  = Number(r.CUSTO_USD || 0);
+      if (!totalMap[tipo]) totalMap[tipo] = { brl: 0, usd: 0 };
+      totalMap[tipo].brl += brl;
+      totalMap[tipo].usd += usd;
+      grandBrl += brl;
+      grandUsd += usd;
+    }
+
+    const empresaGravar = empresa === 'TODAS' ? 'TODAS' : empresa;
+
+    // Gravar um registro por tipo + um TOTAL
+    const tipos_gravar = [...TIPOS.filter(t => (totalMap[t]?.brl || 0) > 0), 'TOTAL'];
+
+    for (const tipo of tipos_gravar) {
+      const brl = tipo === 'TOTAL' ? grandBrl : (totalMap[tipo]?.brl || 0);
+      const usd = tipo === 'TOTAL' ? grandUsd : (totalMap[tipo]?.usd || 0);
+
+      const mergeSql = `
+        MERGE INTO FECHAMENTO_INSUMOS fi
+        USING DUAL ON (fi.FI_EMPRESA = :empresa AND fi.FI_ANO = :ano AND fi.FI_MES = :mes AND fi.FI_TIPO_INSUMO = :tipo)
+        WHEN MATCHED THEN UPDATE SET
+          fi.FI_CUSTO_TOTAL    = :custoBrl,
+          fi.FI_CUSTO_USD      = :custoUsd,
+          fi.FI_DT_FECHAMENTO  = SYSDATE
+        WHEN NOT MATCHED THEN INSERT
+          (FI_EMPRESA, FI_ANO, FI_MES, FI_TIPO_INSUMO, FI_CUSTO_TOTAL, FI_CUSTO_USD, FI_DT_FECHAMENTO)
+        VALUES
+          (:empresa, :ano, :mes, :tipo, :custoBrl, :custoUsd, SYSDATE)
+      `;
+      await db.execute(mergeSql, {
+        empresa: empresaGravar,
+        ano: parseInt(ano),
+        mes: parseInt(mes),
+        tipo,
+        custoBrl: brl,
+        custoUsd: usd
+      }, { autoCommit: true });
+    }
+
+    res.json({
+      success: true,
+      mensagem: `Mês ${mes}/${ano} fechado com sucesso para empresa ${empresaGravar}.`,
+      dados: { empresa: empresaGravar, ano, mes, grandBrl, grandUsd }
+    });
+  } catch (err) {
+    console.error('[insumos/fechar-mes]', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /api/insumos/fechados — lista registros de FECHAMENTO_INSUMOS
+app.get('/api/insumos/fechados', async (req, res) => {
+  try {
+    const { ano, mes, filial, tipo } = req.query;
+    let where = 'WHERE 1=1';
+    const binds = {};
+    if (ano)   { where += ' AND FI_ANO = :ano';            binds.ano   = parseInt(ano); }
+    if (mes)   { where += ' AND FI_MES = :mes';            binds.mes   = parseInt(mes); }
+    if (filial){ where += ' AND FI_EMPRESA = :filial';     binds.filial = filial; }
+    if (tipo)  { where += ' AND FI_TIPO_INSUMO = :tipo';   binds.tipo   = tipo; }
+
+    const sql = `
+      SELECT FI_ID, FI_EMPRESA, FI_ANO, FI_MES, FI_TIPO_INSUMO,
+             FI_CUSTO_TOTAL, FI_CUSTO_USD, FI_DT_FECHAMENTO, FI_USUARIO, FI_OBS
+      FROM FECHAMENTO_INSUMOS
+      ${where}
+      ORDER BY FI_ANO DESC, FI_MES DESC, FI_EMPRESA, FI_TIPO_INSUMO
+    `;
+    let rows = [];
+    try {
+      rows = await db.execute(sql, binds);
+    } catch (e) {
+      console.warn('[insumos/fechados] tabela não existe ainda:', e.message);
+    }
+    res.json({ success: true, count: rows.length, data: rows });
+  } catch (err) {
+    console.error('[insumos/fechados]', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// PUT /api/insumos/fechamento/:id — atualiza registro manual
+app.put('/api/insumos/fechamento/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { custoBrl, custoUsd, obs } = req.body;
+    const sql = `
+      UPDATE FECHAMENTO_INSUMOS SET
+        FI_CUSTO_TOTAL   = :custoBrl,
+        FI_CUSTO_USD     = :custoUsd,
+        FI_OBS           = :obs,
+        FI_DT_FECHAMENTO = SYSDATE
+      WHERE FI_ID = :id
+    `;
+    await db.execute(sql, {
+      id: parseInt(id),
+      custoBrl: Number(custoBrl || 0),
+      custoUsd: Number(custoUsd || 0),
+      obs: obs || ''
+    }, { autoCommit: true });
+    res.json({ success: true, mensagem: 'Fechamento atualizado com sucesso.' });
+  } catch (err) {
+    console.error('[insumos/fechamento/update]', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/insumos/fechamento — inclui novo registro manual
+app.post('/api/insumos/fechamento', async (req, res) => {
+  try {
+    const { periodo, filial, tipo, custoBrl, custoUsd, obs } = req.body;
+    if (!periodo || !filial || !tipo) {
+      return res.status(400).json({ success: false, error: 'Período, filial e tipo são obrigatórios.' });
+    }
+    const [ano, mes] = periodo.split('-');
+
+    const checkSql = `
+      SELECT COUNT(*) AS QTD FROM FECHAMENTO_INSUMOS
+      WHERE FI_EMPRESA = :filial AND FI_ANO = :ano AND FI_MES = :mes AND FI_TIPO_INSUMO = :tipo
+    `;
+    const check = await db.execute(checkSql, { filial, ano: parseInt(ano), mes: parseInt(mes), tipo });
+    if (check[0] && check[0].QTD > 0) {
+      return res.status(400).json({ success: false, error: 'Já existe um fechamento para esta Filial, Mês/Ano e Tipo.' });
+    }
+
+    const sql = `
+      INSERT INTO FECHAMENTO_INSUMOS
+        (FI_EMPRESA, FI_ANO, FI_MES, FI_TIPO_INSUMO, FI_CUSTO_TOTAL, FI_CUSTO_USD, FI_OBS, FI_DT_FECHAMENTO)
+      VALUES
+        (:filial, :ano, :mes, :tipo, :custoBrl, :custoUsd, :obs, SYSDATE)
+    `;
+    await db.execute(sql, {
+      filial, ano: parseInt(ano), mes: parseInt(mes), tipo,
+      custoBrl: Number(custoBrl || 0),
+      custoUsd: Number(custoUsd || 0),
+      obs: obs || ''
+    }, { autoCommit: true });
+    res.json({ success: true, mensagem: 'Fechamento incluído com sucesso.' });
+  } catch (err) {
+    console.error('[insumos/fechamento/insert]', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// DELETE /api/insumos/fechamento/:id — exclui registro manual
+app.delete('/api/insumos/fechamento/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await db.execute('DELETE FROM FECHAMENTO_INSUMOS WHERE FI_ID = :id', { id: parseInt(id) }, { autoCommit: true });
+    res.json({ success: true, mensagem: 'Fechamento excluído com sucesso.' });
+  } catch (err) {
+    console.error('[insumos/fechamento/delete]', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });

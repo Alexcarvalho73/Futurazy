@@ -292,19 +292,32 @@
             </div>
           </a>
 
-          <!-- CUSTO OPERACIONAL DIRETO — Em breve -->
-          <div class="modulo-card disabled" style="--card-accent: #6366f1;">
+          <!-- CUSTO COM INSUMOS — Ativo -->
+          <a href="fechamento_insumos.html" class="modulo-card" id="card-insumos"
+             style="--card-accent: #ef4444;">
             <div class="modulo-top">
-              <div class="modulo-icon" style="background:rgba(99,102,241,.12); color:#6366f1;">
-                <i class="fa-solid fa-industry"></i>
+              <div class="modulo-icon" style="background:rgba(239,68,68,.12); color:#ef4444;">
+                <i class="fa-solid fa-flask-vial"></i>
               </div>
-              <span class="modulo-badge badge-breve">Em Breve</span>
+              <span class="modulo-badge badge-ativo">Ativo</span>
             </div>
             <div>
-              <div class="modulo-titulo">Custo Operacional Direto</div>
-              <div class="modulo-subtitulo">CAV / CMV — Resultado Bruto da Operação</div>
+              <div class="modulo-titulo">Custos com Insumos</div>
+              <div class="modulo-subtitulo">Defensivos · Fertilizantes · Sementes — Custo de Produção</div>
             </div>
-          </div>
+            <div class="modulo-progresso">
+              <div class="progresso-label">
+                <span>Progresso da Safra</span>
+                <span id="pct-insumos">Carregando…</span>
+              </div>
+              <div class="progresso-bar">
+                <div class="progresso-fill" id="bar-insumos" style="width:0%"></div>
+              </div>
+              <div class="meses-pills" id="pills-insumos">
+                <!-- Renderizado pelo JS -->
+              </div>
+            </div>
+          </a>
 
           <!-- CUSTO OPERACIONAL INDIRETO — Em breve -->
           <div class="modulo-card disabled" style="--card-accent: #8b5cf6;">
