@@ -341,7 +341,7 @@ app.get('/api/notas/:chave/itens', async (req, res) => {
                              AND FT_CLIEFOR = SUBSTR(XML_KEYF1,19,6)    
                              AND FT_LOJA = SUBSTR(XML_KEYF1,25,2)    
                              AND FT_ITEM = XIT_ITEM AND XIT_KEYSD1 = ' ' ))     
-                             AND FT_ESPECIE = 'SPED'     
+                             AND FT_ESPECIE in ('SPED','NFPS')     
                              AND FT_FILIAL = TRIM(XM.XML_FIL)     
                              AND FT_CFOP <='5'    
                              AND FT_FORMUL NOT IN('S')  
