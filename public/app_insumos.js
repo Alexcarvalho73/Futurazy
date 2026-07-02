@@ -466,7 +466,16 @@ function renderCube(data) {
   const rows = [];
   let uid = 0;
 
-  const tiposOrdem = ['DEFENSIVO','FERTILIZANTE','SEMENTE','OUTROS'].filter(t => tree[t]);
+  // Ordena os tipos encontrados nos dados, dando prioridade para as categorias principais
+  const defaultOrder = ['DEFENSIVOS', 'FERTILIZANTES', 'SEMENTES'];
+  const tiposOrdem = Object.keys(tree).sort((a, b) => {
+    const idxA = defaultOrder.indexOf(a);
+    const idxB = defaultOrder.indexOf(b);
+    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+    if (idxA !== -1) return -1;
+    if (idxB !== -1) return 1;
+    return a.localeCompare(b);
+  });
 
   for (const tipo of tiposOrdem) {
     const T    = tree[tipo];
@@ -565,9 +574,9 @@ function renderCube(data) {
   for (const tipo of tiposOrdem) {
     const T   = tree[tipo];
     const cfg = TIPO_CONFIG[tipo] || TIPO_CONFIG['OUTROS'];
-    const tipoId = `tipo_${tipo}`;
-    const tValD = state.moeda === 'USD' ? T._usd : T._brl;
-    const tValO = state.moeda === 'USD' ? T._brl : T._usd;
+    const tipoId = `tipo_${uid++}`;
+    const tValUsd = T._usd;
+    const tValBrl = T._brl;
 
     finalRows.push(`
       <tr class="lvl-0" data-id="${tipoId}">
@@ -577,8 +586,8 @@ function renderCube(data) {
         </td>
         <td class="text-right">—</td>
         <td class="text-right">${fmtN(T._consumo)}</td>
-        <td class="text-right">${fmtMoeda(tValD)}</td>
-        <td class="text-right">${fmtMoeda(tValO)}</td>
+        <td class="text-right">${fmtMoedaUsd(tValUsd)}</td>
+        <td class="text-right">${fmtMoedaBrl(tValBrl)}</td>
         <td class="text-right">—</td>
         <td class="text-right">—</td>
         <td colspan="2">—</td>
@@ -587,9 +596,9 @@ function renderCube(data) {
 
     let prUid = 0;
     for (const [prod, P] of Object.entries(T.produtos)) {
-      const prId = `pr_${tipo}_${prUid++}`;
-      const prD  = state.moeda === 'USD' ? P._usd : P._brl;
-      const prO  = state.moeda === 'USD' ? P._brl : P._usd;
+      const prId = `pr_${tipoId}_${prUid++}`;
+      const prValUsd = P._usd;
+      const prValBrl = P._brl;
       const exRow = P.rows[0] || {};
 
       finalRows.push(`
@@ -597,8 +606,8 @@ function renderCube(data) {
           <td><span class="toggle-btn" onclick="toggleRows('${prId}')">▶</span>${escHtml(prod)}</td>
           <td class="text-right">${escHtml(exRow.FAZENDA || '—')}</td>
           <td class="text-right">${fmtN(P._consumo)}</td>
-          <td class="text-right">${fmtMoeda(prD)}</td>
-          <td class="text-right">${fmtMoeda(prO)}</td>
+          <td class="text-right">${fmtMoedaUsd(prValUsd)}</td>
+          <td class="text-right">${fmtMoedaBrl(prValBrl)}</td>
           <td class="text-right">—</td>
           <td class="text-right">—</td>
           <td>—</td>
@@ -612,8 +621,8 @@ function renderCube(data) {
         const cUsd   = Number(row.CUSTO_USD || 0);
         const vBrl   = Number(row.VLR_BRL   || 0);
         const vUsd   = Number(row.VLR_USD   || 0);
-        const dValD  = state.moeda === 'USD' ? cUsd : cBrl;
-        const dValO  = state.moeda === 'USD' ? cBrl : cUsd;
+        const dValUsd = cUsd;
+        const dValBrl = cBrl;
         finalRows.push(`
           <tr class="lvl-2 row-hidden" data-parent="${prId}">
             <td style="padding-left:100px !important; font-style:italic; color:#475569;">
@@ -621,8 +630,8 @@ function renderCube(data) {
             </td>
             <td class="text-right">${escHtml(row.FAZENDA || '—')}</td>
             <td class="text-right">${fmtN(row.CONSUMO)}</td>
-            <td class="text-right">${fmtMoeda(dValD)}</td>
-            <td class="text-right">${fmtMoeda(dValO)}</td>
+            <td class="text-right">${fmtMoedaUsd(dValUsd)}</td>
+            <td class="text-right">${fmtMoedaBrl(dValBrl)}</td>
             <td class="text-right">${fmtMoedaBrl(vBrl)}</td>
             <td class="text-right">${fmtMoedaUsd(vUsd)}</td>
             <td>${escHtml(row.TALHAO || '—')}</td>
@@ -636,14 +645,12 @@ function renderCube(data) {
   body.innerHTML = finalRows.join('');
 
   // Grand totals
-  const gD = state.moeda === 'USD' ? grandUsd : grandBrl;
-  const gO = state.moeda === 'USD' ? grandBrl : grandUsd;
   const elC   = document.getElementById('tot-consumo');
-  const elT   = document.getElementById('tot-custo');
-  const elTU  = document.getElementById('tot-custo-usd');
+  const elT   = document.getElementById('tot-custo-usd');
+  const elTU  = document.getElementById('tot-custo');
   if (elC)  elC.textContent  = fmtN(grandConsumo);
-  if (elT)  elT.textContent  = fmtMoeda(gD);
-  if (elTU) elTU.textContent = fmtMoeda(gO);
+  if (elT)  elT.textContent  = fmtMoedaUsd(grandUsd);
+  if (elTU) elTU.textContent = fmtMoedaBrl(grandBrl);
 }
 
 function toggleRows(parentId) {

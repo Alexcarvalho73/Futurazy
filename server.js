@@ -1688,7 +1688,7 @@ app.get('/api/insumos/resumo-anual', async (req, res) => {
 
     // 1. Buscar fechados na tabela FECHAMENTO_INSUMOS
     const fechadosSQL = `
-      SELECT FI_EMPRESA, FI_ANO, FI_MES, FI_TIPO_INSUMO, FI_CUSTO_TOTAL, FI_CUSTO_USD, FI_DT_FECHAMENTO
+      SELECT FI_EMPRESA, FI_ANO, FI_MES, FI_TIPO_INSUMO, FI_CUSTO_TOTAL, FI_PTAX, FI_DT_FECHAMENTO
       FROM FECHAMENTO_INSUMOS
       ORDER BY FI_ANO, FI_MES
     `;
@@ -1700,29 +1700,28 @@ app.get('/api/insumos/resumo-anual', async (req, res) => {
     }
 
     // Montar mapa de fechados
-    const fechadosMap = {}; // key: empresa_ano_mes → { totalBrl, totalUsd, porTipo, subgrupos, dtFechamento }
+    const fechadosMap = {}; // key: empresa_ano_mes → { totalBrl, ptaxMedio, porTipo, subgrupos, dtFechamento }
     for (const f of fechados) {
       const key = `${f.FI_EMPRESA}_${f.FI_ANO}_${f.FI_MES}`;
       if (!fechadosMap[key]) {
-        fechadosMap[key] = { totalBrl: 0, totalUsd: 0, porTipo: {}, subgrupos: {}, dtFechamento: f.FI_DT_FECHAMENTO };
+        fechadosMap[key] = { totalBrl: 0, ptaxMedio: 0, porTipo: {}, subgrupos: {}, dtFechamento: f.FI_DT_FECHAMENTO };
       }
       const M   = fechadosMap[key];
       const brl = Number(f.FI_CUSTO_TOTAL || 0);
-      const usd = Number(f.FI_CUSTO_USD   || 0);
+      const ptax = Number(f.FI_PTAX   || 0);
       const tipo = (f.FI_TIPO_INSUMO || 'TOTAL').toUpperCase();
 
       if (tipo !== 'TOTAL') {
         M.totalBrl += brl;
-        M.totalUsd += usd;
-        if (!M.porTipo[tipo]) M.porTipo[tipo] = { custoBrl: 0, custoUsd: 0 };
+        if (!M.porTipo[tipo]) M.porTipo[tipo] = { custoBrl: 0 };
         M.porTipo[tipo].custoBrl += brl;
-        M.porTipo[tipo].custoUsd += usd;
-        // subgrupos: sem detalhamento por subgrupo nos fechados (somente por tipo)
+        // PTAX não agregamos iterativamente aqui pois no FECHAMENTO ele já é gravado por tipo e pro TOTAL.
+        // Pegaremos o ptaxMedio diretamente da linha TOTAL.
         if (!M.subgrupos[tipo]) M.subgrupos[tipo] = {};
       } else {
         // Registro consolidado
         M.totalBrl = brl;
-        M.totalUsd = usd;
+        M.ptaxMedio = ptax;
       }
     }
 
@@ -1787,7 +1786,7 @@ app.get('/api/insumos/resumo-anual', async (req, res) => {
         if (f && !hasDetailFilter) {
           porEmpresa[emp] = {
             totalBrl: f.totalBrl,
-            totalUsd: f.totalUsd,
+            ptaxMedio: f.ptaxMedio,
             porTipo:  { ...f.porTipo },
             subgrupos: { ...f.subgrupos },
             status: 'fechado',
@@ -1814,23 +1813,28 @@ app.get('/api/insumos/resumo-anual', async (req, res) => {
       for (const emp of ['028501', '028503']) {
         const e = porEmpresa[emp];
         t.totalBrl += e.totalBrl;
-        t.totalUsd += e.totalUsd;
+        if (e.ptaxMedio > 0 && e.totalBrl > 0) {
+           // para média ponderada global (usando var auxiliar para acumular pesos)
+           if (!t._ptaxSumPeso) t._ptaxSumPeso = 0;
+           if (!t._ptaxPeso)    t._ptaxPeso = 0;
+           t._ptaxSumPeso += e.totalBrl;
+           t._ptaxPeso    += e.totalBrl * e.ptaxMedio;
+        }
         // Merge porTipo
         for (const [tipo, v] of Object.entries(e.porTipo || {})) {
-          if (!t.porTipo[tipo]) t.porTipo[tipo] = { custoBrl: 0, custoUsd: 0 };
+          if (!t.porTipo[tipo]) t.porTipo[tipo] = { custoBrl: 0 };
           t.porTipo[tipo].custoBrl += v.custoBrl || 0;
-          t.porTipo[tipo].custoUsd += v.custoUsd || 0;
         }
         // Merge subgrupos
         for (const [tipo, subs] of Object.entries(e.subgrupos || {})) {
           if (!t.subgrupos[tipo]) t.subgrupos[tipo] = {};
           for (const [sg, sv] of Object.entries(subs)) {
-            if (!t.subgrupos[tipo][sg]) t.subgrupos[tipo][sg] = { custoBrl: 0, custoUsd: 0 };
+            if (!t.subgrupos[tipo][sg]) t.subgrupos[tipo][sg] = { custoBrl: 0 };
             t.subgrupos[tipo][sg].custoBrl += sv.custoBrl || 0;
-            t.subgrupos[tipo][sg].custoUsd += sv.custoUsd || 0;
           }
         }
       }
+      if (t._ptaxSumPeso > 0) t.ptaxMedio = t._ptaxPeso / t._ptaxSumPeso;
       const statusSet = new Set(Object.values(porEmpresa).map(e => e.status));
       t.status = statusSet.has('fechado') && statusSet.size === 1 ? 'fechado'
         : statusSet.has('dinamico_atual') ? 'dinamico_atual'
