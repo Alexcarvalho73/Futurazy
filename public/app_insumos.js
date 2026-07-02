@@ -10,12 +10,11 @@
 // ─────────────────────────────────────────────
 const NOMES_MES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 
-// Mapeamento de tipo_produto para cor/badge
 const TIPO_CONFIG = {
-  'DEFENSIVO':    { badge: 'badge-def',  cor: '#a78bfa', icon: '🛡️' },
-  'FERTILIZANTE': { badge: 'badge-fert', cor: '#10b981', icon: '🧪' },
-  'SEMENTE':      { badge: 'badge-sem',  cor: '#f59e0b', icon: '🌱' },
-  'OUTROS':       { badge: 'badge-out',  cor: '#94a3b8', icon: '📦' },
+  'DEFENSIVOS':    { badge: 'badge-def',  cor: '#a78bfa', icon: '🛡️' },
+  'FERTILIZANTES': { badge: 'badge-fert', cor: '#10b981', icon: '🧪' },
+  'SEMENTES':      { badge: 'badge-sem',  cor: '#f59e0b', icon: '🌱' },
+  'OUTROS':        { badge: 'badge-out',  cor: '#94a3b8', icon: '📦' },
 };
 
 const state = {
@@ -73,8 +72,37 @@ function getMesesCalendario(ano) {
 document.addEventListener('DOMContentLoaded', () => {
   setupEventListeners();
   loadParams();
+  loadTiposInsumo();
   loadAll();
 });
+
+async function loadTiposInsumo() {
+  try {
+    const res = await fetch('/api/insumos/tipos').then(r => r.json());
+    if (res.success && res.data) {
+      const select = document.getElementById('f-tipo-insumo');
+      if (select) {
+        // Remove existing options except the first one ('todos')
+        while (select.options.length > 1) {
+          select.remove(1);
+        }
+        res.data.forEach(t => {
+          const opt = document.createElement('option');
+          opt.value = t.BM_GRUPO; // '0201' etc.
+          // Fallback simple icons
+          let icon = '📦';
+          if (t.BM_DESC.includes('DEFENS')) icon = '🛡️';
+          else if (t.BM_DESC.includes('FERTIL')) icon = '🧪';
+          else if (t.BM_DESC.includes('SEMENT')) icon = '🌱';
+          opt.textContent = `${icon} ${t.BM_DESC}`;
+          select.appendChild(opt);
+        });
+      }
+    }
+  } catch (err) {
+    console.error('Erro ao buscar tipos de insumo:', err);
+  }
+}
 
 function setupEventListeners() {
   // Toggle calendário

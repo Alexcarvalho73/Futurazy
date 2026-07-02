@@ -1413,6 +1413,23 @@ app.post('/api/params', (req, res) => {
   }
 });
 
+// GET /api/insumos/tipos - Busca os tipos de insumo dinamicamente na sbm020
+app.get('/api/insumos/tipos', async (req, res) => {
+  const sql = `
+    SELECT trim(bm_grupo) as bm_grupo, trim(bm_desc) as bm_desc 
+    FROM protheus11.sbm020  
+    WHERE bm_grupo like '02%'
+      AND length(trim(bm_grupo)) = 4
+  `;
+  try {
+    const rows = await db.execute(sql);
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    console.error('Erro ao buscar tipos de insumo:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ============================================================
 // MÓDULO FECHAMENTO FINANCEIRO — INSUMOS
 // ============================================================
@@ -1435,13 +1452,8 @@ function buildInsumosSQL(opts = {}) {
     extraWhere += ` AND UPPER(b1.b1_desc) LIKE '%${pr.toUpperCase()}%'`;
   }
   if (tipoInsumoFiltro && tipoInsumoFiltro !== 'todos') {
-    const tipoMap = {
-      'DEFENSIVO':    "b1_grupo in ('0201001','0201002','0201003','0201004','0201005','0201006','0201007','0201008','0202003')",
-      'FERTILIZANTE': "b1_grupo in ('0202001','0202002')",
-      'SEMENTE':      "b1_grupo in ('0205001','0205002','0205004','0205005','0205006')",
-    };
-    const cond = tipoMap[tipoInsumoFiltro];
-    if (cond) extraWhere += ` AND ${cond}`;
+    const tipoVal = tipoInsumoFiltro.replace(/'/g, '');
+    extraWhere += ` AND substr(b1_grupo, 1, 4) = '${tipoVal}'`;
   }
 
   const sf_za5 = za5_safra.replace(/'/g, '');
@@ -1465,13 +1477,17 @@ function buildInsumosSQL(opts = {}) {
       b1.b1_desc                    AS PRODUTO,
       u3.qt_area_prod               AS AREA_PLAN,
       z4.zo4_haapli                 AS AREA_APLIC,
+      (SELECT SUM(z41.zo4_haapli)
+         FROM protheus11.zo4020 z41
+        WHERE z41.zo4_codigo = z0.zo0_codigo
+          AND z41.d_e_l_e_t_ <> '*') AS AREA_APLT,
       z1.zo1_qtdcon                 AS CONSUMO,
       za.za5_moeda                  AS ZA5_MOEDA,
       CASE za.za5_moeda
         WHEN '1' THEN NVL(za.za5_vcompr, 0)
         ELSE NVL(za.za5_vcompr, 0) * NVL(za.za5_ptax, 1)
       END                           AS VLR_RS,
-      NVL(za.za5_ptax, 0)          AS PTAX
+      NVL(za.za5_ptax, 0)           AS PTAX
     FROM protheus11.zo4020         z4,
          protheus11.zo1020         z1,
          protheus11.zo0020         z0,
