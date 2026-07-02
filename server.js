@@ -1458,6 +1458,9 @@ function buildInsumosSQL(opts = {}) {
 
   const sf_za5 = String(za5_safra).replace(/'/g, '');
   const fi_za5 = String(za5_filial).replace(/'/g, '');
+  
+  const baseSafra = parseInt(sf_za5.substring(0, 4)) || 2025;
+  const safraList = `'${baseSafra}1', '${baseSafra}2', '${baseSafra}3'`;
 
   return `
     SELECT DISTINCT
@@ -1505,9 +1508,10 @@ function buildInsumosSQL(opts = {}) {
          safra@PIMSGRAOSAGR        sf
    WHERE z4.zo4_codigo = z0.zo0_codigo
      AND z0.zo0_codemp = '85'
+     AND z0.zo0_anoagr in (${safraList})
      AND z0.zo0_codigo = z1.zo1_codigo
      AND z1.zo1_codpro = b1.b1_cod
-     AND trim(substr(b1.b1_grupo, 1, 4)) = trim(bm.bm_grupo)
+     AND substr(b1.b1_grupo, 1, 4) || '   ' = bm.bm_grupo
      AND ua.id_filial = f.id_filial
      AND f.id_empresa = e.id_empresa
      AND CAST(TRIM(z0.zo0_codagl) AS VARCHAR(6)) = ua.cd_int_erp
@@ -1534,8 +1538,8 @@ function buildInsumosSQL(opts = {}) {
      AND b1.d_e_l_e_t_ = ' '
      AND bm.d_e_l_e_t_ = ' '
      AND b1_grupo like '02%'
-     AND TO_DATE(z0.zo0_data, 'yyyy/mm/dd') >= TO_DATE(REPLACE(:data_de, '-', ''), 'yyyymmdd')
-     AND TO_DATE(z0.zo0_data, 'yyyy/mm/dd') <= TO_DATE(REPLACE(:data_ate, '-', ''), 'yyyymmdd')
+     AND z0.zo0_data >= REPLACE(:data_de, '-', '')
+     AND z0.zo0_data <= REPLACE(:data_ate, '-', '')
      ${extraWhere}
   `;
 }
