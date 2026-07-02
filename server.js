@@ -1344,6 +1344,7 @@ app.post('/api/receita/fechamento', async (req, res) => {
       sacas: Number(sacas || 0),
       qtdNfs: parseInt(qtdNfs || 0),
       funrural: Number(funrural || 0),
+      gta: Number(gta || 0),
       fethab: Number(fethab || 0),
       vlrFacs: Number(vlrFacs || 0),
       dolarMedio: dolarMedio ? Number(dolarMedio) : null,

@@ -14,6 +14,7 @@ CREATE TABLE FECHAMENTO_RECEITA (
   FR_SACAS           NUMBER(18,4),               -- Total de sacas (Quant/60)
   FR_QTD_NFS         NUMBER(10),                 -- Qtd de NFs distintas
   FR_FUNRURAL        NUMBER(18,2),               -- Soma vl_funrural (F2_CONTSOC / F1_CONTSOC)
+  FR_GTA             NUMBER(18,2),               -- GTA
   FR_FETHAB          NUMBER(18,2),               -- Soma Vlr_Fethab (F2_VALFET / D1_VALFET)
   FR_VLR_FACS        NUMBER(18,2),               -- Soma Vlr_Facs (F2_VALFAC / D1_VALFAC)
   FR_AGRO_RECEITA    NUMBER(18,2),               -- Receita Agricultura (B1_GRUPO = '0402008')
