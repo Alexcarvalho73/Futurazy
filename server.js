@@ -842,8 +842,7 @@ app.get('/api/receita/resumo-anual', async (req, res) => {
     const fechadosSQL = `
       SELECT FR_EMPRESA, FR_ANO, FR_MES, FR_RECEITA_TOTAL, FR_SACAS,
              FR_QTD_NFS, FR_FUNRURAL, FR_FETHAB, FR_VLR_FACS,
-             FR_AGRO_RECEITA, FR_AGRO_SACAS, FR_PEC_RECEITA, FR_PEC_SACAS,
-             FR_OUTROS_RECEITA, FR_OUTROS_SACAS, FR_DOLAR_MEDIO, FR_NEGOCIO, FR_DT_FECHAMENTO
+             FR_DOLAR_MEDIO, FR_NEGOCIO, FR_DT_FECHAMENTO
       FROM FECHAMENTO_RECEITA
       WHERE FR_RUBRICA = 'RECEITA'
       ORDER BY FR_ANO, FR_MES
@@ -882,8 +881,16 @@ app.get('/api/receita/resumo-anual', async (req, res) => {
         const tot = fechadosMap[key].Total;
 
         const valBrl = Number(f.FR_RECEITA_TOTAL || 0);
-        const sac = Number(f.FR_SACAS || 0);
-        const cab = Number(f.FR_PEC_SACAS || 0);
+        const qtdSacas = Number(f.FR_SACAS || 0);
+        
+        let sac = 0;
+        let cab = 0;
+        if (negocio === 'Pecuaria') {
+          cab = qtdSacas;
+        } else {
+          sac = qtdSacas;
+        }
+
         const fun = Number(f.FR_FUNRURAL || 0);
         const fet = Number(f.FR_FETHAB || 0);
         const fac = Number(f.FR_VLR_FACS || 0);
@@ -905,45 +912,15 @@ app.get('/api/receita/resumo-anual', async (req, res) => {
         tot.vlrFacs += fac;
         if (dm > 0) tot.dolarMedio = dm;
       } else {
-        // Formato consolidado de linha única
+        // Formato consolidado de linha única (Legado sem segmentação)
         const tot = fechadosMap[key].Total;
         tot.receita = Number(f.FR_RECEITA_TOTAL || 0);
-        tot.sacas = Number(f.FR_SACAS || 0);
-        tot.cabecas = Number(f.FR_PEC_SACAS || 0);
+        tot.sacas = Number(f.FR_SACAS || 0); // Assumimos tudo sacas já que não sabemos
+        tot.cabecas = 0; 
         tot.funrural = Number(f.FR_FUNRURAL || 0);
         tot.fethab = Number(f.FR_FETHAB || 0);
         tot.vlrFacs = Number(f.FR_VLR_FACS || 0);
         tot.dolarMedio = Number(f.FR_DOLAR_MEDIO || 0);
-
-        // Rateio Pecuária
-        const pec = fechadosMap[key].Pecuaria;
-        pec.receita = Number(f.FR_PEC_RECEITA || 0);
-        pec.sacas = 0;
-        pec.cabecas = Number(f.FR_PEC_SACAS || 0);
-        pec.funrural = tot.receita > 0 ? tot.funrural * (pec.receita / tot.receita) : 0;
-        pec.fethab = 0;
-        pec.vlrFacs = 0;
-        pec.dolarMedio = tot.dolarMedio;
-
-        // Rateio Agrícola
-        const agr = fechadosMap[key].Agricola;
-        agr.receita = Number(f.FR_AGRO_RECEITA || 0);
-        agr.sacas = Number(f.FR_AGRO_SACAS || 0);
-        agr.cabecas = 0;
-        agr.funrural = tot.receita > 0 ? tot.funrural * (agr.receita / tot.receita) : 0;
-        agr.fethab = Number(f.FR_FETHAB || 0);
-        agr.vlrFacs = Number(f.FR_VLR_FACS || 0);
-        agr.dolarMedio = tot.dolarMedio;
-
-        // Rateio Outros
-        const out = fechadosMap[key].Outros;
-        out.receita = Number(f.FR_OUTROS_RECEITA || 0);
-        out.sacas = Number(f.FR_OUTROS_SACAS || 0);
-        out.cabecas = 0;
-        out.funrural = tot.receita > 0 ? tot.funrural * (out.receita / tot.receita) : 0;
-        out.fethab = 0;
-        out.vlrFacs = 0;
-        out.dolarMedio = tot.dolarMedio;
       }
     }
 
