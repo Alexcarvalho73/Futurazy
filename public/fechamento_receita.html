@@ -729,6 +729,26 @@
 
       <!-- LISTA DE FECHAMENTOS -->
       <div id="edit-fechamento-list-view">
+        <div style="display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap;">
+          <div class="filter-group" style="flex: 1; min-width: 150px;">
+            <input type="month" id="filter-modal-periodo" class="form-control" title="Filtrar por Mês/Ano">
+          </div>
+          <div class="filter-group" style="flex: 1; min-width: 150px;">
+            <select id="filter-modal-filial" class="form-control" title="Filtrar por Filial">
+              <option value="">Todas as Filiais</option>
+              <option value="028501">028501</option>
+              <option value="028503">028503</option>
+            </select>
+          </div>
+          <div class="filter-group" style="flex: 1; min-width: 150px;">
+            <select id="filter-modal-negocio" class="form-control" title="Filtrar por Negócio">
+              <option value="">Todos os Negócios</option>
+              <option value="Pecuária">Pecuária</option>
+              <option value="Agricultura">Agricultura</option>
+              <option value="Outros">Outros</option>
+            </select>
+          </div>
+        </div>
         <div class="table-wrapper" style="max-height: 400px;">
           <table class="anual-table" style="width: 100%; font-size: 13px;">
             <thead>

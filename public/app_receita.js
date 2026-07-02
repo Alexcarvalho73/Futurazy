@@ -213,6 +213,10 @@ function setupEventListeners() {
   document.getElementById('modal-edit-fechamento')?.addEventListener('click', e => {
     if (e.target.id === 'modal-edit-fechamento') closeEditFechamentoModal();
   });
+
+  document.getElementById('filter-modal-periodo')?.addEventListener('input', filterModalList);
+  document.getElementById('filter-modal-filial')?.addEventListener('change', filterModalList);
+  document.getElementById('filter-modal-negocio')?.addEventListener('change', filterModalList);
 }
 
 // Atualiza labels dinâmicos de moeda na página
@@ -615,23 +619,41 @@ function renderAnualTable() {
 
 
 
+  const tipoFiltro = document.getElementById('f-tipo-negocio').value;
+
   // ── Helpers para obter valor do resumoAnual ──
   function getValor(m, negocio, campo) {
+    if (tipoFiltro === 'Pecuária' && negocio === 'Agricola') return null;
+    if (tipoFiltro === 'Agricultura' && negocio === 'Pecuaria') return null;
+
     if (!state.resumoAnual?.meses) return null;
     const mesData = state.resumoAnual.meses.find(x => x.ano === m.ano && x.mes === m.mes);
     if (!mesData) return null;
     const dEmp = emp === 'TOTAL' ? mesData.porEmpresa['TOTAL'] : mesData.porEmpresa[emp];
     if (!dEmp || !dEmp[negocio]) return null;
-    return Number(dEmp[negocio][campo] ?? 0);
+    
+    let val = Number(dEmp[negocio][campo] ?? 0);
+    if (negocio === 'Total' && tipoFiltro === 'Pecuária') val = Number(dEmp['Pecuaria'][campo] ?? 0);
+    if (negocio === 'Total' && tipoFiltro === 'Agricultura') val = Number(dEmp['Agricola'][campo] ?? 0);
+    
+    return val;
   }
 
   function getValorUsd(m, negocio, campoUsd) {
+    if (tipoFiltro === 'Pecuária' && negocio === 'Agricola') return null;
+    if (tipoFiltro === 'Agricultura' && negocio === 'Pecuaria') return null;
+
     if (!state.resumoAnual?.meses) return null;
     const mesData = state.resumoAnual.meses.find(x => x.ano === m.ano && x.mes === m.mes);
     if (!mesData) return null;
     const dEmp = emp === 'TOTAL' ? mesData.porEmpresa['TOTAL'] : mesData.porEmpresa[emp];
     if (!dEmp || !dEmp[negocio]) return null;
-    return Number(dEmp[negocio][campoUsd] ?? 0);
+    
+    let val = Number(dEmp[negocio][campoUsd] ?? 0);
+    if (negocio === 'Total' && tipoFiltro === 'Pecuária') val = Number(dEmp['Pecuaria'][campoUsd] ?? 0);
+    if (negocio === 'Total' && tipoFiltro === 'Agricultura') val = Number(dEmp['Agricola'][campoUsd] ?? 0);
+    
+    return val;
   }
 
   function getStatus(m) {
@@ -1007,7 +1029,7 @@ async function loadClosedFechamentos() {
     const json = await res.json();
     if (json.success) {
       _closedFechamentosList = json.data;
-      renderClosedFechamentosList(json.data);
+      filterModalList();
     } else {
       body.innerHTML = `<tr><td colspan="5" class="text-center" style="color:var(--color-danger)">Erro: ${json.error}</td></tr>`;
     }
@@ -1015,6 +1037,26 @@ async function loadClosedFechamentos() {
     body.innerHTML = `<tr><td colspan="5" class="text-center" style="color:var(--color-danger)">Erro de conexão.</td></tr>`;
   }
 }
+
+window.filterModalList = function() {
+  const periodo = document.getElementById('filter-modal-periodo').value;
+  const filial = document.getElementById('filter-modal-filial').value;
+  const negocio = document.getElementById('filter-modal-negocio').value;
+  
+  if (!_closedFechamentosList) return;
+  
+  const filtered = _closedFechamentosList.filter(item => {
+    if (periodo) {
+      const [y, m] = periodo.split('-');
+      if (item.FR_ANO != Number(y) || item.FR_MES != Number(m)) return false;
+    }
+    if (filial && item.FR_EMPRESA !== filial) return false;
+    if (negocio && (item.FR_NEGOCIO || 'Pecuária') !== negocio) return false;
+    return true;
+  });
+  
+  renderClosedFechamentosList(filtered);
+};
 
 function renderClosedFechamentosList(data) {
   const body = document.getElementById('edit-fechamento-list-body');
