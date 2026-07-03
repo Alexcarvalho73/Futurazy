@@ -527,6 +527,9 @@
             <i class="fa-solid fa-seedling"></i>
             <span id="label-cal">Safra Agrícola</span>
           </button>
+          <button class="btn btn-secondary" id="btn-open-params-modal" onclick="document.getElementById('modal-params').classList.remove('hidden')">
+            <i class="fa-solid fa-gear"></i>
+          </button>
           <button class="btn btn-secondary" id="btn-refresh">
             <i class="fa-solid fa-rotate"></i> Atualizar
           </button>
@@ -560,33 +563,7 @@
         </div>
       </section>
 
-      <!-- Painel de Parâmetros de Safra -->
-      <section class="params-panel" id="params-panel">
-        <div class="params-panel-title">
-          <i class="fa-solid fa-sliders"></i>
-          Parâmetros de Precificação
-        </div>
-        <div class="params-fields">
-          <div class="param-item">
-            <label>Código Safra (ZA5_SAFRA)</label>
-            <input type="text" id="param-za5-safra" placeholder="Ex: 20251" maxlength="6">
-          </div>
-          <div class="param-item">
-            <label>Filial Preço (ZA5_FILIAL)</label>
-            <input type="text" id="param-za5-filial" placeholder="Ex: 0285" maxlength="6">
-          </div>
-          <div class="param-item">
-            <label>Descrição</label>
-            <input type="text" id="param-descricao" placeholder="Ex: Safra 2024/25" style="width:200px;">
-          </div>
-          <div style="display:flex; gap:8px; align-items:flex-end;">
-            <button class="btn btn-primary btn-sm" id="btn-save-params">
-              <i class="fa-solid fa-floppy-disk"></i> Salvar
-            </button>
-            <span class="param-save-ok" id="param-save-ok"><i class="fa-solid fa-check"></i> Salvo!</span>
-          </div>
-        </div>
-      </section>
+      <!-- Params modal moved to bottom -->
 
       <!-- Filtros -->
       <section class="filters-card filters-collapsed" id="filtros-section">
@@ -890,6 +867,36 @@
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Params -->
+  <div class="modal-container hidden" id="modal-params">
+    <div class="modal-content" style="max-width: 500px; padding:24px; background:var(--bg-card); border-radius:12px; border:1px solid rgba(255,255,255,0.1); width: 100%;">
+      <h2 style="margin-top:0; color:#cbd5e1; font-size:18px;"><i class="fa-solid fa-sliders" style="margin-right:8px; color:#3b82f6;"></i> Parâmetros de Precificação</h2>
+      <div class="params-fields" style="margin-top:20px; display:flex; flex-direction:column; gap:16px;">
+        <div class="param-item" style="display:flex; flex-direction:column; gap:6px;">
+          <label style="font-size:12px; color:#94a3b8; font-weight:600;">Código Safra (ZA5_SAFRA)</label>
+          <input type="text" id="param-za5-safra" placeholder="Ex: 20251" maxlength="6" class="form-control" style="width:100%;">
+        </div>
+        <div class="param-item" style="display:flex; flex-direction:column; gap:6px;">
+          <label style="font-size:12px; color:#94a3b8; font-weight:600;">Filial Preço (ZA5_FILIAL)</label>
+          <input type="text" id="param-za5-filial" placeholder="Ex: 0285" maxlength="6" class="form-control" style="width:100%;">
+        </div>
+        <div class="param-item" style="display:flex; flex-direction:column; gap:6px;">
+          <label style="font-size:12px; color:#94a3b8; font-weight:600;">Descrição</label>
+          <input type="text" id="param-descricao" placeholder="Ex: Safra 2024/25" class="form-control" style="width:100%;">
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top: 10px;">
+          <span class="param-save-ok" id="param-save-ok" style="display:none;color:#10b981;font-size:14px;font-weight:600;"><i class="fa-solid fa-check"></i> Salvo!</span>
+          <div style="display:flex; gap:10px; flex:1; justify-content:flex-end;">
+            <button class="btn btn-secondary" onclick="document.getElementById('modal-params').classList.add('hidden')">Cancelar</button>
+            <button class="btn btn-primary" id="btn-save-params" onclick="setTimeout(()=>document.getElementById('modal-params').classList.add('hidden'), 800)">
+              <i class="fa-solid fa-floppy-disk"></i> Salvar
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
