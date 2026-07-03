@@ -33,48 +33,88 @@ async function init() {
   document.getElementById('val-mes-ref').textContent =
     `${NOMES_MES[hoje.getMonth()]}/${hoje.getFullYear()}`;
 
-  // Buscar fechados da API
-  let fechados = [];
+  // Buscar fechados da API (Receitas)
+  let fechadosReceita = [];
   try {
     const resp = await fetch('/api/receita/fechados');
     const json = await resp.json();
-    if (json.success) fechados = json.data;
+    if (json.success) fechadosReceita = json.data;
   } catch(e) {
-    console.warn('Não foi possível carregar fechados:', e.message);
+    console.warn('Não foi possível carregar fechados Receita:', e.message);
   }
 
-  // Conjunto de meses fechados (qualquer empresa)
-  const fechadosSet = new Set(fechados.map(f => `${f.FR_ANO}_${f.FR_MES}`));
+  // Conjunto de meses fechados Receita
+  const fechadosSetReceita = new Set(fechadosReceita.map(f => `${f.FR_ANO}_${f.FR_MES}`));
+
+  // Buscar fechados da API (Insumos)
+  let fechadosInsumos = [];
+  try {
+    const resp = await fetch('/api/insumos/fechados');
+    const json = await resp.json();
+    if (json.success) fechadosInsumos = json.data;
+  } catch(e) {
+    console.warn('Não foi possível carregar fechados Insumos:', e.message);
+  }
+
+  // Conjunto de meses fechados Insumos
+  const fechadosSetInsumos = new Set(fechadosInsumos.map(f => `${f.FI_ANO}_${f.FI_MES}`));
 
   const hoje2    = new Date();
   const mesAtual = { ano: hoje2.getFullYear(), mes: hoje2.getMonth() + 1 };
   const prevD    = new Date(hoje2.getFullYear(), hoje2.getMonth() - 1, 1);
   const mesAnt   = { ano: prevD.getFullYear(), mes: prevD.getMonth() + 1 };
 
-  let qtdFechados = 0, qtdPendentes = 0;
-  const pillsHtml = meses.map(m => {
+  // ==========================================
+  // Renderizar Receitas
+  // ==========================================
+  let qtdFechadosReceita = 0, qtdPendentesReceita = 0;
+  const pillsHtmlReceita = meses.map(m => {
     const isFuturo  = new Date(m.ano, m.mes - 1, 1) > hoje2;
     const isAtual   = m.ano === mesAtual.ano && m.mes === mesAtual.mes;
-    const fechado   = fechadosSet.has(`${m.ano}_${m.mes}`);
+    const fechado   = fechadosSetReceita.has(`${m.ano}_${m.mes}`);
     const label     = NOMES_MES[m.mes - 1];
 
     let cls = 'pill-futuro';
-    if (fechado)        { cls = 'pill-fechado';  qtdFechados++; }
+    if (fechado)        { cls = 'pill-fechado';  qtdFechadosReceita++; }
     else if (isAtual)   { cls = 'pill-atual'; }
-    else if (!isFuturo) { cls = 'pill-pendente'; qtdPendentes++; }
+    else if (!isFuturo) { cls = 'pill-pendente'; qtdPendentesReceita++; }
 
     return `<div class="mes-pill ${cls}" title="${label}/${m.ano}">${label.substring(0,3)}</div>`;
   }).join('');
 
-  document.getElementById('pills-receitas').innerHTML = pillsHtml;
-  document.getElementById('val-fechados').textContent  = qtdFechados;
-  document.getElementById('val-pendentes').textContent = qtdPendentes;
+  document.getElementById('pills-receitas').innerHTML = pillsHtmlReceita;
+  document.getElementById('val-fechados').textContent  = qtdFechadosReceita;
+  document.getElementById('val-pendentes').textContent = qtdPendentesReceita;
 
-  // Barra de progresso Receitas
-  const pct = Math.round((qtdFechados / 12) * 100);
-  document.getElementById('bar-receitas').style.width = pct + '%';
+  const pctReceita = Math.round((qtdFechadosReceita / 12) * 100);
+  document.getElementById('bar-receitas').style.width = pctReceita + '%';
   document.getElementById('pct-receitas').textContent =
-    `${qtdFechados}/12 meses (${pct}%)`;
+    `${qtdFechadosReceita}/12 meses (${pctReceita}%)`;
+
+  // ==========================================
+  // Renderizar Insumos
+  // ==========================================
+  let qtdFechadosInsumos = 0, qtdPendentesInsumos = 0;
+  const pillsHtmlInsumos = meses.map(m => {
+    const isFuturo  = new Date(m.ano, m.mes - 1, 1) > hoje2;
+    const isAtual   = m.ano === mesAtual.ano && m.mes === mesAtual.mes;
+    const fechado   = fechadosSetInsumos.has(`${m.ano}_${m.mes}`);
+    const label     = NOMES_MES[m.mes - 1];
+
+    let cls = 'pill-futuro';
+    if (fechado)        { cls = 'pill-fechado';  qtdFechadosInsumos++; }
+    else if (isAtual)   { cls = 'pill-atual'; }
+    else if (!isFuturo) { cls = 'pill-pendente'; qtdPendentesInsumos++; }
+
+    return `<div class="mes-pill ${cls}" title="${label}/${m.ano}">${label.substring(0,3)}</div>`;
+  }).join('');
+
+  document.getElementById('pills-insumos').innerHTML = pillsHtmlInsumos;
+
+  const pctInsumos = Math.round((qtdFechadosInsumos / 12) * 100);
+  document.getElementById('bar-insumos').style.width = pctInsumos + '%';
+  document.getElementById('pct-insumos').textContent =
+    `${qtdFechadosInsumos}/12 meses (${pctInsumos}%)`;
 }
 
 document.addEventListener('DOMContentLoaded', init);

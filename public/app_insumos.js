@@ -10,12 +10,13 @@
 // ─────────────────────────────────────────────
 const NOMES_MES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 
-const TIPO_CONFIG = {
-  'DEFENSIVOS':    { badge: 'badge-def',  cor: '#a78bfa', icon: '🛡️' },
-  'FERTILIZANTES': { badge: 'badge-fert', cor: '#10b981', icon: '🧪' },
-  'SEMENTES':      { badge: 'badge-sem',  cor: '#f59e0b', icon: '🌱' },
-  'OUTROS':        { badge: 'badge-out',  cor: '#94a3b8', icon: '📦' },
-};
+function getTipoConfig(tipoName) {
+  const t = (tipoName || '').toUpperCase();
+  if (t.includes('DEFENS')) return { badge: 'badge-def',  cor: '#a78bfa', icon: '🛡️' };
+  if (t.includes('FERTIL')) return { badge: 'badge-fert', cor: '#10b981', icon: '🧪' };
+  if (t.includes('SEMENT')) return { badge: 'badge-sem',  cor: '#f59e0b', icon: '🌱' };
+  return { badge: 'badge-out',  cor: '#94a3b8', icon: '📦' };
+}
 
 const state = {
   tipoCalendario: 'safra',   // 'safra' | 'calendario'
@@ -81,6 +82,12 @@ async function loadTiposInsumo() {
     const res = await fetch('/api/insumos/tipos').then(r => r.json());
     if (res.success && res.data) {
       const select = document.getElementById('f-tipo-insumo');
+      const selectEdit = document.getElementById('edit-fi-tipo');
+      
+      if (selectEdit) {
+        selectEdit.innerHTML = '<option value="TOTAL">Total Geral</option>';
+      }
+      
       if (select) {
         // Remove existing options except the first one ('todos')
         while (select.options.length > 1) {
@@ -96,6 +103,13 @@ async function loadTiposInsumo() {
           else if (t.BM_DESC.includes('SEMENT')) icon = '🌱';
           opt.textContent = `${icon} ${t.BM_DESC}`;
           select.appendChild(opt);
+
+          if (selectEdit) {
+            const optEdit = document.createElement('option');
+            optEdit.value = t.BM_DESC.trim().toUpperCase(); // Para salvar no banco
+            optEdit.textContent = `${icon} ${t.BM_DESC}`;
+            selectEdit.appendChild(optEdit);
+          }
         });
       }
     }
@@ -230,6 +244,13 @@ function setupEventListeners() {
   // Modal fechar
   document.getElementById('btn-cancel-fechar')?.addEventListener('click', closeModal);
   document.getElementById('btn-confirm-fechar')?.addEventListener('click', confirmarFechamento);
+
+  // Modal Excluir
+  document.getElementById('btn-cancel-excluir')?.addEventListener('click', () => {
+    document.getElementById('modal-excluir').classList.remove('open');
+    pendingDeleteId = null;
+  });
+  document.getElementById('btn-confirm-excluir')?.addEventListener('click', confirmDeleteFechamento);
 
   // Modal ajustes manuais
   document.getElementById('btn-open-edit-fechamento')?.addEventListener('click', () => {
@@ -451,11 +472,31 @@ function updateKpis(data) {
   };
 
   const usarUsd = state.moeda === 'USD';
-  set('kpi-custo-total', fmtMoeda(usarUsd ? custoUsd : custoTotal), periodoLabel);
+  set('kpi-custo-total', fmtMoedaBrl(custoTotal), periodoLabel);
   set('kpi-custo-usd',   'US$ ' + fmtUsd.format(custoUsd), periodoLabel);
-  set('kpi-defensivo',   fmtMoeda(usarUsd ? (porTipo['DEFENSIVOS']?.usd||0) : (porTipo['DEFENSIVOS']?.brl||0)), periodoLabel);
-  set('kpi-fertilizante',fmtMoeda(usarUsd ? (porTipo['FERTILIZANTES']?.usd||0) : (porTipo['FERTILIZANTES']?.brl||0)), periodoLabel);
-  set('kpi-semente',     fmtMoeda(usarUsd ? (porTipo['SEMENTES']?.usd||0) : (porTipo['SEMENTES']?.brl||0)), periodoLabel);
+
+  const dynKpis = document.getElementById('dynamic-kpis');
+  if (dynKpis) {
+    const tipos = Object.keys(porTipo).sort((a, b) => a.localeCompare(b));
+    let html = '';
+    for (const tipo of tipos) {
+      const cfg = getTipoConfig(tipo);
+      const val = usarUsd ? (porTipo[tipo]?.usd||0) : (porTipo[tipo]?.brl||0);
+      html += `
+        <div class="kpi-card">
+          <div class="kpi-icon" style="background:${cfg.cor}1a;color:${cfg.cor};font-size:1.5rem;">
+            ${cfg.icon}
+          </div>
+          <div class="kpi-data">
+            <h3>${escHtml(tipo)}</h3>
+            <h2>${fmtMoeda(val)}</h2>
+            <span class="kpi-sub">${escHtml(periodoLabel)}</span>
+          </div>
+        </div>
+      `;
+    }
+    dynKpis.innerHTML = html;
+  }
 }
 
 // ─────────────────────────────────────────────
@@ -494,114 +535,12 @@ function renderCube(data) {
   const rows = [];
   let uid = 0;
 
-  // Ordena os tipos encontrados nos dados, dando prioridade para as categorias principais
-  const defaultOrder = ['DEFENSIVOS', 'FERTILIZANTES', 'SEMENTES'];
-  const tiposOrdem = Object.keys(tree).sort((a, b) => {
-    const idxA = defaultOrder.indexOf(a);
-    const idxB = defaultOrder.indexOf(b);
-    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-    if (idxA !== -1) return -1;
-    if (idxB !== -1) return 1;
-    return a.localeCompare(b);
-  });
+    const tiposOrdem = Object.keys(tree).sort((a, b) => a.localeCompare(b));
 
-  for (const tipo of tiposOrdem) {
-    const T    = tree[tipo];
-    const cfg  = TIPO_CONFIG[tipo] || TIPO_CONFIG['OUTROS'];
-    const tipoId = `tipo-${uid++}`;
-    const tipoChildren = [];
-
-    for (const [subgrp, S] of Object.entries(T.subgrupos)) {
-      const subgrpId = `sg-${uid++}`;
-      const subChildren = [];
-
-      for (const [prod, P] of Object.entries(S.produtos)) {
-        const prodId = `pr-${uid++}`;
-        // Linha de produto (lvl-2), sem filhos para não poluir
-        const valDisplay  = state.moeda === 'USD' ? P._usd : P._brl;
-        const valOther    = state.moeda === 'USD' ? P._brl : P._usd;
-        // Primeira linha de detalhe para mostrar fazenda/talhão/data
-        const rowEx = P.rows[0] || {};
-        subChildren.push(`
-          <tr class="lvl-2" data-parent="${subgrpId}" data-id="${prodId}">
-            <td><span class="toggle-btn" onclick="toggleRows('${prodId}')">▶</span>${escHtml(prod)}</td>
-            <td class="text-right">${escHtml(rowEx.FAZENDA || '—')}</td>
-            <td class="text-right">${fmtN(P._consumo)}</td>
-            <td class="text-right">${fmtMoeda(valDisplay)}</td>
-            <td class="text-right">${fmtMoeda(valOther)}</td>
-            <td class="text-right">—</td>
-            <td class="text-right">—</td>
-            <td>—</td>
-            <td>—</td>
-          </tr>
-        `);
-
-        // Linhas de detalhe (lvl-3)
-        for (const row of P.rows) {
-          const ddata = row.DDATA ? formatDate(row.DDATA) : '—';
-          const vlrBrl = Number(row.VLR_BRL || 0);
-          const vlrUsd = Number(row.VLR_USD || 0);
-          const cBrl   = Number(row.CUSTO_BRL || 0);
-          const cUsd   = Number(row.CUSTO_USD || 0);
-          const displayVal = state.moeda === 'USD' ? cUsd : cBrl;
-          const otherVal   = state.moeda === 'USD' ? cBrl : cUsd;
-          subChildren.push(`
-            <tr class="lvl-3 row-hidden" data-parent="${prodId}">
-              <td style="padding-left:100px !important;font-style:italic;">${escHtml(row.O_S || '—')}</td>
-              <td class="text-right">${escHtml(row.FAZENDA || '—')}</td>
-              <td class="text-right">${fmtN(row.CONSUMO)}</td>
-              <td class="text-right">${fmtMoeda(displayVal)}</td>
-              <td class="text-right">${fmtMoeda(otherVal)}</td>
-              <td class="text-right">${fmtMoedaBrl(vlrBrl)}</td>
-              <td class="text-right">${fmtMoedaUsd(vlrUsd)}</td>
-              <td>${escHtml(row.TALHAO || '—')}</td>
-              <td>${ddata}</td>
-            </tr>
-          `);
-        }
-      }
-
-      const sgValDisplay = state.moeda === 'USD' ? S._usd : S._brl;
-      const sgValOther   = state.moeda === 'USD' ? S._brl : S._usd;
-      rows.push(`
-        <tr class="lvl-1 row-hidden" data-parent="${tipoId}" data-id="${subgrpId}">
-          <td><span class="toggle-btn" onclick="toggleRows('${subgrpId}')">▶</span>${escHtml(subgrp)}</td>
-          <td class="text-right">—</td>
-          <td class="text-right">${fmtN(S._consumo)}</td>
-          <td class="text-right">${fmtMoeda(sgValDisplay)}</td>
-          <td class="text-right">${fmtMoeda(sgValOther)}</td>
-          <td class="text-right">—</td>
-          <td class="text-right">—</td>
-          <td colspan="2">—</td>
-        </tr>
-      `);
-      rows.push(...subChildren);
-    }
-
-    const tValDisplay = state.moeda === 'USD' ? T._usd : T._brl;
-    const tValOther   = state.moeda === 'USD' ? T._brl : T._usd;
-    rows.unshift(`
-      <tr class="lvl-0" data-id="${tipoId}">
-        <td><span class="toggle-btn" onclick="toggleRows('${tipoId}')">▶</span>
-          <span class="${cfg.badge}" style="margin-right:6px;">${cfg.icon} ${tipo}</span>
-        </td>
-        <td class="text-right">—</td>
-        <td class="text-right">${fmtN(T._consumo)}</td>
-        <td class="text-right">${fmtMoeda(tValDisplay)}</td>
-        <td class="text-right">${fmtMoeda(tValOther)}</td>
-        <td class="text-right">—</td>
-        <td class="text-right">—</td>
-        <td colspan="2">—</td>
-      </tr>
-    `);
-    // A lógica de inserção acima fica errada; refazemos de forma sequencial:
-  }
-
-  // Rebuild sequencial correto
   const finalRows = [];
   for (const tipo of tiposOrdem) {
     const T   = tree[tipo];
-    const cfg = TIPO_CONFIG[tipo] || TIPO_CONFIG['OUTROS'];
+    const cfg = getTipoConfig(tipo);
     const tipoId = `tipo_${uid++}`;
     const tValUsd = T._usd;
     const tValBrl = T._brl;
@@ -674,11 +613,11 @@ function renderCube(data) {
 
   // Grand totals
   const elC   = document.getElementById('tot-consumo');
-  const elT   = document.getElementById('tot-custo-usd');
-  const elTU  = document.getElementById('tot-custo');
-  if (elC)  elC.textContent  = fmtN(grandConsumo);
-  if (elT)  elT.textContent  = fmtMoedaUsd(grandUsd);
-  if (elTU) elTU.textContent = fmtMoedaBrl(grandBrl);
+  const elUsd = document.getElementById('tot-usd');
+  const elBrl = document.getElementById('tot-brl');
+  if (elC)   elC.textContent   = fmtN(grandConsumo);
+  if (elUsd) elUsd.textContent = fmtMoedaUsd(grandUsd);
+  if (elBrl) elBrl.textContent = fmtMoedaBrl(grandBrl);
 }
 
 function toggleRows(parentId) {
@@ -755,34 +694,17 @@ function renderAnualTable() {
     const empData = mesData.porEmpresa?.[emp] || mesData.porEmpresa?.['TOTAL'] || {};
     const v = empData.porTipo?.[tipo];
     if (!v) return null;
-    if (usarUsd) {
-      const ptax = empData.ptaxMedio || 0;
-      return ptax > 0 ? (v.custoBrl / ptax) : 0;
-    }
-    return v.custoBrl || 0;
+    return usarUsd ? (v.custoUsd || 0) : (v.custoBrl || 0);
   }
   function getTotalVal(mesData) {
     const empData = mesData.porEmpresa?.[emp] || mesData.porEmpresa?.['TOTAL'] || {};
-    if (usarUsd) {
-      const ptax = empData.ptaxMedio || 0;
-      return ptax > 0 ? (empData.totalBrl / ptax) : 0;
-    }
-    return empData.totalBrl || 0;
+    return usarUsd ? (empData.totalUsd || 0) : (empData.totalBrl || 0);
   }
 
-  // Ordenar tipos, dando prioridade para DEFENSIVO, FERTILIZANTE, SEMENTE
-  const defaultOrder = ['DEFENSIVOS','FERTILIZANTES','SEMENTES'];
-  const tiposOrdem = [...allTipos].sort((a, b) => {
-    const idxA = defaultOrder.indexOf(a);
-    const idxB = defaultOrder.indexOf(b);
-    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-    if (idxA !== -1) return -1;
-    if (idxB !== -1) return 1;
-    return a.localeCompare(b);
-  });
+  const tiposOrdem = [...allTipos].sort((a, b) => a.localeCompare(b));
 
   for (const tipo of tiposOrdem) {
-    const cfg = TIPO_CONFIG[tipo] || TIPO_CONFIG['OUTROS'];
+    const cfg = getTipoConfig(tipo);
 
     // Linha do tipo (subtotal)
     let tipoRowTotal = 0;
@@ -1060,7 +982,7 @@ function openNewFechamentoForm() {
   document.getElementById('edit-fi-id').value        = '';
   document.getElementById('edit-fi-periodo').value   = '';
   document.getElementById('edit-fi-filial').value    = '028501';
-  document.getElementById('edit-fi-tipo').value      = 'DEFENSIVO';
+  document.getElementById('edit-fi-tipo').value = 'TOTAL';
   document.getElementById('edit-fi-custo-brl').value = '';
   document.getElementById('edit-fi-ptax').value      = '';
   document.getElementById('edit-fi-obs').value       = '';
@@ -1119,18 +1041,36 @@ async function saveFechamentoForm() {
   }
 }
 
-async function deleteFechamento(id) {
-  if (!confirm('Confirma exclusão deste fechamento?')) return;
+let pendingDeleteId = null;
+
+function deleteFechamento(id) {
+  pendingDeleteId = id;
+  document.getElementById('modal-excluir').classList.add('open');
+}
+
+async function confirmDeleteFechamento() {
+  if (!pendingDeleteId) return;
+  const id = pendingDeleteId;
+  const btn = document.getElementById('btn-confirm-excluir');
+  const originalHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Excluindo...';
+
   try {
     const res = await fetch(`/api/insumos/fechamento/${id}`, { method: 'DELETE' }).then(r => r.json());
     if (res.success) {
       await loadClosedFechamentos();
       showToast('Registro excluído.', 'success');
+      document.getElementById('modal-excluir').classList.remove('open');
     } else {
       alert('Erro: ' + res.error);
     }
   } catch (err) {
     alert('Erro: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalHtml;
+    pendingDeleteId = null;
   }
 }
 

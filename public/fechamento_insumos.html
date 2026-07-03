@@ -555,35 +555,8 @@
             <span class="kpi-sub" id="kpi-custo-usd-sub">Cotação parametrizada</span>
           </div>
         </div>
-        <div class="kpi-card">
-          <div class="kpi-icon" style="background:rgba(139,92,246,.12);color:#a78bfa;">
-            <i class="fa-solid fa-shield-virus"></i>
-          </div>
-          <div class="kpi-data">
-            <h3>Defensivos</h3>
-            <h2 id="kpi-defensivo">—</h2>
-            <span class="kpi-sub" id="kpi-defensivo-sub">Total do período</span>
-          </div>
-        </div>
-        <div class="kpi-card">
-          <div class="kpi-icon" style="background:rgba(16,185,129,.12);color:#10b981;">
-            <i class="fa-solid fa-flask-vial"></i>
-          </div>
-          <div class="kpi-data">
-            <h3>Fertilizantes</h3>
-            <h2 id="kpi-fertilizante">—</h2>
-            <span class="kpi-sub" id="kpi-fertilizante-sub">Total do período</span>
-          </div>
-        </div>
-        <div class="kpi-card">
-          <div class="kpi-icon" style="background:rgba(245,158,11,.12);color:#f59e0b;">
-            <i class="fa-solid fa-seedling"></i>
-          </div>
-          <div class="kpi-data">
-            <h3>Sementes</h3>
-            <h2 id="kpi-semente">—</h2>
-            <span class="kpi-sub" id="kpi-semente-sub">Total do período</span>
-          </div>
+        <div id="dynamic-kpis" style="display:contents;">
+          <!-- Dynamic KPIs will be injected here -->
         </div>
       </section>
 
@@ -722,13 +695,13 @@
             </tbody>
             <tfoot>
               <tr class="grand-total-row" id="cube-gd-total">
-                <td>Total Geral</td>
-                <td class="text-right">—</td>
-                <td class="text-right" id="tot-consumo">0</td>
-                <td class="text-right" id="tot-custo">R$ 0,00</td>
-                <td class="text-right" id="tot-custo-usd">—</td>
-                <td class="text-right">—</td>
-                <td class="text-right">—</td>
+                  <td>Total Geral</td>
+                  <td class="text-right">—</td>
+                  <td class="text-right" id="tot-consumo">0</td>
+                  <td class="text-right" id="tot-usd">US$ 0.00</td>
+                  <td class="text-right" id="tot-brl">R$ 0,00</td>
+                  <td class="text-right">—</td>
+                  <td class="text-right">—</td>
                 <td colspan="2"></td>
               </tr>
             </tfoot>
@@ -787,9 +760,28 @@
     </div>
   </div>
 
+  <!-- Modal Confirmar Exclusão -->
+  <div class="modal-overlay" id="modal-excluir" style="z-index: 110;">
+    <div class="modal-box">
+      <div class="modal-icon" style="background: rgba(239,68,68,.15); color: #f87171;"><i class="fa-solid fa-trash"></i></div>
+      <div class="modal-title">Confirmar Exclusão</div>
+      <div class="modal-body">
+        Você tem certeza que deseja excluir este registro?
+      </div>
+      <div class="modal-actions" style="margin-top: 20px;">
+        <button class="btn btn-secondary" id="btn-cancel-excluir">
+          <i class="fa-solid fa-xmark"></i> Cancelar
+        </button>
+        <button class="btn btn-primary" id="btn-confirm-excluir" style="background: #ef4444; border-color: #ef4444;">
+          <i class="fa-solid fa-trash"></i> Excluir
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal de Ajustes Manuais -->
   <div class="modal-overlay" id="modal-edit-fechamento">
-    <div class="modal-box" style="max-width: 860px; width: 95%; max-height: 90vh; overflow-y: auto;">
+    <div class="modal-box" style="max-width: 1100px; width: 95%; max-height: 90vh; overflow-y: auto;">
       <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; margin-bottom: 16px;">
         <h2 class="modal-title" style="margin: 0; text-align: left; display: flex; align-items: center; gap: 8px;">
           <i class="fa-solid fa-pen-to-square" style="color: #f87171;"></i> Ajustes Manuais — FECHAMENTO_INSUMOS
@@ -868,10 +860,7 @@
             <div class="filter-group">
               <label>Tipo Insumo</label>
               <select id="edit-fi-tipo" class="form-control" required>
-                <option value="DEFENSIVO">Defensivos</option>
-                <option value="FERTILIZANTE">Fertilizantes</option>
-                <option value="SEMENTE">Sementes</option>
-                <option value="TOTAL">Total</option>
+                <!-- Preenchido via loadTiposInsumo() -->
               </select>
             </div>
           </div>

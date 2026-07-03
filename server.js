@@ -962,8 +962,7 @@ app.get('/api/receita/resumo-anual', async (req, res) => {
     // 2. Identificar meses dinâmicos
     const dinâmicos = meses.filter(m => {
       const isFuturo = new Date(m.ano, m.mes - 1, 1) > hoje;
-      if (isFuturo) return false;
-      if (hasDetailFilter) return true; // Se tem filtro de detalhe, todos os meses passados/atuais são dinâmicos!
+      if (isFuturo) return false; // Se tem filtro de detalhe, todos os meses passados/atuais são dinâmicos!
       if (m.ano === mesAtual.ano && m.mes === mesAtual.mes) return true;
       if (m.ano === mesAnterior.ano && m.mes === mesAnterior.mes) return true;
       return false;
@@ -1001,7 +1000,7 @@ app.get('/api/receita/resumo-anual', async (req, res) => {
         const keyFech = `${emp}_${m.ano}_${m.mes}`;
         const f = fechadosMap[keyFech];
 
-        if (f && !hasDetailFilter) {
+        if (f) {
           porEmpresa[emp] = {
             Pecuaria: { ...f.Pecuaria },
             Agricola: { ...f.Agricola },
@@ -1099,7 +1098,7 @@ app.get('/api/receita/resumo-anual', async (req, res) => {
         }
         total.status = 'fechado';
         total.dtFechamento = f1.dtFechamento || f2.dtFechamento;
-      } else if (isTodasClosed && !hasDetailFilter) {
+      } else if (isTodasClosed) {
         statusTotal = 'fechado';
         total = {
           Pecuaria: { ...fTodas.Pecuaria },
@@ -1128,6 +1127,21 @@ app.get('/api/receita/resumo-anual', async (req, res) => {
           st.vlrFacsUsd = s1.vlrFacsUsd + s2.vlrFacsUsd;
           st.dolarMedio = st.receitaUsd > 0 ? st.receita / st.receitaUsd : 0;
         }
+
+        const f1Closed = porEmpresa['028501'].status === 'fechado';
+        const f2Closed = porEmpresa['028503'].status === 'fechado';
+        
+        const f1HasData = porEmpresa['028501'].Total.receita > 0 || porEmpresa['028501'].Total.sacas > 0 || porEmpresa['028501'].Total.cabecas > 0;
+        const f2HasData = porEmpresa['028503'].Total.receita > 0 || porEmpresa['028503'].Total.sacas > 0 || porEmpresa['028503'].Total.cabecas > 0;
+
+        if ((f1Closed || !f1HasData) && (f2Closed || !f2HasData) && (f1HasData || f2HasData)) {
+          statusTotal = 'fechado';
+        } else if (total.Total.receita > 0 || total.Total.sacas > 0 || total.Total.cabecas > 0) {
+          if (statusTotal === 'aguardando') {
+            statusTotal = 'dinamico_anterior';
+          }
+        }
+
         total.status = statusTotal;
       }
       porEmpresa['TOTAL'] = total;
@@ -1596,25 +1610,28 @@ function agregarInsumosPorMes(rows) {
     const key = `${emp}_${ano}_${mes}`;
     if (!map[key]) {
       map[key] = {
-        empresa: emp, ano, mes,
-        totalBrl: 0, ptaxSumPeso: 0, ptaxPeso: 0, // para média ponderada
+          empresa: emp, ano, mes,
+          totalBrl: 0, totalUsd: 0, ptaxSumPeso: 0, ptaxPeso: 0, // para média ponderada
         porTipo: {}, subgrupos: {}
       };
     }
     const M = map[key];
-
-    const brl  = Number(r.CUSTO_BRL || 0);
-    const ptax = Number(r.PTAX || 0);
-
-    M.totalBrl += brl;
-    // Média ponderada de PTAX pelo custo BRL
-    if (ptax > 0 && brl > 0) {
-      M.ptaxSumPeso += brl;       // soma dos pesos
-      M.ptaxPeso    += brl * ptax; // soma ponderada
-    }
-
-    if (!M.porTipo[tipo])  M.porTipo[tipo]  = { custoBrl: 0 };
-    M.porTipo[tipo].custoBrl += brl;
+  
+      const brl  = Number(r.CUSTO_BRL || 0);
+      const usd  = Number(r.CUSTO_USD || 0);
+      const ptax = Number(r.PTAX || 0);
+  
+      M.totalBrl += brl;
+      M.totalUsd = (M.totalUsd || 0) + usd;
+      // Média ponderada de PTAX pelo custo BRL
+      if (ptax > 0 && brl > 0) {
+        M.ptaxSumPeso += brl;       // soma dos pesos
+        M.ptaxPeso    += brl * ptax; // soma ponderada
+      }
+  
+      if (!M.porTipo[tipo])  M.porTipo[tipo]  = { custoBrl: 0, custoUsd: 0 };
+      M.porTipo[tipo].custoBrl += brl;
+      M.porTipo[tipo].custoUsd += usd;
 
     if (!M.subgrupos[tipo]) M.subgrupos[tipo] = {};
     if (!M.subgrupos[tipo][subgrp]) M.subgrupos[tipo][subgrp] = { custoBrl: 0 };
@@ -1729,18 +1746,19 @@ app.get('/api/insumos/resumo-anual', async (req, res) => {
       const M   = fechadosMap[key];
       const brl = Number(f.FI_CUSTO_TOTAL || 0);
       const ptax = Number(f.FI_PTAX   || 0);
+      const usd = ptax > 0 ? (brl / ptax) : 0;
       const tipo = (f.FI_TIPO_INSUMO || 'TOTAL').toUpperCase();
 
       if (tipo !== 'TOTAL') {
         M.totalBrl += brl;
-        if (!M.porTipo[tipo]) M.porTipo[tipo] = { custoBrl: 0 };
+        M.totalUsd = (M.totalUsd || 0) + usd;
+        if (!M.porTipo[tipo]) M.porTipo[tipo] = { custoBrl: 0, custoUsd: 0 };
         M.porTipo[tipo].custoBrl += brl;
-        // PTAX não agregamos iterativamente aqui pois no FECHAMENTO ele já é gravado por tipo e pro TOTAL.
-        // Pegaremos o ptaxMedio diretamente da linha TOTAL.
+        M.porTipo[tipo].custoUsd += usd;
         if (!M.subgrupos[tipo]) M.subgrupos[tipo] = {};
       } else {
-        // Registro consolidado
         M.totalBrl = brl;
+        M.totalUsd = usd;
         M.ptaxMedio = ptax;
       }
     }
@@ -1750,7 +1768,6 @@ app.get('/api/insumos/resumo-anual', async (req, res) => {
     const dinamicos = meses.filter(m => {
       const isFuturo = new Date(m.ano, m.mes - 1, 1) > hoje;
       if (isFuturo) return false;
-      if (hasDetailFilter) return true;
       if (m.ano === mesAtual.ano    && m.mes === mesAtual.mes)    return true;
       if (m.ano === mesAnterior.ano && m.mes === mesAnterior.mes) return true;
       return false;
@@ -1803,9 +1820,10 @@ app.get('/api/insumos/resumo-anual', async (req, res) => {
         const keyFech = `${emp}_${m.ano}_${m.mes}`;
         const f = fechadosMap[keyFech];
 
-        if (f && !hasDetailFilter) {
+        if (f) {
           porEmpresa[emp] = {
             totalBrl: f.totalBrl,
+            totalUsd: f.totalUsd || 0,
             ptaxMedio: f.ptaxMedio,
             porTipo:  { ...f.porTipo },
             subgrupos: { ...f.subgrupos },
@@ -1833,6 +1851,7 @@ app.get('/api/insumos/resumo-anual', async (req, res) => {
       for (const emp of ['028501', '028503']) {
         const e = porEmpresa[emp];
         t.totalBrl += e.totalBrl;
+        t.totalUsd = (t.totalUsd || 0) + (e.totalUsd || 0);
         if (e.ptaxMedio > 0 && e.totalBrl > 0) {
            // para média ponderada global (usando var auxiliar para acumular pesos)
            if (!t._ptaxSumPeso) t._ptaxSumPeso = 0;
@@ -1842,8 +1861,9 @@ app.get('/api/insumos/resumo-anual', async (req, res) => {
         }
         // Merge porTipo
         for (const [tipo, v] of Object.entries(e.porTipo || {})) {
-          if (!t.porTipo[tipo]) t.porTipo[tipo] = { custoBrl: 0 };
+          if (!t.porTipo[tipo]) t.porTipo[tipo] = { custoBrl: 0, custoUsd: 0 };
           t.porTipo[tipo].custoBrl += v.custoBrl || 0;
+          t.porTipo[tipo].custoUsd += v.custoUsd || 0;
         }
         // Merge subgrupos
         for (const [tipo, subs] of Object.entries(e.subgrupos || {})) {

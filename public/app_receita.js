@@ -838,8 +838,11 @@ function renderAnualTable() {
   rows += renderMetricaRow('💵 Valor Dólar', 'dolarMedio', null, v => fmtCot.format(v), false, true);
 
   // ── Linha de Status ──────────────────────────
-  rows += `<tr class="section-row"><td colspan="53" style="font-weight:700;background:rgba(255,255,255,0.02);padding:6px 10px;">Status de Fechamento</td></tr>`;
-  rows += '<tr class="status-row"><td>Status</td>';
+  rows += `<tr class="section-row">
+      <td class="sticky-col" style="font-weight:700;background:rgba(255,255,255,0.02);padding:6px 10px;text-transform:uppercase;">Status de Fechamento</td>
+      <td colspan="39" style="background:rgba(255,255,255,0.02);"></td>
+    </tr>`;
+  rows += '<tr class="status-row"><td class="sticky-col">Status</td>';
   for (const m of meses) {
     const isFuturo   = new Date(m.ano, m.mes-1, 1) > hoje;
     const isAtual    = m.ano === mesAtual.ano   && m.mes === mesAtual.mes;
@@ -851,16 +854,16 @@ function renderAnualTable() {
 
     let icon = '—';
     if      (status === 'fechado')             icon = '<span style="color:#10b981;font-size:12px;">✅ Fechado</span>';
-    else if (status === 'dinamico_atual')       icon = '<span style="color:#3b82f6;font-size:12px;">🟡 Em Curso</span>';
-    else if (status === 'dinamico_anterior')    icon = '<span style="color:#f59e0b;font-size:12px;">🔴 Pendente</span>';
-    else if (status === 'aguardando')           icon = '<span style="color:#64748b;font-size:12px;">⬜ Sem dados</span>';
+    else if (status === 'dinamico_atual')       icon = '<span style="color:#3b82f6;font-size:12px;">⏳ Em Curso</span>';
+    else if (status === 'dinamico_anterior')    icon = '<span style="color:#f59e0b;font-size:12px;">⚠️ Pendente</span>';
+    else if (status === 'aguardando')           icon = '<span style="color:#64748b;font-size:12px;">✖ Sem dados</span>';
 
-    rows += `<td class="${cls}" colspan="4" style="text-align:center;">${icon}</td>`;
+    rows += `<td class="${cls}" colspan="3" style="text-align:center;">${icon}</td>`;
   }
-  rows += '<td class="col-total" colspan="4" style="text-align:center;">—</td></tr>';
+  rows += '<td class="col-total" colspan="3" style="text-align:center;">—</td></tr>';
 
   // ── Linha de Ações ────────────────────────────
-  rows += '<tr class="action-row"><td>Ação</td>';
+  rows += '<tr class="action-row"><td class="sticky-col">Ação</td>';
   for (const m of meses) {
     const isFuturo   = new Date(m.ano, m.mes-1, 1) > hoje;
     const isAnterior = m.ano === mesAnterior.ano && m.mes === mesAnterior.mes;
@@ -905,9 +908,9 @@ function renderAnualTable() {
         `;
       }
     }
-    rows += `<td class="${cls}" colspan="4" style="text-align:center;">${action}</td>`;
+    rows += `<td class="${cls}" colspan="3" style="text-align:center;">${action}</td>`;
   }
-  rows += '<td class="col-total" colspan="4"></td></tr>';
+  rows += '<td class="col-total" colspan="3"></td></tr>';
 
   document.getElementById('anual-tbody').innerHTML = rows;
 
