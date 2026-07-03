@@ -83,9 +83,13 @@ async function loadTiposInsumo() {
     if (res.success && res.data) {
       const select = document.getElementById('f-tipo-insumo');
       const selectEdit = document.getElementById('edit-fi-tipo');
+      const selectFilterModal = document.getElementById('filter-modal-tipo');
       
       if (selectEdit) {
         selectEdit.innerHTML = '<option value="TOTAL">Total Geral</option>';
+      }
+      if (selectFilterModal) {
+        selectFilterModal.innerHTML = '<option value="">Todos os Tipos</option><option value="TOTAL">Total Geral</option>';
       }
       
       if (select) {
@@ -109,6 +113,13 @@ async function loadTiposInsumo() {
             optEdit.value = t.BM_DESC.trim().toUpperCase(); // Para salvar no banco
             optEdit.textContent = `${icon} ${t.BM_DESC}`;
             selectEdit.appendChild(optEdit);
+          }
+
+          if (selectFilterModal) {
+            const optFilter = document.createElement('option');
+            optFilter.value = t.BM_DESC.trim().toUpperCase();
+            optFilter.textContent = `${icon} ${t.BM_DESC}`;
+            selectFilterModal.appendChild(optFilter);
           }
         });
       }
