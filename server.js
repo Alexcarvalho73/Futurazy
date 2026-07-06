@@ -557,6 +557,7 @@ function buildReceitaSQL(cfopFiltro = '', produtoFiltro = '') {
       FROM (
         SELECT distinct
           f2_filial                             AS EMPRESA,
+          CASE WHEN TRIM(D2_CF)='5151' THEN 'Intercompany' ELSE 'Faturamento' END AS TIPOFECHA,
           CASE 
             WHEN LENGTH(TRIM(F2_EMISSAO)) = 8 AND F2_EMISSAO <> '00000000' AND F2_EMISSAO <> '        ' AND REGEXP_LIKE(F2_EMISSAO, '^[0-9]{8}$')
             THEN TO_DATE(F2_EMISSAO, 'yyyymmdd')
@@ -611,7 +612,7 @@ function buildReceitaSQL(cfopFiltro = '', produtoFiltro = '') {
           AND b1.d_e_l_e_t_ <> '*'
           AND F2_EMISSAO >= REPLACE(:data_de, '-', '')
           AND F2_EMISSAO <= REPLACE(:data_ate, '-', '')
-          AND D2_CF NOT IN ('5949','5905','5151','5910','5201','5208')
+          AND D2_CF NOT IN ('5949','5905','5910','5201','5208')
           AND F2.F2_FILIAL IN ('028501','028503')
           AND TRIM(B1_GRUPO) IN ('0203003', '0402008')
           ${extraD2}
@@ -620,6 +621,7 @@ function buildReceitaSQL(cfopFiltro = '', produtoFiltro = '') {
 
         SELECT distinct
           f1_filial                              AS EMPRESA,
+          CASE WHEN TRIM(D1_CF) IN ('1151','1209') THEN 'Intercompany' ELSE 'Faturamento' END AS TIPOFECHA,
           CASE 
             WHEN LENGTH(TRIM(F1_EMISSAO)) = 8 AND F1_EMISSAO <> '00000000' AND F1_EMISSAO <> '        ' AND REGEXP_LIKE(F1_EMISSAO, '^[0-9]{8}$')
             THEN TO_DATE(F1_EMISSAO, 'yyyymmdd')
@@ -666,10 +668,72 @@ function buildReceitaSQL(cfopFiltro = '', produtoFiltro = '') {
           AND b1.d_e_l_e_t_ <> '*'
           AND F1_EMISSAO >= REPLACE(:data_de, '-', '')
           AND F1_EMISSAO <= REPLACE(:data_ate, '-', '')
-          AND D1_CF NOT IN ('1906','1151','1101','1933','1356','1922','1910','1209')
+          AND D1_CF NOT IN ('1906','1101','1933','1356','1922','1910')
           AND f1.f1_filial IN ('028501','028503')
           AND TRIM(B1_GRUPO) IN ('0203003', '0402008')
           ${extraD1}
+
+        UNION
+
+        SELECT distinct
+          SE5.E5_FILIAL                          AS EMPRESA,
+          'Faturamento'                          AS TIPOFECHA,
+          CASE 
+            WHEN LENGTH(TRIM(SE5.E5_DTDISPO)) = 8 AND SE5.E5_DTDISPO <> '00000000' AND SE5.E5_DTDISPO <> '        ' AND REGEXP_LIKE(SE5.E5_DTDISPO, '^[0-9]{8}$')
+            THEN TO_DATE(SE5.E5_DTDISPO, 'yyyymmdd')
+            ELSE NULL
+          END                                    AS EMISSAO,
+          TRIM(SE5.E5_NUMERO)                    AS NF,
+          (select SUBSTR(a2.a2_nome,1,30) from protheus11.sa2020 a2
+              where a2.a2_cod=SE5.E5_CLIFOR and a2.a2_loja=SE5.E5_LOJA and a2.d_e_l_e_t_<>'*') AS NOME_CLIENTE,
+          'GTA'                                  AS CONTRPAI,
+          'GTA'                                  AS CONTRFILHO,
+          TRIM(SE5.E5_NATUREZ)                   AS CFOP,
+          0                                      AS QUANT,
+          CASE SE5.E5_RECPAG 
+              WHEN 'P' THEN SE5.E5_VALOR * -1
+              WHEN 'R' THEN SE5.E5_VALOR 
+          END                                    AS TOTAL,
+          'GTA'                                  AS PRODUTO,
+          TRIM(SE5.E5_TIPO)                      AS TPDOC,
+          0                                      AS SACAS,
+          0                                      AS CABECAS,
+          0                                      AS VLR_UNIT,
+          0                                      AS VLR_FACS,
+          0                                      AS VLR_FETHAB,
+          0                                      AS VL_FUNRURAL,
+          ' '                                    AS TRANSP,
+          ' '                                    AS PLACA,
+          '0203003'                              AS B1_GRUPO,
+          'Pecuária'                             AS TIPO_NEGOCIO
+        FROM protheus11.SE5020 SE5
+        WHERE SE5.E5_BANCO <> '   '
+          AND SE5.E5_TIPODOC NOT IN ('DC','JR','MT','CM','D2','J2','M2','V2','C2','CP','TL','BA','I2','EI')
+          AND NOT (
+                SE5.E5_MOEDA IN ('C1','C2','C3','C4','C5','CH')
+                AND SE5.E5_NUMCHEQ = '               '
+                AND SE5.E5_TIPODOC NOT IN ('TR','TE')
+          )
+          AND NOT (
+                SE5.E5_TIPODOC IN ('TR','TE')
+                AND (
+                      SE5.E5_NUMCHEQ BETWEEN '*              ' AND '*ZZZZZZZZZZZZZZ'
+                      OR SE5.E5_DOCUMEN BETWEEN '*                ' AND '*ZZZZZZZZZZZZZZZZ'
+                )
+          )
+          AND NOT (
+                SE5.E5_TIPODOC IN ('TR','TE')
+                AND SE5.E5_NUMERO = '      '
+                AND SE5.E5_MOEDA NOT IN ('CC','CD','CH','CO','DOC','FI','R$','TB','TC','VL','DO')
+          )
+          AND SE5.E5_SITUACA <> 'C'
+          AND SE5.E5_VALOR <> 0
+          AND NOT(SE5.E5_NUMCHEQ BETWEEN '*              ' AND '*ZZZZZZZZZZZZZZ') 
+          AND SE5.D_E_L_E_T_ = ' '
+          AND SE5.E5_FILIAL IN ('028501','028503')
+          AND SE5.E5_TPGER='DIMP'
+          AND SE5.E5_DTDISPO >= REPLACE(:data_de, '-', '')
+          AND SE5.E5_DTDISPO <= REPLACE(:data_ate, '-', '')
       ) MID_Q
     ) OUTER_Q
   `;
@@ -721,8 +785,8 @@ function agregarPorMes(rows) {
 
   function initSegment() {
     return {
-      receita: 0, sacas: 0, cabecas: 0, funrural: 0, fethab: 0, vlrFacs: 0,
-      receitaUsd: 0, funruralUsd: 0, fethabUsd: 0, vlrFacsUsd: 0, dolarMedio: 0
+      receita: 0, sacas: 0, cabecas: 0, funrural: 0, fethab: 0, vlrFacs: 0, gta: 0, intercompany: 0,
+      receitaUsd: 0, funruralUsd: 0, fethabUsd: 0, vlrFacsUsd: 0, dolarMedio: 0, gtaUsd: 0, intercompanyUsd: 0
     };
   }
 
@@ -760,8 +824,25 @@ function agregarPorMes(rows) {
     const facUsd = Number(r.VLR_FACS_USD || 0);
 
     // Adicionar ao segmento específico
-    target.receita += valBrl;
-    target.receitaUsd += valUsd;
+    if (r.PRODUTO === 'GTA') {
+      const gtaVal = Math.abs(valBrl);
+      const gtaUsdVal = Math.abs(valUsd);
+      target.gta += gtaVal;
+      target.gtaUsd += gtaUsdVal;
+      tot.gta += gtaVal;
+      tot.gtaUsd += gtaUsdVal;
+    } else if (r.TIPOFECHA === 'Intercompany') {
+      target.intercompany += valBrl;
+      target.intercompanyUsd += valUsd;
+      tot.intercompany += valBrl;
+      tot.intercompanyUsd += valUsd;
+    } else {
+      target.receita += valBrl;
+      target.receitaUsd += valUsd;
+      tot.receita += valBrl;
+      tot.receitaUsd += valUsd;
+    }
+
     target.sacas += sac;
     target.cabecas += cab;
     target.funrural += fun;
@@ -771,9 +852,7 @@ function agregarPorMes(rows) {
     target.vlrFacs += fac;
     target.vlrFacsUsd += facUsd;
 
-    // Adicionar ao total
-    tot.receita += valBrl;
-    tot.receitaUsd += valUsd;
+    // Adicionar ao total (receita e gta já foram adicionados acima)
     tot.sacas += sac;
     tot.cabecas += cab;
     tot.funrural += fun;
@@ -856,7 +935,7 @@ app.get('/api/receita/resumo-anual', async (req, res) => {
 
     // 1. Buscar meses fechados na tabela FECHAMENTO_RECEITA
     const fechadosSQL = `
-      SELECT FR_EMPRESA, FR_ANO, FR_MES, FR_RECEITA_TOTAL, FR_SACAS,
+      SELECT FR_EMPRESA, FR_ANO, FR_MES, FR_RECEITA_TOTAL, FR_INTERCOMPANY, FR_SACAS,
              FR_QTD_NFS, FR_FUNRURAL, FR_GTA, FR_FETHAB, FR_VLR_FACS,
              FR_DOLAR_MEDIO, FR_NEGOCIO, FR_DT_FECHAMENTO
       FROM FECHAMENTO_RECEITA
@@ -872,8 +951,8 @@ app.get('/api/receita/resumo-anual', async (req, res) => {
 
     function initSegment() {
       return {
-        receita: 0, sacas: 0, cabecas: 0, funrural: 0, gta: 0, fethab: 0, vlrFacs: 0,
-        receitaUsd: 0, funruralUsd: 0, gtaUsd: 0, fethabUsd: 0, vlrFacsUsd: 0, dolarMedio: 0
+        receita: 0, sacas: 0, cabecas: 0, funrural: 0, gta: 0, fethab: 0, vlrFacs: 0, intercompany: 0,
+        receitaUsd: 0, funruralUsd: 0, gtaUsd: 0, fethabUsd: 0, vlrFacsUsd: 0, dolarMedio: 0, intercompanyUsd: 0
       };
     }
 
@@ -898,7 +977,7 @@ app.get('/api/receita/resumo-anual', async (req, res) => {
 
         const valBrl = Number(f.FR_RECEITA_TOTAL || 0);
         const qtdSacas = Number(f.FR_SACAS || 0);
-        
+
         let sac = 0;
         let cab = 0;
         if (negocio === 'Pecuaria') {
@@ -911,9 +990,11 @@ app.get('/api/receita/resumo-anual', async (req, res) => {
         const gta = Number(f.FR_GTA || 0);
         const fet = Number(f.FR_FETHAB || 0);
         const fac = Number(f.FR_VLR_FACS || 0);
+        const inc = Number(f.FR_INTERCOMPANY || 0);
         const dm = Number(f.FR_DOLAR_MEDIO || 0);
 
         target.receita += valBrl;
+        target.intercompany += inc;
         target.sacas += sac;
         target.cabecas += cab;
         target.funrural += fun;
@@ -923,6 +1004,7 @@ app.get('/api/receita/resumo-anual', async (req, res) => {
         if (dm > 0) target.dolarMedio = dm;
 
         tot.receita += valBrl;
+        tot.intercompany += inc;
         tot.sacas += sac;
         tot.cabecas += cab;
         tot.funrural += fun;
@@ -935,7 +1017,7 @@ app.get('/api/receita/resumo-anual', async (req, res) => {
         const tot = fechadosMap[key].Total;
         tot.receita = Number(f.FR_RECEITA_TOTAL || 0);
         tot.sacas = Number(f.FR_SACAS || 0); // Assumimos tudo sacas já que não sabemos
-        tot.cabecas = 0; 
+        tot.cabecas = 0;
         tot.funrural = Number(f.FR_FUNRURAL || 0);
         tot.gta = Number(f.FR_GTA || 0);
         tot.fethab = Number(f.FR_FETHAB || 0);
@@ -1028,18 +1110,24 @@ app.get('/api/receita/resumo-anual', async (req, res) => {
               pec.gta = tTot.gta * ratioPec;
               pec.fethab = tTot.fethab * ratioPec;
               pec.vlrFacs = tTot.vlrFacs * ratioPec;
+              pec.intercompany = tTot.intercompany * ratioPec;
+              pec.intercompanyUsd = tTot.intercompanyUsd * ratioPec;
 
               agr.receita = tTot.receita * ratioAgr;
               agr.funrural = tTot.funrural * ratioAgr;
               agr.gta = tTot.gta * ratioAgr;
               agr.fethab = tTot.fethab * ratioAgr;
               agr.vlrFacs = tTot.vlrFacs * ratioAgr;
+              agr.intercompany = tTot.intercompany * ratioAgr;
+              agr.intercompanyUsd = tTot.intercompanyUsd * ratioAgr;
 
               out.receita = tTot.receita * ratioOut;
               out.funrural = tTot.funrural * ratioOut;
               out.gta = tTot.gta * ratioOut;
               out.fethab = tTot.fethab * ratioOut;
               out.vlrFacs = tTot.vlrFacs * ratioOut;
+              out.intercompany = tTot.intercompany * ratioOut;
+              out.intercompanyUsd = tTot.intercompanyUsd * ratioOut;
             } else {
               out = { ...tTot };
             }
@@ -1083,6 +1171,8 @@ app.get('/api/receita/resumo-anual', async (req, res) => {
           const s2 = f2[seg];
           const st = total[seg];
           st.receita = s1.receita + s2.receita;
+          st.intercompany = (s1.intercompany || 0) + (s2.intercompany || 0);
+          st.intercompany = (s1.intercompany || 0) + (s2.intercompany || 0);
           st.sacas = s1.sacas + s2.sacas;
           st.cabecas = s1.cabecas + s2.cabecas;
           st.funrural = s1.funrural + s2.funrural;
@@ -1090,6 +1180,8 @@ app.get('/api/receita/resumo-anual', async (req, res) => {
           st.fethab = s1.fethab + s2.fethab;
           st.vlrFacs = s1.vlrFacs + s2.vlrFacs;
           st.receitaUsd = s1.receitaUsd + s2.receitaUsd;
+          st.intercompanyUsd = (s1.intercompanyUsd || 0) + (s2.intercompanyUsd || 0);
+          st.intercompanyUsd = (s1.intercompanyUsd || 0) + (s2.intercompanyUsd || 0);
           st.funruralUsd = s1.funruralUsd + s2.funruralUsd;
           st.gtaUsd = s1.gtaUsd + s2.gtaUsd;
           st.fethabUsd = s1.fethabUsd + s2.fethabUsd;
@@ -1114,6 +1206,7 @@ app.get('/api/receita/resumo-anual', async (req, res) => {
           const s2 = porEmpresa['028503'][seg];
           const st = total[seg];
           st.receita = s1.receita + s2.receita;
+          st.intercompany = (s1.intercompany || 0) + (s2.intercompany || 0);
           st.sacas = s1.sacas + s2.sacas;
           st.cabecas = s1.cabecas + s2.cabecas;
           st.funrural = s1.funrural + s2.funrural;
@@ -1121,6 +1214,7 @@ app.get('/api/receita/resumo-anual', async (req, res) => {
           st.fethab = s1.fethab + s2.fethab;
           st.vlrFacs = s1.vlrFacs + s2.vlrFacs;
           st.receitaUsd = s1.receitaUsd + s2.receitaUsd;
+          st.intercompanyUsd = (s1.intercompanyUsd || 0) + (s2.intercompanyUsd || 0);
           st.funruralUsd = s1.funruralUsd + s2.funruralUsd;
           st.gtaUsd = s1.gtaUsd + s2.gtaUsd;
           st.fethabUsd = s1.fethabUsd + s2.fethabUsd;
@@ -1130,7 +1224,7 @@ app.get('/api/receita/resumo-anual', async (req, res) => {
 
         const f1Closed = porEmpresa['028501'].status === 'fechado';
         const f2Closed = porEmpresa['028503'].status === 'fechado';
-        
+
         const f1HasData = porEmpresa['028501'].Total.receita > 0 || porEmpresa['028501'].Total.sacas > 0 || porEmpresa['028501'].Total.cabecas > 0;
         const f2HasData = porEmpresa['028503'].Total.receita > 0 || porEmpresa['028503'].Total.sacas > 0 || porEmpresa['028503'].Total.cabecas > 0;
 
@@ -1183,14 +1277,18 @@ app.post('/api/receita/fechar-mes', async (req, res) => {
     const dolarMedio = totalUsd > 0 ? (totalBrl / totalUsd) : null;
 
     // Agregar totais consolidados para a empresa solicitada
-    let receita = 0, sacas = 0, cabecas = 0, funrural = 0, gta = 0, fethab = 0, vlrFacs = 0;
+    let receita = 0, intercompany = 0, sacas = 0, cabecas = 0, funrural = 0, gta = 0, fethab = 0, vlrFacs = 0;
     const nfsSet = new Set();
 
     for (const r of rowsEmp) {
       const tot = Number(r.TOTAL || 0);
+      if (r.TIPOFECHA === 'Intercompany') {
+        intercompany += Math.abs(tot);
+      } else {
+        receita += tot;
+      }
       const sac = Number(r.SACAS || 0);
       const cab = Number(r.CABECAS || 0);
-      receita += tot;
       sacas += sac;
       cabecas += cab;
       funrural += Number(r.VL_FUNRURAL || 0);
@@ -1207,6 +1305,7 @@ app.post('/api/receita/fechar-mes', async (req, res) => {
       USING DUAL ON (fr.FR_EMPRESA = :empresa AND fr.FR_ANO = :ano AND fr.FR_MES = :mes AND fr.FR_RUBRICA = 'RECEITA')
       WHEN MATCHED THEN UPDATE SET
         fr.FR_RECEITA_TOTAL  = :receita,
+        fr.FR_INTERCOMPANY   = :intercompany,
         fr.FR_SACAS          = :sacas,
         fr.FR_QTD_NFS        = :qtdNfs,
         fr.FR_FUNRURAL       = :funrural,
@@ -1216,16 +1315,16 @@ app.post('/api/receita/fechar-mes', async (req, res) => {
         fr.FR_DOLAR_MEDIO    = :dolarMedio,
         fr.FR_DT_FECHAMENTO  = SYSDATE
       WHEN NOT MATCHED THEN INSERT
-        (FR_EMPRESA, FR_ANO, FR_MES, FR_RUBRICA, FR_RECEITA_TOTAL, FR_SACAS, FR_QTD_NFS,
+        (FR_EMPRESA, FR_ANO, FR_MES, FR_RUBRICA, FR_RECEITA_TOTAL, FR_INTERCOMPANY, FR_SACAS, FR_QTD_NFS,
          FR_FUNRURAL, FR_GTA, FR_FETHAB, FR_VLR_FACS, FR_DOLAR_MEDIO, FR_DT_FECHAMENTO)
       VALUES
-        (:empresa, :ano, :mes, 'RECEITA', :receita, :sacas, :qtdNfs,
+        (:empresa, :ano, :mes, 'RECEITA', :receita, :intercompany, :sacas, :qtdNfs,
          :funrural, :gta, :fethab, :vlrFacs, :dolarMedio, SYSDATE)
     `;
 
     await db.execute(mergeSql, {
       empresa, ano: parseInt(ano), mes: parseInt(mes),
-      receita, sacas, qtdNfs,
+      receita, intercompany, sacas, qtdNfs,
       funrural, gta, fethab, vlrFacs,
       dolarMedio
     }, { autoCommit: true });
@@ -1267,7 +1366,7 @@ app.get('/api/receita/fechados', async (req, res) => {
 
     const sql = `
       SELECT FR_ID, FR_EMPRESA, FR_ANO, FR_MES, FR_RUBRICA,
-             FR_RECEITA_TOTAL, FR_SACAS, FR_QTD_NFS, FR_FUNRURAL, FR_GTA, FR_FETHAB, FR_VLR_FACS,
+             FR_RECEITA_TOTAL, FR_INTERCOMPANY, FR_SACAS, FR_QTD_NFS, FR_FUNRURAL, FR_GTA, FR_FETHAB, FR_VLR_FACS,
              FR_DOLAR_MEDIO, FR_NEGOCIO,
              FR_DT_FECHAMENTO, FR_USUARIO, FR_OBS
       FROM FECHAMENTO_RECEITA
@@ -1292,13 +1391,14 @@ app.put('/api/receita/fechamento/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const {
-      receitaTotal, sacas, qtdNfs, funrural, gta, fethab, vlrFacs,
+      receitaTotal, intercompany, sacas, qtdNfs, funrural, gta, fethab, vlrFacs,
       dolarMedio, obs
     } = req.body;
 
     const sql = `
       UPDATE FECHAMENTO_RECEITA SET
         FR_RECEITA_TOTAL  = :receitaTotal,
+        FR_INTERCOMPANY   = :intercompany,
         FR_SACAS          = :sacas,
         FR_QTD_NFS        = :qtdNfs,
         FR_FUNRURAL       = :funrural,
@@ -1314,6 +1414,7 @@ app.put('/api/receita/fechamento/:id', async (req, res) => {
     await db.execute(sql, {
       id: parseInt(id),
       receitaTotal: Number(receitaTotal || 0),
+      intercompany: Number(intercompany || 0),
       sacas: Number(sacas || 0),
       qtdNfs: parseInt(qtdNfs || 0),
       funrural: Number(funrural || 0),
@@ -1336,7 +1437,7 @@ app.post('/api/receita/fechamento', async (req, res) => {
   try {
     const {
       periodo, filial, negocio, // "periodo" = YYYY-MM
-      receitaTotal, sacas, qtdNfs, funrural, gta, fethab, vlrFacs,
+      receitaTotal, intercompany, sacas, qtdNfs, funrural, gta, fethab, vlrFacs,
       dolarMedio, obs
     } = req.body;
 
@@ -1345,7 +1446,7 @@ app.post('/api/receita/fechamento', async (req, res) => {
     }
 
     const [ano, mes] = periodo.split('-');
-    
+
     // Controle de integridade
     const checkSql = `
       SELECT COUNT(*) as QTD FROM FECHAMENTO_RECEITA
@@ -1359,11 +1460,11 @@ app.post('/api/receita/fechamento', async (req, res) => {
     const sql = `
       INSERT INTO FECHAMENTO_RECEITA (
         FR_EMPRESA, FR_ANO, FR_MES, FR_NEGOCIO, FR_RUBRICA,
-        FR_RECEITA_TOTAL, FR_SACAS, FR_QTD_NFS, FR_FUNRURAL, FR_GTA, FR_FETHAB, FR_VLR_FACS,
+        FR_RECEITA_TOTAL, FR_INTERCOMPANY, FR_SACAS, FR_QTD_NFS, FR_FUNRURAL, FR_GTA, FR_FETHAB, FR_VLR_FACS,
         FR_DOLAR_MEDIO, FR_OBS, FR_DT_FECHAMENTO
       ) VALUES (
         :filial, :ano, :mes, :negocio, 'RECEITA',
-        :receitaTotal, :sacas, :qtdNfs, :funrural, :gta, :fethab, :vlrFacs,
+        :receitaTotal, :intercompany, :sacas, :qtdNfs, :funrural, :gta, :fethab, :vlrFacs,
         :dolarMedio, :obs, SYSDATE
       )
     `;
@@ -1371,6 +1472,7 @@ app.post('/api/receita/fechamento', async (req, res) => {
     await db.execute(sql, {
       filial, ano: parseInt(ano), mes: parseInt(mes), negocio,
       receitaTotal: Number(receitaTotal || 0),
+      intercompany: Number(intercompany || 0),
       sacas: Number(sacas || 0),
       qtdNfs: parseInt(qtdNfs || 0),
       funrural: Number(funrural || 0),
@@ -1472,7 +1574,7 @@ function buildInsumosSQL(opts = {}) {
 
   const sf_za5 = String(za5_safra).replace(/'/g, '');
   const fi_za5 = String(za5_filial).replace(/'/g, '');
-  
+
   const baseSafra = parseInt(sf_za5.substring(0, 4)) || 2025;
   const safraList = `'${baseSafra}1', '${baseSafra}2', '${baseSafra}3'`;
 
@@ -1577,17 +1679,17 @@ function mapEmpresaCod(cod) {
 // USD display: custo_brl / ptax (calculado dinamicamente no frontend)
 function calcCustos(rows) {
   return rows.map(r => {
-    const consumo  = Number(r.CONSUMO || 0);
-    const vlrRs   = Number(r.VLR_RS  || 0);
-    const ptax    = Number(r.PTAX    || 0);
+    const consumo = Number(r.CONSUMO || 0);
+    const vlrRs = Number(r.VLR_RS || 0);
+    const ptax = Number(r.PTAX || 0);
     const custoBrl = consumo * vlrRs;
     const custoUsd = (ptax > 0) ? (custoBrl / ptax) : 0;
     return {
       ...r,
-      EMPRESA:   mapEmpresaCod(r.EMPRESA_COD),
+      EMPRESA: mapEmpresaCod(r.EMPRESA_COD),
       CUSTO_BRL: custoBrl,
       CUSTO_USD: custoUsd,
-      PTAX:      ptax,
+      PTAX: ptax,
     };
   });
 }
@@ -1601,37 +1703,37 @@ function agregarInsumosPorMes(rows) {
     const ddata = r.DDATA instanceof Date ? r.DDATA : (r.DDATA ? new Date(r.DDATA) : null);
     if (!ddata || isNaN(ddata)) continue;
 
-    const emp    = r.EMPRESA || '028501';
-    const ano    = ddata.getFullYear();
-    const mes    = ddata.getMonth() + 1;
-    const tipo   = r.TIPO_PRODUTO || 'OUTROS';
-    const subgrp = r.SUBGRUPO    || '(sem subgrupo)';
+    const emp = r.EMPRESA || '028501';
+    const ano = ddata.getFullYear();
+    const mes = ddata.getMonth() + 1;
+    const tipo = r.TIPO_PRODUTO || 'OUTROS';
+    const subgrp = r.SUBGRUPO || '(sem subgrupo)';
 
     const key = `${emp}_${ano}_${mes}`;
     if (!map[key]) {
       map[key] = {
-          empresa: emp, ano, mes,
-          totalBrl: 0, totalUsd: 0, ptaxSumPeso: 0, ptaxPeso: 0, // para média ponderada
+        empresa: emp, ano, mes,
+        totalBrl: 0, totalUsd: 0, ptaxSumPeso: 0, ptaxPeso: 0, // para média ponderada
         porTipo: {}, subgrupos: {}
       };
     }
     const M = map[key];
-  
-      const brl  = Number(r.CUSTO_BRL || 0);
-      const usd  = Number(r.CUSTO_USD || 0);
-      const ptax = Number(r.PTAX || 0);
-  
-      M.totalBrl += brl;
-      M.totalUsd = (M.totalUsd || 0) + usd;
-      // Média ponderada de PTAX pelo custo BRL
-      if (ptax > 0 && brl > 0) {
-        M.ptaxSumPeso += brl;       // soma dos pesos
-        M.ptaxPeso    += brl * ptax; // soma ponderada
-      }
-  
-      if (!M.porTipo[tipo])  M.porTipo[tipo]  = { custoBrl: 0, custoUsd: 0 };
-      M.porTipo[tipo].custoBrl += brl;
-      M.porTipo[tipo].custoUsd += usd;
+
+    const brl = Number(r.CUSTO_BRL || 0);
+    const usd = Number(r.CUSTO_USD || 0);
+    const ptax = Number(r.PTAX || 0);
+
+    M.totalBrl += brl;
+    M.totalUsd = (M.totalUsd || 0) + usd;
+    // Média ponderada de PTAX pelo custo BRL
+    if (ptax > 0 && brl > 0) {
+      M.ptaxSumPeso += brl;       // soma dos pesos
+      M.ptaxPeso += brl * ptax; // soma ponderada
+    }
+
+    if (!M.porTipo[tipo]) M.porTipo[tipo] = { custoBrl: 0, custoUsd: 0 };
+    M.porTipo[tipo].custoBrl += brl;
+    M.porTipo[tipo].custoUsd += usd;
 
     if (!M.subgrupos[tipo]) M.subgrupos[tipo] = {};
     if (!M.subgrupos[tipo][subgrp]) M.subgrupos[tipo][subgrp] = { custoBrl: 0 };
@@ -1642,7 +1744,7 @@ function agregarInsumosPorMes(rows) {
   return Object.values(map).map(m => ({
     ...m,
     ptaxMedio: m.ptaxSumPeso > 0 ? (m.ptaxPeso / m.ptaxSumPeso) : 0,
-    totalUsd:  m.ptaxSumPeso > 0 ? (m.totalBrl / (m.ptaxPeso / m.ptaxSumPeso)) : 0,
+    totalUsd: m.ptaxSumPeso > 0 ? (m.totalBrl / (m.ptaxPeso / m.ptaxSumPeso)) : 0,
   }));
 }
 
@@ -1652,12 +1754,12 @@ function getSafraYearIns(hoje = new Date()) {
 }
 function getMesesSafraIns(anoSafra) {
   return [
-    { ano: anoSafra-1, mes:9  }, { ano: anoSafra-1, mes:10 },
-    { ano: anoSafra-1, mes:11 }, { ano: anoSafra-1, mes:12 },
-    { ano: anoSafra,   mes:1  }, { ano: anoSafra,   mes:2  },
-    { ano: anoSafra,   mes:3  }, { ano: anoSafra,   mes:4  },
-    { ano: anoSafra,   mes:5  }, { ano: anoSafra,   mes:6  },
-    { ano: anoSafra,   mes:7  }, { ano: anoSafra,   mes:8  }
+    { ano: anoSafra - 1, mes: 9 }, { ano: anoSafra - 1, mes: 10 },
+    { ano: anoSafra - 1, mes: 11 }, { ano: anoSafra - 1, mes: 12 },
+    { ano: anoSafra, mes: 1 }, { ano: anoSafra, mes: 2 },
+    { ano: anoSafra, mes: 3 }, { ano: anoSafra, mes: 4 },
+    { ano: anoSafra, mes: 5 }, { ano: anoSafra, mes: 6 },
+    { ano: anoSafra, mes: 7 }, { ano: anoSafra, mes: 8 }
   ];
 }
 function getMesesCalendarioIns(ano) {
@@ -1679,21 +1781,21 @@ function getMonthRangeIns(ano, mes) {
 // GET /api/insumos/dados — dados brutos para o cubo drill-down
 app.get('/api/insumos/dados', async (req, res) => {
   try {
-    const hoje     = new Date();
+    const hoje = new Date();
     const prevDate = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
     const currLast = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
 
     const dataDe = req.query.data_de || dateToStrIns(prevDate);
     const dataAte = req.query.data_ate || dateToStrIns(currLast);
 
-    const params  = loadParamsFile();
-    const p       = params.insumos || {};
+    const params = loadParamsFile();
+    const p = params.insumos || {};
 
     const sql = buildInsumosSQL({
-      fazendaFiltro:    (req.query.fazenda    || '').trim(),
-      produtoFiltro:    (req.query.produto    || '').trim(),
-      tipoInsumoFiltro: (req.query.tipo_insumo|| '').trim(),
-      za5_safra:  p.za5_safra  || '20251',
+      fazendaFiltro: (req.query.fazenda || '').trim(),
+      produtoFiltro: (req.query.produto || '').trim(),
+      tipoInsumoFiltro: (req.query.tipo_insumo || '').trim(),
+      za5_safra: p.za5_safra || '20251',
       za5_filial: p.za5_filial || '0285',
     });
 
@@ -1710,17 +1812,17 @@ app.get('/api/insumos/dados', async (req, res) => {
 // GET /api/insumos/resumo-anual — resumo de 12 meses (safra ou calendário)
 app.get('/api/insumos/resumo-anual', async (req, res) => {
   try {
-    const hoje      = new Date();
-    const anoSafra  = parseInt(req.query.ano_safra) || getSafraYearIns(hoje);
+    const hoje = new Date();
+    const anoSafra = parseInt(req.query.ano_safra) || getSafraYearIns(hoje);
     const tipoCalend = req.query.tipo || 'safra';
-    const anoCalend  = parseInt(req.query.ano) || hoje.getFullYear();
+    const anoCalend = parseInt(req.query.ano) || hoje.getFullYear();
 
     const meses = tipoCalend === 'calendario'
       ? getMesesCalendarioIns(anoCalend)
       : getMesesSafraIns(anoSafra);
 
-    const mesAtual    = { ano: hoje.getFullYear(), mes: hoje.getMonth() + 1 };
-    const prevDate    = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+    const mesAtual = { ano: hoje.getFullYear(), mes: hoje.getMonth() + 1 };
+    const prevDate = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
     const mesAnterior = { ano: prevDate.getFullYear(), mes: prevDate.getMonth() + 1 };
 
     // 1. Buscar fechados na tabela FECHAMENTO_INSUMOS
@@ -1743,9 +1845,9 @@ app.get('/api/insumos/resumo-anual', async (req, res) => {
       if (!fechadosMap[key]) {
         fechadosMap[key] = { totalBrl: 0, ptaxMedio: 0, porTipo: {}, subgrupos: {}, dtFechamento: f.FI_DT_FECHAMENTO };
       }
-      const M   = fechadosMap[key];
+      const M = fechadosMap[key];
       const brl = Number(f.FI_CUSTO_TOTAL || 0);
-      const ptax = Number(f.FI_PTAX   || 0);
+      const ptax = Number(f.FI_PTAX || 0);
       const usd = ptax > 0 ? (brl / ptax) : 0;
       const tipo = (f.FI_TIPO_INSUMO || 'TOTAL').toUpperCase();
 
@@ -1768,7 +1870,7 @@ app.get('/api/insumos/resumo-anual', async (req, res) => {
     const dinamicos = meses.filter(m => {
       const isFuturo = new Date(m.ano, m.mes - 1, 1) > hoje;
       if (isFuturo) return false;
-      if (m.ano === mesAtual.ano    && m.mes === mesAtual.mes)    return true;
+      if (m.ano === mesAtual.ano && m.mes === mesAtual.mes) return true;
       if (m.ano === mesAnterior.ano && m.mes === mesAnterior.mes) return true;
       return false;
     });
@@ -1776,18 +1878,18 @@ app.get('/api/insumos/resumo-anual', async (req, res) => {
     // 3. Buscar dados dinâmicos
     let dadosDinamicos = [];
     if (dinamicos.length > 0) {
-      const timestamps    = dinamicos.map(m => new Date(m.ano, m.mes - 1, 1).getTime());
+      const timestamps = dinamicos.map(m => new Date(m.ano, m.mes - 1, 1).getTime());
       const timestampsAte = dinamicos.map(m => new Date(m.ano, m.mes, 0).getTime());
-      const dataDe  = dateToStrIns(new Date(Math.min(...timestamps)));
+      const dataDe = dateToStrIns(new Date(Math.min(...timestamps)));
       const dataAte = dateToStrIns(new Date(Math.max(...timestampsAte)));
 
       const params = loadParamsFile();
-      const p      = params.insumos || {};
-      const sql    = buildInsumosSQL({
-        fazendaFiltro:    (req.query.fazenda    || '').trim(),
-        produtoFiltro:    (req.query.produto    || '').trim(),
-        tipoInsumoFiltro: (req.query.tipo_insumo|| '').trim(),
-        za5_safra:  p.za5_safra  || '20251',
+      const p = params.insumos || {};
+      const sql = buildInsumosSQL({
+        fazendaFiltro: (req.query.fazenda || '').trim(),
+        produtoFiltro: (req.query.produto || '').trim(),
+        tipoInsumoFiltro: (req.query.tipo_insumo || '').trim(),
+        za5_safra: p.za5_safra || '20251',
         za5_filial: p.za5_filial || '0285',
       });
 
@@ -1805,12 +1907,12 @@ app.get('/api/insumos/resumo-anual', async (req, res) => {
     }
 
     const resultado = meses.map(m => {
-      const isMesAtual    = m.ano === mesAtual.ano    && m.mes === mesAtual.mes;
+      const isMesAtual = m.ano === mesAtual.ano && m.mes === mesAtual.mes;
       const isMesAnterior = m.ano === mesAnterior.ano && m.mes === mesAnterior.mes;
-      const isFuturo      = new Date(m.ano, m.mes - 1, 1) > hoje;
+      const isFuturo = new Date(m.ano, m.mes - 1, 1) > hoje;
 
       let defaultStatus = 'futuro';
-      if (isMesAtual)    defaultStatus = 'dinamico_atual';
+      if (isMesAtual) defaultStatus = 'dinamico_atual';
       else if (isMesAnterior) defaultStatus = 'dinamico_anterior';
       else if (!isFuturo) defaultStatus = 'aguardando';
 
@@ -1825,7 +1927,7 @@ app.get('/api/insumos/resumo-anual', async (req, res) => {
             totalBrl: f.totalBrl,
             totalUsd: f.totalUsd || 0,
             ptaxMedio: f.ptaxMedio,
-            porTipo:  { ...f.porTipo },
+            porTipo: { ...f.porTipo },
             subgrupos: { ...f.subgrupos },
             status: 'fechado',
             dtFechamento: f.dtFechamento
@@ -1836,7 +1938,7 @@ app.get('/api/insumos/resumo-anual', async (req, res) => {
             porEmpresa[emp] = {
               totalBrl: din.totalBrl,
               totalUsd: din.totalUsd,
-              porTipo:  din.porTipo,
+              porTipo: din.porTipo,
               subgrupos: din.subgrupos,
               status: defaultStatus
             };
@@ -1853,11 +1955,11 @@ app.get('/api/insumos/resumo-anual', async (req, res) => {
         t.totalBrl += e.totalBrl;
         t.totalUsd = (t.totalUsd || 0) + (e.totalUsd || 0);
         if (e.ptaxMedio > 0 && e.totalBrl > 0) {
-           // para média ponderada global (usando var auxiliar para acumular pesos)
-           if (!t._ptaxSumPeso) t._ptaxSumPeso = 0;
-           if (!t._ptaxPeso)    t._ptaxPeso = 0;
-           t._ptaxSumPeso += e.totalBrl;
-           t._ptaxPeso    += e.totalBrl * e.ptaxMedio;
+          // para média ponderada global (usando var auxiliar para acumular pesos)
+          if (!t._ptaxSumPeso) t._ptaxSumPeso = 0;
+          if (!t._ptaxPeso) t._ptaxPeso = 0;
+          t._ptaxSumPeso += e.totalBrl;
+          t._ptaxPeso += e.totalBrl * e.ptaxMedio;
         }
         // Merge porTipo
         for (const [tipo, v] of Object.entries(e.porTipo || {})) {
@@ -1878,8 +1980,8 @@ app.get('/api/insumos/resumo-anual', async (req, res) => {
       const statusSet = new Set(Object.values(porEmpresa).map(e => e.status));
       t.status = statusSet.has('fechado') && statusSet.size === 1 ? 'fechado'
         : statusSet.has('dinamico_atual') ? 'dinamico_atual'
-        : statusSet.has('dinamico_anterior') ? 'dinamico_anterior'
-        : defaultStatus;
+          : statusSet.has('dinamico_anterior') ? 'dinamico_anterior'
+            : defaultStatus;
       porEmpresa['TOTAL'] = t;
 
       return { ano: m.ano, mes: m.mes, status: t.status, porEmpresa };
@@ -1902,9 +2004,9 @@ app.post('/api/insumos/fechar-mes', async (req, res) => {
 
     const { dataDe, dataAte } = getMonthRangeIns(parseInt(ano), parseInt(mes));
     const params = loadParamsFile();
-    const p      = params.insumos || {};
+    const p = params.insumos || {};
 
-    const sql  = buildInsumosSQL({ za5_safra: p.za5_safra || '20251', za5_filial: p.za5_filial || '0285' });
+    const sql = buildInsumosSQL({ za5_safra: p.za5_safra || '20251', za5_filial: p.za5_filial || '0285' });
     const rows = calcCustos(await db.execute(sql, { data_de: dataDe, data_ate: dataAte }));
 
     const rowsEmp = empresa === 'TODAS' ? rows : rows.filter(r => r.EMPRESA === empresa);
@@ -1915,16 +2017,16 @@ app.post('/api/insumos/fechar-mes', async (req, res) => {
 
     for (const r of rowsEmp) {
       const tipo = r.TIPO_PRODUTO || 'OUTROS';
-      const brl  = Number(r.CUSTO_BRL || 0);
+      const brl = Number(r.CUSTO_BRL || 0);
       const ptax = Number(r.PTAX || 0);
       if (!totalMap[tipo]) totalMap[tipo] = { brl: 0, ptaxSumPeso: 0, ptaxPeso: 0 };
       totalMap[tipo].brl += brl;
       grandBrl += brl;
       if (ptax > 0 && brl > 0) {
         totalMap[tipo].ptaxSumPeso += brl;
-        totalMap[tipo].ptaxPeso    += brl * ptax;
+        totalMap[tipo].ptaxPeso += brl * ptax;
         grandPtaxSumPeso += brl;
-        grandPtaxPeso    += brl * ptax;
+        grandPtaxPeso += brl * ptax;
       }
     }
     const grandPtax = grandPtaxSumPeso > 0 ? (grandPtaxPeso / grandPtaxSumPeso) : 0;
@@ -1935,7 +2037,7 @@ app.post('/api/insumos/fechar-mes', async (req, res) => {
     const tipos_gravar = [...Object.keys(totalMap).filter(t => (totalMap[t]?.brl || 0) > 0), 'TOTAL'];
 
     for (const tipo of tipos_gravar) {
-      const brl  = tipo === 'TOTAL' ? grandBrl : (totalMap[tipo]?.brl || 0);
+      const brl = tipo === 'TOTAL' ? grandBrl : (totalMap[tipo]?.brl || 0);
       const ptaxT = tipo === 'TOTAL' ? grandPtax
         : (totalMap[tipo]?.ptaxSumPeso > 0 ? (totalMap[tipo].ptaxPeso / totalMap[tipo].ptaxSumPeso) : 0);
 
@@ -1978,10 +2080,10 @@ app.get('/api/insumos/fechados', async (req, res) => {
     const { ano, mes, filial, tipo } = req.query;
     let where = 'WHERE 1=1';
     const binds = {};
-    if (ano)   { where += ' AND FI_ANO = :ano';            binds.ano   = parseInt(ano); }
-    if (mes)   { where += ' AND FI_MES = :mes';            binds.mes   = parseInt(mes); }
-    if (filial){ where += ' AND FI_EMPRESA = :filial';     binds.filial = filial; }
-    if (tipo)  { where += ' AND FI_TIPO_INSUMO = :tipo';   binds.tipo   = tipo; }
+    if (ano) { where += ' AND FI_ANO = :ano'; binds.ano = parseInt(ano); }
+    if (mes) { where += ' AND FI_MES = :mes'; binds.mes = parseInt(mes); }
+    if (filial) { where += ' AND FI_EMPRESA = :filial'; binds.filial = filial; }
+    if (tipo) { where += ' AND FI_TIPO_INSUMO = :tipo'; binds.tipo = tipo; }
 
     const sql = `
       SELECT FI_ID, FI_EMPRESA, FI_ANO, FI_MES, FI_TIPO_INSUMO,
@@ -2019,7 +2121,7 @@ app.put('/api/insumos/fechamento/:id', async (req, res) => {
     await db.execute(sql, {
       id: parseInt(id),
       custoBrl: Number(custoBrl || 0),
-      ptaxVal:  ptaxVal ? Number(ptaxVal) : null,
+      ptaxVal: ptaxVal ? Number(ptaxVal) : null,
       obs: obs || ''
     }, { autoCommit: true });
     res.json({ success: true, mensagem: 'Fechamento atualizado com sucesso.' });
@@ -2056,7 +2158,7 @@ app.post('/api/insumos/fechamento', async (req, res) => {
     await db.execute(sql, {
       filial, ano: parseInt(ano), mes: parseInt(mes), tipo,
       custoBrl: Number(custoBrl || 0),
-      ptaxVal:  ptaxVal ? Number(ptaxVal) : null,
+      ptaxVal: ptaxVal ? Number(ptaxVal) : null,
       obs: obs || ''
     }, { autoCommit: true });
     res.json({ success: true, mensagem: 'Fechamento incluído com sucesso.' });

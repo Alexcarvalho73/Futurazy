@@ -233,6 +233,8 @@ function atualizarLabelsMoeda() {
   if (thFacs)  thFacs.textContent  = `Vlr FACS (${prefix})`;
   if (thFeth)  thFeth.textContent  = `FETHAB (${prefix})`;
   if (thFun)   thFun.textContent   = `FUNRURAL (${prefix})`;
+  const thInt = document.getElementById('th-intercompany-cubo');
+  if (thInt) thInt.textContent = `Intercompany (${prefix})`;
   // Indicador de moeda no cabeçalho USD
   const usdNote = document.getElementById('moeda-note');
   if (usdNote) {
@@ -399,13 +401,17 @@ function sumRows(rows) {
     acc.total      += Number(r[cf.total]    || 0);
     acc.totalBrl   += Number(r.TOTAL        || 0);
     acc.totalUsd   += Number(r.TOTAL_USD    || 0);
+    if (r.TIPOFECHA === 'Intercompany') {
+      const val = state.moeda === 'USD' ? Number(r.TOTAL_USD || 0) : Number(r.TOTAL || 0);
+      acc.intercompany += Math.abs(val);
+    }
     acc.sacas      += Number(r.SACAS        || 0);
     acc.cabecas    += Number(r.CABECAS      || 0);
     acc.facs       += Number(r[cf.facs]     || 0);
     acc.fethab     += Number(r[cf.fethab]   || 0);
     acc.funrural   += Number(r[cf.funrural] || 0);
     return acc;
-  }, { quant:0, total:0, totalBrl:0, totalUsd:0, sacas:0, cabecas:0, facs:0, fethab:0, funrural:0 });
+  }, { quant:0, total:0, totalBrl:0, totalUsd:0, sacas:0, cabecas:0, facs:0, fethab:0, funrural:0, intercompany:0 });
 }
 
 let _rowId = 0;
@@ -528,6 +534,7 @@ function buildRow({ id, parentId, level, labelHtml, sums, extra = {} }) {
       <td style="min-width:280px">${labelHtml}</td>
       <td class="text-right">${fmtN(sums.quant)}</td>
       <td class="text-right" style="font-weight:${level<=1?'600':'400'}">${fmtMoeda(sums.total)}</td>
+      <td class="text-right" style="font-weight:${level<=1?'600':'400'}">${fmtMoeda(sums.intercompany)}</td>
       <td class="text-right" style="color:#f59e0b;font-weight:600;">${dolarText}</td>
       <td class="text-right">${qCell}</td>
       <td class="text-right">—</td>
@@ -789,22 +796,24 @@ function renderAnualTable() {
           continue;
         }
 
-        let rec, fac, fet, fun, gta;
+        let rec, fac, fet, fun, gta, inc;
         if (state.moeda === 'USD') {
           rec = getValorUsd(m, seg, 'receitaUsd') || 0;
           fac = getValorUsd(m, seg, 'vlrFacsUsd') || 0;
           fet = getValorUsd(m, seg, 'fethabUsd') || 0;
           fun = getValorUsd(m, seg, 'funruralUsd') || 0;
           gta = getValorUsd(m, seg, 'gtaUsd') || 0;
+          inc = getValorUsd(m, seg, 'intercompanyUsd') || 0;
         } else {
           rec = getValor(m, seg, 'receita') || 0;
           fac = getValor(m, seg, 'vlrFacs') || 0;
           fet = getValor(m, seg, 'fethab') || 0;
           fun = getValor(m, seg, 'funrural') || 0;
           gta = getValor(m, seg, 'gta') || 0;
+          inc = getValor(m, seg, 'intercompany') || 0;
         }
 
-        const net = rec - fac - fet - fun - gta;
+        const net = rec + inc - fac - fet - fun - gta;
         segmentTotals[seg] += net;
 
         let style = 'text-align:right;font-weight:700;color:#10b981;';
@@ -828,6 +837,7 @@ function renderAnualTable() {
   // Montar linhas da tabela
   let rows = '';
   rows += renderMetricaRow('💰 Receita de Vendas', 'receita', 'receitaUsd', fmtMoeda);
+  rows += renderMetricaRow('(+) Intercompany', 'intercompany', 'intercompanyUsd', fmtMoeda);
   rows += renderMetricaRow('(-) FACS', 'vlrFacs', 'vlrFacsUsd', fmtMoeda, true);
   rows += renderMetricaRow('(-) FETHAB', 'fethab', 'fethabUsd', fmtMoeda, true);
   rows += renderMetricaRow('(-) FUNRURAL', 'funrural', 'funruralUsd', fmtMoeda, true);
@@ -1127,6 +1137,7 @@ window.openEditForm = function(id) {
   document.getElementById('edit-fr-dolar').value = item.FR_DOLAR_MEDIO || 0;
   document.getElementById('edit-fr-funrural').value = item.FR_FUNRURAL || 0;
   document.getElementById('edit-fr-gta').value = item.FR_GTA || 0;
+  document.getElementById('edit-fr-intercompany').value = item.FR_INTERCOMPANY || 0;
   document.getElementById('edit-fr-fethab').value = item.FR_FETHAB || 0;
   document.getElementById('edit-fr-facs').value = item.FR_VLR_FACS || 0;
   document.getElementById('edit-fr-nfs').value = item.FR_QTD_NFS || 0;
@@ -1167,6 +1178,7 @@ async function saveFechamentoForm() {
     dolarMedio: Number(document.getElementById('edit-fr-dolar').value || 0),
     funrural: Number(document.getElementById('edit-fr-funrural').value || 0),
     gta: Number(document.getElementById('edit-fr-gta').value || 0),
+    intercompany: Number(document.getElementById('edit-fr-intercompany').value || 0),
     fethab: Number(document.getElementById('edit-fr-fethab').value || 0),
     vlrFacs: Number(document.getElementById('edit-fr-facs').value || 0),
     qtdNfs: parseInt(document.getElementById('edit-fr-nfs').value || 0, 10),

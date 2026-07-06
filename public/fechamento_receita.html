@@ -627,8 +627,9 @@
               <tr>
                 <th style="min-width:280px">Hierarquia (Tipo → Empresa → Mês → Produto)</th>
                 <th class="text-right">Qtd.</th>
-                <th class="text-right" id="th-total-cubo">Total (R$)</th>
-                <th class="text-right" id="th-dolar-cubo">Dólar</th>
+                <th id="th-total-cubo" class="text-right">Total (R$)</th>
+                <th id="th-intercompany-cubo" class="text-right">Intercompany (R$)</th>
+                <th id="th-dolar-cubo" class="text-right">Dólar</th>
                 <th class="text-right">Sacas / Cab.</th>
                 <th class="text-right">Vlr Unit.</th>
                 <th class="text-right" id="th-facs-cubo">Vlr FACS</th>
@@ -814,6 +815,10 @@
             <div class="filter-group">
               <label>GTA (BRL)</label>
               <input type="number" step="0.01" id="edit-fr-gta" class="form-control" required>
+            </div>
+            <div class="filter-group">
+              <label>Intercompany (BRL)</label>
+              <input type="number" step="0.01" id="edit-fr-intercompany" class="form-control" required>
             </div>
             <div class="filter-group">
               <label>FETHAB (BRL)</label>
