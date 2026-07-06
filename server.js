@@ -460,11 +460,11 @@ app.get('/api/notas/:chave/financeiro', async (req, res) => {
     }
 
     const xmlKey = xmlRows[0].XML_KEYF1;
-    const filial = xmlKey.substring(0, 6).trim();
-    const nfiscal = xmlKey.substring(6, 15).trim();
-    const serie = xmlKey.substring(15, 18).trim();
-    const fornec = xmlKey.substring(18, 24).trim();
-    const loja = xmlKey.substring(24, 26).trim();
+    const filial = xmlKey.substring(0, 6);
+    const nfiscal = xmlKey.substring(6, 15);
+    const serie = xmlKey.substring(15, 18);
+    const fornec = xmlKey.substring(18, 24);
+    const loja = xmlKey.substring(24, 26);
 
     // 2. Buscar dados financeiros no contas a pagar (SE2020) com os campos chave extraídos
     const sqlSE2 = `
