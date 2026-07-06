@@ -612,7 +612,7 @@ function buildReceitaSQL(cfopFiltro = '', produtoFiltro = '') {
           AND b1.d_e_l_e_t_ <> '*'
           AND F2_EMISSAO >= REPLACE(:data_de, '-', '')
           AND F2_EMISSAO <= REPLACE(:data_ate, '-', '')
-          AND D2_CF NOT IN ('5949','1151','5905','5910','5201','5208')
+          AND D2_CF NOT IN ('5949','5905','5910','5201','5208')
           AND F2.F2_FILIAL IN ('028501','028503')
           AND TRIM(B1_GRUPO) IN ('0203003', '0402008')
           ${extraD2}
@@ -668,7 +668,7 @@ function buildReceitaSQL(cfopFiltro = '', produtoFiltro = '') {
           AND b1.d_e_l_e_t_ <> '*'
           AND F1_EMISSAO >= REPLACE(:data_de, '-', '')
           AND F1_EMISSAO <= REPLACE(:data_ate, '-', '')
-          AND D1_CF NOT IN ('1906','1101','1933','1356','1922','1910')
+          AND D1_CF NOT IN ('1906','1101','1151','1933','1356','1922','1910')
           AND f1.f1_filial IN ('028501','028503')
           AND TRIM(B1_GRUPO) IN ('0203003', '0402008')
           ${extraD1}
