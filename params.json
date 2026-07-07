@@ -4,5 +4,34 @@
     "za5_filial": "0285",
     "descricao": "Parâmetros de precificação de insumos — Safra 2024/25",
     "atualizado_em": "2026-07-02"
+  },
+  "pecuaria": {
+    "028501": {
+      "estoque_ini_safra_qtd": 7131,
+      "estoque_ini_safra_vlr": 35791209,
+      "meses": {
+        "2026_06": {
+          "nascimentos": 10,
+          "mortes_perda": 6,
+          "mortes_consumo": 5,
+          "estoque_fazenda": 6265,
+          "ajuste_inv": 4,
+          "pasto": 3
+        },
+        "2026_05": {
+          "nascimentos": 0,
+          "mortes_perda": 6,
+          "mortes_consumo": 0,
+          "estoque_fazenda": 6265,
+          "ajuste_inv": 0,
+          "pasto": 0
+        }
+      }
+    },
+    "028503": {
+      "estoque_ini_safra_qtd": 0,
+      "estoque_ini_safra_vlr": 0,
+      "meses": {}
+    }
   }
 }

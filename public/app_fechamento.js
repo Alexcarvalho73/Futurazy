@@ -115,6 +115,43 @@ async function init() {
   document.getElementById('bar-insumos').style.width = pctInsumos + '%';
   document.getElementById('pct-insumos').textContent =
     `${qtdFechadosInsumos}/12 meses (${pctInsumos}%)`;
+
+  // ==========================================
+  // Renderizar Pecuária
+  // ==========================================
+  let fechadosPecuaria = [];
+  try {
+    const resp = await fetch('/api/pecuaria/fechados');
+    const json = await resp.json();
+    if (json.success) fechadosPecuaria = json.data;
+  } catch(e) {
+    console.warn('Não foi possível carregar fechados Pecuária:', e.message);
+  }
+
+  const fechadosSetPecuaria = new Set(fechadosPecuaria.map(f => `${f.FP_ANO}_${f.FP_MES}`));
+
+  let qtdFechadosPecuaria = 0;
+  const pillsHtmlPecuaria = meses.map(m => {
+    const isFuturo  = new Date(m.ano, m.mes - 1, 1) > hoje2;
+    const isAtual   = m.ano === mesAtual.ano && m.mes === mesAtual.mes;
+    const fechado   = fechadosSetPecuaria.has(`${m.ano}_${m.mes}`);
+    const label     = NOMES_MES[m.mes - 1];
+
+    let cls = 'pill-futuro';
+    if (fechado)        { cls = 'pill-fechado';  qtdFechadosPecuaria++; }
+    else if (isAtual)   { cls = 'pill-atual'; }
+    else if (!isFuturo) { cls = 'pill-pendente'; }
+
+    return `<div class="mes-pill ${cls}" title="${label}/${m.ano}" style="background:${cls==='pill-fechado'?'rgba(245,158,11,.2)':''};color:${cls==='pill-fechado'?'#f59e0b':''}">${label.substring(0,3)}</div>`;
+  }).join('');
+
+  const pillsPec = document.getElementById('pills-pecuaria');
+  const barPec   = document.getElementById('bar-pecuaria');
+  const pctPec   = document.getElementById('pct-pecuaria');
+  if (pillsPec) pillsPec.innerHTML = pillsHtmlPecuaria;
+  const pctPecuaria = Math.round((qtdFechadosPecuaria / 12) * 100);
+  if (barPec)  barPec.style.width = pctPecuaria + '%';
+  if (pctPec)  pctPec.textContent = `${qtdFechadosPecuaria}/12 meses (${pctPecuaria}%)`;
 }
 
 document.addEventListener('DOMContentLoaded', init);

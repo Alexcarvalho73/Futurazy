@@ -2180,7 +2180,915 @@ app.delete('/api/insumos/fechamento/:id', async (req, res) => {
   }
 });
 
+// ============================================================
+// MÓDULO FECHAMENTO FINANCEIRO — PECUÁRIA
+// ============================================================
+
+// ─── Helpers Pecuária ───────────────────────────────────────
+
+function getPecuariaParams() {
+  const data = loadParamsFile();
+  if (!data.pecuaria) {
+    data.pecuaria = {
+      '028501': { estoque_ini_safra_qtd: 0, estoque_ini_safra_vlr: 0, meses: {} },
+      '028503': { estoque_ini_safra_qtd: 0, estoque_ini_safra_vlr: 0, meses: {} }
+    };
+  }
+  return data.pecuaria;
+}
+
+function savePecuariaParams(pecParams) {
+  const data = loadParamsFile();
+  data.pecuaria = pecParams;
+  saveParamsFile(data);
+}
+
+function getPecuariaManualMes(pecParams, filial, ano, mes) {
+  const key = `${ano}_${String(mes).padStart(2, '0')}`;
+  return (pecParams[filial]?.meses?.[key]) || {
+    nascimentos: 0, mortes_perda: 0, mortes_consumo: 0,
+    estoque_fazenda: 0, ajuste_inv: 0, pasto: 0
+  };
+}
+
+// Mapeamento de filial para 028501 ou 028503
+function mapFilialPec(cod) {
+  const s = String(cod || '').trim();
+  if (s === '028503' || s === '028504') return '028503';
+  return '028501'; // 028501, 028502 e 85x → 028501
+}
+
+// Agrega rows (EMPRESA, EMISSAO date, QUANT, TOTAL) por filial+mes
+function agregarPecPorMesFilial(rows) {
+  const map = {};
+  for (const r of rows) {
+    const emissao = r.EMISSAO instanceof Date ? r.EMISSAO : (r.EMISSAO ? new Date(r.EMISSAO) : null);
+    if (!emissao || isNaN(emissao)) continue;
+    const filial = mapFilialPec(r.EMPRESA);
+    const ano = emissao.getFullYear();
+    const mes = emissao.getMonth() + 1;
+    const key = `${filial}_${ano}_${mes}`;
+    if (!map[key]) map[key] = { filial, ano, mes, qtd: 0, total: 0 };
+    map[key].qtd += Number(r.QUANT || 0);
+    map[key].total += Number(r.TOTAL || 0);
+  }
+  return map;
+}
+
+// Agrega pesagens SQL5 (NJH_PSSUBT) por filial+mes
+function agregarSQL5PorMesFilial(rows) {
+  const map = {};
+  for (const r of rows) {
+    const dateStr = String(r.NJH_DATA || '').trim().replace(/[^0-9]/g, '');
+    if (dateStr.length < 8) continue;
+    const ano = parseInt(dateStr.substring(0, 4));
+    const mes = parseInt(dateStr.substring(4, 6));
+    const filial = mapFilialPec(r.EMPRESA);
+    const key = `${filial}_${ano}_${mes}`;
+    if (!map[key]) map[key] = { filial, ano, mes, pesagem: 0 };
+    map[key].pesagem += Number(r.PESO_SUBTOTAL || 0);
+  }
+  return map;
+}
+
+function getSafraYearPec(hoje = new Date()) {
+  return hoje.getMonth() + 1 >= 9 ? hoje.getFullYear() + 1 : hoje.getFullYear();
+}
+function getMesesSafraPec(anoSafra) {
+  return [
+    { ano: anoSafra - 1, mes: 9 }, { ano: anoSafra - 1, mes: 10 },
+    { ano: anoSafra - 1, mes: 11 }, { ano: anoSafra - 1, mes: 12 },
+    { ano: anoSafra, mes: 1 }, { ano: anoSafra, mes: 2 },
+    { ano: anoSafra, mes: 3 }, { ano: anoSafra, mes: 4 },
+    { ano: anoSafra, mes: 5 }, { ano: anoSafra, mes: 6 },
+    { ano: anoSafra, mes: 7 }, { ano: anoSafra, mes: 8 }
+  ];
+}
+function getMesesCalendarioPec(ano) {
+  return Array.from({ length: 12 }, (_, i) => ({ ano, mes: i + 1 }));
+}
+function dateToStrPec(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function getMonthRangePec(ano, mes) {
+  return {
+    dataDe: dateToStrPec(new Date(ano, mes - 1, 1)),
+    dataAte: dateToStrPec(new Date(ano, mes, 0))
+  };
+}
+
+// ─── SQL Builders ───────────────────────────────────────────
+
+function buildSQL1Pec() {
+  return `
+    SELECT TRIM(f2_filial) AS EMPRESA,
+           TO_DATE(F2_EMISSAO,'yyyy/mm/dd') AS EMISSAO,
+           TRIM(F2_DOC) AS NF,
+           DECODE(f2_tipo,'D',
+             (SELECT SUBSTR(a2.a2_nome,1,25) FROM protheus11.sa2020 a2 WHERE a2.a2_cod=f2_cliente AND a2.a2_loja=f2_loja AND a2.d_e_l_e_t_<>'*'),
+             (SELECT SUBSTR(a1.a1_nome,1,25) FROM protheus11.sa1020 a1 WHERE a1.a1_cod=f2_cliente AND a1.a1_loja=f2_loja AND a1.d_e_l_e_t_<>'*')
+           ) AS NOME,
+           TRIM(D2_CF) AS CFOP, D2_QUANT*-1 AS QUANT, (d2_total+d2_valfre)*-1 AS TOTAL,
+           SUBSTR(B1_desc,1,30) AS PRODUTO, TRIM(F2_TIPO) AS TPDOC,
+           F2_VALFAC*-1 AS VLR_FACS, F2_CONTSOC*-1 AS VL_FUNRURAL
+    FROM protheus11.sc5020 c5, protheus11.sc6020 c6, protheus11.sf2020 f2,
+         protheus11.sd2020 d2, protheus11.sb1020 b1
+    WHERE c5.c5_num=c6.c6_num AND D2.D2_PEDIDO=c5.c5_num AND c5.c5_filial=c6.c6_filial
+      AND F2.F2_FILIAL=c6.c6_filial AND D2.D2_FILIAL=f2.f2_filial AND d2.d2_cod=b1.b1_cod
+      AND f2.f2_doc=d2.d2_doc AND f2.f2_serie=d2.d2_serie AND f2.f2_cliente=d2.d2_cliente AND f2.f2_loja=d2.d2_loja
+      AND c5.d_e_l_e_t_<>'*' AND c6.d_e_l_e_t_<>'*' AND f2.d_e_l_e_t_<>'*' AND d2.d_e_l_e_t_<>'*' AND b1.d_e_l_e_t_<>'*'
+      AND F2_EMISSAO >= REPLACE(:data_de, '-', '') AND F2_EMISSAO <= REPLACE(:data_ate, '-', '')
+      AND B1_grupo='0203003' AND D2_CF='5201' AND F2.F2_FILIAL IN ('028501','028503')
+    UNION ALL
+    SELECT TRIM(f1_filial) AS EMPRESA,
+           TO_DATE(F1_DTDIGIT,'yyyy/mm/dd') AS EMISSAO,
+           TRIM(D1_DOC) AS NF,
+           DECODE(d1_TIPO,'D',
+             (SELECT SUBSTR(a2.a2_nome,1,25) FROM protheus11.sa2020 a2 WHERE a2.a2_cod=F1_fornece AND a2.a2_loja=d1_loja AND a2.d_e_l_e_t_<>'*'),
+             (SELECT SUBSTR(a1.a1_nome,1,25) FROM protheus11.sa1020 a1 WHERE a1.a1_cod=F1_fornece AND a1.a1_loja=d1_loja AND a1.d_e_l_e_t_<>'*')
+           ) AS NOME,
+           TRIM(D1_CF) AS CFOP, D1_QUANT AS QUANT, d1_total AS TOTAL,
+           SUBSTR(B1_desc,1,30) AS PRODUTO, TRIM(d1_TIPO) AS TPDOC,
+           D1_VALFAC AS VLR_FACS, F1_CONTSOC AS VL_FUNRURAL
+    FROM protheus11.sf1020 f1, protheus11.sd1020 d1, protheus11.sb1020 b1
+    WHERE D1.D1_FILIAL=f1.f1_filial AND d1.d1_cod=b1.b1_cod
+      AND f1.f1_doc=d1.d1_doc AND f1.f1_serie=d1.d1_serie AND f1.f1_fornece=d1.d1_fornece AND f1.f1_loja=d1.d1_loja
+      AND f1.d_e_l_e_t_<>'*' AND d1.d_e_l_e_t_<>'*' AND b1.d_e_l_e_t_<>'*'
+      AND F1_DTDIGIT >= REPLACE(:data_de, '-', '') AND F1_DTDIGIT <= REPLACE(:data_ate, '-', '')
+      AND D1_grupo='0203003' AND D1_CF IN ('1933','1910','1101','1356') AND F1_FILIAL IN ('028501','028503')
+  `;
+}
+
+function buildSQL2Pec() {
+  return `
+    SELECT TRIM(f2_filial) AS EMPRESA,
+           TO_DATE(F2_EMISSAO,'yyyy/mm/dd') AS EMISSAO,
+           TRIM(F2_DOC) AS NF,
+           DECODE(f2_tipo,'D',
+             (SELECT SUBSTR(a2.a2_nome,1,25) FROM protheus11.sa2020 a2 WHERE a2.a2_cod=f2_cliente AND a2.a2_loja=f2_loja AND a2.d_e_l_e_t_<>'*'),
+             (SELECT SUBSTR(a1.a1_nome,1,25) FROM protheus11.sa1020 a1 WHERE a1.a1_cod=f2_cliente AND a1.a1_loja=f2_loja AND a1.d_e_l_e_t_<>'*')
+           ) AS NOME,
+           TRIM(D2_CF) AS CFOP, D2_QUANT*-1 AS QUANT, (d2_total+d2_valfre)*-1 AS TOTAL,
+           SUBSTR(B1_desc,1,30) AS PRODUTO, TRIM(F2_TIPO) AS TPDOC,
+           F2_VALFAC*-1 AS VLR_FACS, F2_CONTSOC*-1 AS VL_FUNRURAL
+    FROM protheus11.sc5020 c5, protheus11.sc6020 c6, protheus11.sf2020 f2,
+         protheus11.sd2020 d2, protheus11.sb1020 b1
+    WHERE c5.c5_num=c6.c6_num AND D2.D2_PEDIDO=c5.c5_num AND c5.c5_filial=c6.c6_filial
+      AND F2.F2_FILIAL=c6.c6_filial AND D2.D2_FILIAL=f2.f2_filial AND d2.d2_cod=b1.b1_cod
+      AND f2.f2_doc=d2.d2_doc AND f2.f2_serie=d2.d2_serie AND f2.f2_cliente=d2.d2_cliente AND f2.f2_loja=d2.d2_loja
+      AND c5.d_e_l_e_t_<>'*' AND c6.d_e_l_e_t_<>'*' AND f2.d_e_l_e_t_<>'*' AND d2.d_e_l_e_t_<>'*' AND b1.d_e_l_e_t_<>'*'
+      AND F2_EMISSAO >= REPLACE(:data_de, '-', '') AND F2_EMISSAO <= REPLACE(:data_ate, '-', '')
+      AND B1_grupo='0203003' AND D2_CF='5208' AND F2.F2_FILIAL IN ('028501','028503')
+    UNION ALL
+    SELECT TRIM(f1_filial) AS EMPRESA,
+           TO_DATE(F1_DTDIGIT,'yyyy/mm/dd') AS EMISSAO,
+           TRIM(D1_DOC) AS NF,
+           DECODE(d1_TIPO,'D',
+             (SELECT SUBSTR(a2.a2_nome,1,25) FROM protheus11.sa2020 a2 WHERE a2.a2_cod=F1_fornece AND a2.a2_loja=d1_loja AND a2.d_e_l_e_t_<>'*'),
+             (SELECT SUBSTR(a1.a1_nome,1,25) FROM protheus11.sa1020 a1 WHERE a1.a1_cod=F1_fornece AND a1.a1_loja=d1_loja AND a1.d_e_l_e_t_<>'*')
+           ) AS NOME,
+           TRIM(D1_CF) AS CFOP, D1_QUANT AS QUANT, d1_total AS TOTAL,
+           SUBSTR(B1_desc,1,30) AS PRODUTO, TRIM(d1_TIPO) AS TPDOC,
+           D1_VALFAC AS VLR_FACS, F1_CONTSOC AS VL_FUNRURAL
+    FROM protheus11.sf1020 f1, protheus11.sd1020 d1, protheus11.sb1020 b1
+    WHERE D1.D1_FILIAL=f1.f1_filial AND d1.d1_cod=b1.b1_cod
+      AND f1.f1_doc=d1.d1_doc AND f1.f1_serie=d1.d1_serie AND f1.f1_fornece=d1.d1_fornece AND f1.f1_loja=d1.d1_loja
+      AND f1.d_e_l_e_t_<>'*' AND d1.d_e_l_e_t_<>'*' AND b1.d_e_l_e_t_<>'*'
+      AND F1_DTDIGIT >= REPLACE(:data_de, '-', '') AND F1_DTDIGIT <= REPLACE(:data_ate, '-', '')
+      AND D1_grupo='0203003' AND D1_CF='1151' AND F1_FILIAL IN ('028501','028503')
+  `;
+}
+
+function buildSQL3Pec() {
+  return `
+    SELECT TRIM(f2_filial) AS EMPRESA,
+           TO_DATE(F2_EMISSAO,'yyyy/mm/dd') AS EMISSAO,
+           TRIM(F2_DOC) AS NF,
+           DECODE(f2_tipo,'D',
+             (SELECT SUBSTR(a2.a2_nome,1,25) FROM protheus11.sa2020 a2 WHERE a2.a2_cod=f2_cliente AND a2.a2_loja=f2_loja AND a2.d_e_l_e_t_<>'*'),
+             (SELECT SUBSTR(a1.a1_nome,1,25) FROM protheus11.sa1020 a1 WHERE a1.a1_cod=f2_cliente AND a1.a1_loja=f2_loja AND a1.d_e_l_e_t_<>'*')
+           ) AS NOME,
+           TRIM(D2_CF) AS CFOP, D2_QUANT AS QUANT, (d2_total+d2_valfre) AS TOTAL,
+           SUBSTR(B1_desc,1,30) AS PRODUTO, TRIM(F2_TIPO) AS TPDOC,
+           F2_VALFAC AS VLR_FACS, F2_CONTSOC AS VL_FUNRURAL
+    FROM protheus11.sc5020 c5, protheus11.sc6020 c6, protheus11.sf2020 f2,
+         protheus11.sd2020 d2, protheus11.sb1020 b1
+    WHERE c5.c5_num=c6.c6_num AND D2.D2_PEDIDO=c5.c5_num AND c5.c5_filial=c6.c6_filial
+      AND F2.F2_FILIAL=c6.c6_filial AND D2.D2_FILIAL=f2.f2_filial AND d2.d2_cod=b1.b1_cod
+      AND f2.f2_doc=d2.d2_doc AND f2.f2_serie=d2.d2_serie AND f2.f2_cliente=d2.d2_cliente AND f2.f2_loja=d2.d2_loja
+      AND c5.d_e_l_e_t_<>'*' AND c6.d_e_l_e_t_<>'*' AND f2.d_e_l_e_t_<>'*' AND d2.d_e_l_e_t_<>'*' AND b1.d_e_l_e_t_<>'*'
+      AND F2_EMISSAO >= REPLACE(:data_de, '-', '') AND F2_EMISSAO <= REPLACE(:data_ate, '-', '')
+      AND B1_grupo='0203003' AND D2_CF='5151' AND F2.F2_FILIAL IN ('028501','028503')
+    UNION ALL
+    SELECT TRIM(f1_filial) AS EMPRESA,
+           TO_DATE(F1_EMISSAO,'yyyy/mm/dd') AS EMISSAO,
+           TRIM(D1_DOC) AS NF,
+           DECODE(d1_TIPO,'D',
+             (SELECT SUBSTR(a2.a2_nome,1,25) FROM protheus11.sa2020 a2 WHERE a2.a2_cod=F1_fornece AND a2.a2_loja=d1_loja AND a2.d_e_l_e_t_<>'*'),
+             (SELECT SUBSTR(a1.a1_nome,1,25) FROM protheus11.sa1020 a1 WHERE a1.a1_cod=F1_fornece AND a1.a1_loja=d1_loja AND a1.d_e_l_e_t_<>'*')
+           ) AS NOME,
+           TRIM(D1_CF) AS CFOP, D1_QUANT*-1 AS QUANT, d1_total*-1 AS TOTAL,
+           SUBSTR(B1_desc,1,30) AS PRODUTO, TRIM(d1_TIPO) AS TPDOC,
+           D1_VALFAC*-1 AS VLR_FACS, F1_CONTSOC*-1 AS VL_FUNRURAL
+    FROM protheus11.sf1020 f1, protheus11.sd1020 d1, protheus11.sb1020 b1
+    WHERE D1.D1_FILIAL=f1.f1_filial AND d1.d1_cod=b1.b1_cod
+      AND f1.f1_doc=d1.d1_doc AND f1.f1_serie=d1.d1_serie AND f1.f1_fornece=d1.d1_fornece AND f1.f1_loja=d1.d1_loja
+      AND f1.d_e_l_e_t_<>'*' AND d1.d_e_l_e_t_<>'*' AND b1.d_e_l_e_t_<>'*'
+      AND F1_EMISSAO >= REPLACE(:data_de, '-', '') AND F1_EMISSAO <= REPLACE(:data_ate, '-', '')
+      AND D1_grupo='0203003' AND D1_CF='1209' AND F1_FILIAL IN ('028501','028503')
+  `;
+}
+
+function buildSQL4Pec() {
+  return `
+  select * from (  
+  SELECT distinct TRIM(D2.D2_FILIAL) AS EMPRESA,
+           TO_DATE(F2_EMISSAO,'yyyy/mm/dd') AS EMISSAO,
+           TRIM(F2_DOC) AS NF, a1.a1_nome AS NOME,
+           TRIM(D2_CF) AS CFOP, D2_QUANT AS QUANT, D2_TOTAL AS TOTAL,
+           SUBSTR(B1_desc,1,30) AS PRODUTO, TRIM(F2_TIPO) AS TPDOC
+    FROM protheus11.sc5020 c5, protheus11.sc6020 c6, protheus11.sf2020 f2,
+         protheus11.sd2020 d2, protheus11.sb1020 b1, protheus11.sa1020 a1
+    WHERE c5.c5_num=c6.c6_num AND D2.D2_PEDIDO=c5.c5_num AND c5.c5_filial=c6.c6_filial
+      AND F2.F2_FILIAL=c6.c6_filial AND D2.D2_FILIAL=f2.f2_filial
+      AND d2.d2_cliente=a1.a1_cod AND d2.d2_loja=a1.a1_loja
+      AND f2.f2_cliente=a1.a1_cod AND f2.f2_loja=a1.a1_loja
+      AND d2.d2_cod=b1.b1_cod AND f2.f2_doc=d2.d2_doc AND f2.f2_serie=d2.d2_serie
+      AND f2.f2_cliente=d2.d2_cliente AND f2.f2_loja=d2.d2_loja AND d2.d2_TES<>'901'
+      AND c5.d_e_l_e_t_<>'*' AND c6.d_e_l_e_t_<>'*' AND f2.d_e_l_e_t_<>'*' AND d2.d_e_l_e_t_<>'*'
+      AND d2.d2_tipo NOT IN ('D','B') AND d2.d2_filial IN ('028501','028502','028503','028504')
+      AND b1.b1_grupo='0203003' AND d2.d2_cf NOT IN ('5151')
+      AND F2_EMISSAO >= REPLACE(:data_de, '-', '') AND F2_EMISSAO <= REPLACE(:data_ate, '-', '')
+    UNION ALL
+    SELECT distinct TRIM(D2.D2_FILIAL) AS EMPRESA,
+           TO_DATE(F2_EMISSAO,'yyyy/mm/dd') AS EMISSAO,
+           TRIM(F2_DOC) AS NF, a2.a2_nome AS NOME,
+           TRIM(D2_CF) AS CFOP, D2_QUANT AS QUANT, D2_TOTAL AS TOTAL,
+           SUBSTR(B1_desc,1,30) AS PRODUTO, TRIM(F2_TIPO) AS TPDOC
+    FROM protheus11.sc5020 c5, protheus11.sc6020 c6, protheus11.sf2020 f2,
+         protheus11.sd2020 d2, protheus11.sb1020 b1, protheus11.sa2020 a2
+    WHERE c5.c5_num=c6.c6_num AND D2.D2_PEDIDO=c5.c5_num AND c5.c5_filial=c6.c6_filial
+      AND F2.F2_FILIAL=c6.c6_filial AND D2.D2_FILIAL=f2.f2_filial
+      AND d2.d2_cliente=a2.a2_cod AND d2.d2_loja=a2.a2_loja
+      AND f2.f2_cliente=a2.a2_cod AND f2.f2_loja=a2.a2_loja
+      AND d2.d2_cod=b1.b1_cod AND f2.f2_doc=d2.d2_doc AND f2.f2_serie=d2.d2_serie
+      AND f2.f2_cliente=d2.d2_cliente AND f2.f2_loja=d2.d2_loja AND d2.d2_TES<>'901'
+      AND c5.d_e_l_e_t_<>'*' AND c6.d_e_l_e_t_<>'*' AND f2.d_e_l_e_t_<>'*' AND d2.d_e_l_e_t_<>'*'
+      AND d2.d2_tipo IN ('D','B') AND d2.d2_filial IN ('028501','028502','028503','028504')
+      AND b1.b1_grupo='0203003' AND d2.d2_cf NOT IN ('5151')
+      AND F2_EMISSAO >= REPLACE(:data_de, '-', '') AND F2_EMISSAO <= REPLACE(:data_ate, '-', '')
+)`;
+}
+
+function buildSQL5Pec() {
+  return `
+    SELECT TRIM(NJH_FILIAL) AS EMPRESA,
+           NJH_DATA,
+           TRIM(NJH_DESPRO) AS DESCRICAO,
+           TRIM(NJH_NOMENT) AS NOMENT,
+           TRIM(NJH_PLACA) AS PLACA,
+           NJH_HORPS1 AS HORA_INI,
+           NJH_HORPS2 AS HORA_FIM,
+           NJH_PSSUBT AS PESO_SUBTOTAL
+    FROM protheus11.njh020
+    WHERE NJH_STATUS='3' AND d_e_l_e_t_=' '
+      AND NJH_FILIAL IN ('028501','028503')
+      AND NJH_DATA >= REPLACE(:data_de,'-','')
+      AND NJH_DATA <= REPLACE(:data_ate,'-','')
+    ORDER BY NJH_DATA, NJH_FILIAL
+  `;
+}
+
+// ─── Cálculo A-R para um mês/filial ─────────────────────────
+function calcPecuariaMes({ A_qtd, J_vlr, B_qtd, K_vlr, C_qtd, L_vlr, D_qtd, E, F_perda, F_consumo, G_qtd, H, nutricao_peso, cavu_prev, pasto }) {
+  const F = F_perda + F_consumo;
+  const I = A_qtd + B_qtd + C_qtd - D_qtd + E - F - G_qtd + H;
+  const M_val = J_vlr + K_vlr + L_vlr;
+  const N = nutricao_peso * (cavu_prev || 0);
+  const P = M_val + N + pasto;
+  const heads_disp = A_qtd + B_qtd + C_qtd;
+  const Q_cavu = heads_disp > 0 ? P / heads_disp : 0;
+  const R_cav = Q_cavu * (D_qtd + G_qtd);
+  const cam_perdas = Q_cavu * F_perda;
+  const cam_consumo = Q_cavu * F_consumo;
+  const vl_estoque_fin = P - R_cav - cam_perdas - cam_consumo;
+  return {
+    A_qtd, B_qtd, C_qtd, D_qtd, E, F_perda, F_consumo, F, G_qtd, H, I,
+    J_vlr, K_vlr, L_vlr, M_val, N, O: pasto, P, Q_cavu, R_cav,
+    cam_perdas, cam_consumo, vl_estoque_fin
+  };
+}
+
+// ─── API Routes ─────────────────────────────────────────────
+
+// GET /api/pecuaria/params
+app.get('/api/pecuaria/params', (req, res) => {
+  try { res.json({ success: true, data: getPecuariaParams() }); }
+  catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+
+// POST /api/pecuaria/params
+app.post('/api/pecuaria/params', (req, res) => {
+  try {
+    const current = getPecuariaParams();
+    const incoming = req.body;
+    const merged = { ...current };
+    for (const filial of ['028501', '028503']) {
+      if (incoming[filial]) {
+        merged[filial] = { ...current[filial], ...incoming[filial] };
+        if (incoming[filial].meses) {
+          merged[filial].meses = { ...(current[filial]?.meses || {}) };
+          for (const [k, v] of Object.entries(incoming[filial].meses)) {
+            merged[filial].meses[k] = { ...(current[filial]?.meses?.[k] || {}), ...v };
+          }
+        }
+      }
+    }
+    savePecuariaParams(merged);
+    res.json({ success: true, mensagem: 'Parâmetros de pecuária salvos.' });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+
+// GET /api/pecuaria/sql1
+app.get('/api/pecuaria/sql1', async (req, res) => {
+  try {
+    const dataDe = req.query.data_de || '2026-05-01';
+    const dataAte = req.query.data_ate || '2026-07-31';
+    const filial = req.query.filial;
+    let sql = buildSQL1Pec();
+    const binds = { data_de: dataDe, data_ate: dataAte };
+    if (filial && filial !== 'TOTAL') {
+      sql = `SELECT * FROM (${sql}) WHERE EMPRESA = :filial`;
+      binds.filial = filial;
+    }
+    const rows = await db.execute(sql, binds);
+    res.json({ success: true, count: rows.length, data: rows });
+  } catch (err) { console.error('[pec/sql1]', err); res.status(500).json({ success: false, error: err.message }); }
+});
+
+// GET /api/pecuaria/sql2
+app.get('/api/pecuaria/sql2', async (req, res) => {
+  try {
+    const dataDe = req.query.data_de || '2026-05-01';
+    const dataAte = req.query.data_ate || '2026-07-31';
+    const filial = req.query.filial;
+    let sql = buildSQL2Pec();
+    const binds = { data_de: dataDe, data_ate: dataAte };
+    if (filial && filial !== 'TOTAL') {
+      sql = `SELECT * FROM (${sql}) WHERE EMPRESA = :filial`;
+      binds.filial = filial;
+    }
+    const rows = await db.execute(sql, binds);
+    res.json({ success: true, count: rows.length, data: rows });
+  } catch (err) { console.error('[pec/sql2]', err); res.status(500).json({ success: false, error: err.message }); }
+});
+
+// GET /api/pecuaria/sql3
+app.get('/api/pecuaria/sql3', async (req, res) => {
+  try {
+    const dataDe = req.query.data_de || '2026-05-01';
+    const dataAte = req.query.data_ate || '2026-07-31';
+    const filial = req.query.filial;
+    let sql = buildSQL3Pec();
+    const binds = { data_de: dataDe, data_ate: dataAte };
+    if (filial && filial !== 'TOTAL') {
+      sql = `SELECT * FROM (${sql}) WHERE EMPRESA = :filial`;
+      binds.filial = filial;
+    }
+    const rows = await db.execute(sql, binds);
+    res.json({ success: true, count: rows.length, data: rows });
+  } catch (err) { console.error('[pec/sql3]', err); res.status(500).json({ success: false, error: err.message }); }
+});
+
+// GET /api/pecuaria/sql4
+app.get('/api/pecuaria/sql4', async (req, res) => {
+  try {
+    const dataDe = req.query.data_de || '2026-05-01';
+    const dataAte = req.query.data_ate || '2026-07-31';
+    const filial = req.query.filial;
+    let sql = buildSQL4Pec();
+    const binds = { data_de: dataDe, data_ate: dataAte };
+    if (filial && filial !== 'TOTAL') {
+      sql = `SELECT * FROM (${sql}) WHERE EMPRESA = :filial`;
+      binds.filial = filial;
+    }
+    const rows = await db.execute(sql, binds);
+    res.json({ success: true, count: rows.length, data: rows });
+  } catch (err) { console.error('[pec/sql4]', err); res.status(500).json({ success: false, error: err.message }); }
+});
+
+// GET /api/pecuaria/sql5
+app.get('/api/pecuaria/sql5', async (req, res) => {
+  try {
+    const dataDe = req.query.data_de || '2026-05-01';
+    const dataAte = req.query.data_ate || '2026-07-31';
+    const filial = req.query.filial;
+    let sql = buildSQL5Pec();
+    const binds = { data_de: dataDe, data_ate: dataAte };
+    if (filial && filial !== 'TOTAL') {
+      sql = `SELECT * FROM (${sql}) WHERE EMPRESA = :filial`;
+      binds.filial = filial;
+    }
+    const rows = await db.execute(sql, binds);
+    res.json({ success: true, count: rows.length, data: rows });
+  } catch (err) { console.error('[pec/sql5]', err); res.status(500).json({ success: false, error: err.message }); }
+});
+
+// GET /api/pecuaria/resumo-anual — grid A-R com 12 meses, cascata de estoque
+app.get('/api/pecuaria/resumo-anual', async (req, res) => {
+  try {
+    const hoje = new Date();
+    const anoSafra = parseInt(req.query.ano_safra) || getSafraYearPec(hoje);
+    const tipoCalend = req.query.tipo || 'safra';
+    const anoCalend = parseInt(req.query.ano) || hoje.getFullYear();
+    const meses = tipoCalend === 'calendario' ? getMesesCalendarioPec(anoCalend) : getMesesSafraPec(anoSafra);
+
+    const mesAtual = { ano: hoje.getFullYear(), mes: hoje.getMonth() + 1 };
+    const prevDate = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+    const mesAnterior = { ano: prevDate.getFullYear(), mes: prevDate.getMonth() + 1 };
+
+    // 1. Buscar fechados
+    let fechados = [];
+    try {
+      fechados = await db.execute(`SELECT * FROM FECHAMENTO_PECUARIA ORDER BY FP_ANO, FP_MES`);
+    } catch (e) { console.warn('[pec/resumo] FECHAMENTO_PECUARIA não existe ainda:', e.message); }
+    const fechadosMap = {};
+    for (const f of fechados) {
+      fechadosMap[`${f.FP_EMPRESA}_${f.FP_ANO}_${f.FP_MES}`] = f;
+    }
+
+    // 2. Parâmetros manuais
+    const pecParams = getPecuariaParams();
+
+    // 3. Identificar meses dinâmicos
+    const dinamicos = meses.filter(m => {
+      if (new Date(m.ano, m.mes - 1, 1) > hoje) return false;
+      // TEMPORÁRIO: Maio (5), Junho (6) e Julho (7) de 2026 são dinâmicos
+      return (m.ano === 2026 && m.mes >= 5 && m.mes <= 7);
+    });
+
+    // 4. Buscar dados dinâmicos (batch query)
+    let s1Agg = {}, s2Agg = {}, s3Agg = {}, s4Agg = {}, s5Agg = {};
+    if (dinamicos.length > 0) {
+      const timestamps = dinamicos.map(m => new Date(m.ano, m.mes - 1, 1).getTime());
+      const timestampsAte = dinamicos.map(m => new Date(m.ano, m.mes, 0).getTime());
+      const dataDe = dateToStrPec(new Date(Math.min(...timestamps)));
+      const dataAte = dateToStrPec(new Date(Math.max(...timestampsAte)));
+      const binds = { data_de: dataDe, data_ate: dataAte };
+      try { s1Agg = agregarPecPorMesFilial(await db.execute(buildSQL1Pec(), binds)); } catch (e) { console.warn('[pec/resumo] SQL1:', e.message); }
+      try { s2Agg = agregarPecPorMesFilial(await db.execute(buildSQL2Pec(), binds)); } catch (e) { console.warn('[pec/resumo] SQL2:', e.message); }
+      try { s3Agg = agregarPecPorMesFilial(await db.execute(buildSQL3Pec(), binds)); } catch (e) { console.warn('[pec/resumo] SQL3:', e.message); }
+      try { s4Agg = agregarPecPorMesFilial(await db.execute(buildSQL4Pec(), binds)); } catch (e) { console.warn('[pec/resumo] SQL4:', e.message); }
+      try { s5Agg = agregarSQL5PorMesFilial(await db.execute(buildSQL5Pec(), binds)); } catch (e) { console.warn('[pec/resumo] SQL5:', e.message); }
+    }
+
+    // 5. Loop sequencial com cascata de estoque
+    const cascata = {
+      '028501': { qtd_fin: null, vlr_fin: null, cavu: null },
+      '028503': { qtd_fin: null, vlr_fin: null, cavu: null }
+    };
+
+    const resultado = meses.map((m, idx) => {
+      const isMesAtual = m.ano === 2026 && m.mes === 7;
+      const isMesAnterior = m.ano === 2026 && (m.mes === 5 || m.mes === 6);
+      const isFuturo = new Date(m.ano, m.mes - 1, 1) > hoje;
+      const isDinamico = m.ano === 2026 && m.mes >= 5 && m.mes <= 7;
+
+      let defaultStatus = isFuturo ? 'futuro' : isDinamico ? (m.mes === 7 ? 'dinamico_atual' : 'dinamico_anterior') : 'aguardando';
+
+      const porEmpresa = {};
+
+      for (const filial of ['028501', '028503']) {
+        const fechado = fechadosMap[`${filial}_${m.ano}_${m.mes}`];
+
+        if (fechado) {
+          // Usar valores do fechamento
+          const data = {
+            A_qtd: Number(fechado.FP_ESTOQUE_INI || 0),
+            B_qtd: Number(fechado.FP_COMPRAS_QTD || 0),
+            C_qtd: Number(fechado.FP_TRANSF_ENT_QTD || 0),
+            D_qtd: Number(fechado.FP_TRANSF_SAI_QTD || 0),
+            E: Number(fechado.FP_NASCIMENTOS || 0),
+            F_perda: Number(fechado.FP_MORTES_PERDA || 0),
+            F_consumo: Number(fechado.FP_MORTES_CONSUMO || 0),
+            F: Number((fechado.FP_MORTES_PERDA || 0)) + Number((fechado.FP_MORTES_CONSUMO || 0)),
+            G_qtd: Number(fechado.FP_VENDAS_QTD || 0),
+            H: Number(fechado.FP_AJUSTE_INV || 0),
+            I: Number(fechado.FP_ESTOQUE_FIN || 0),
+            estoque_fazenda: Number(fechado.FP_ESTOQUE_FAZENDA || 0),
+            J_vlr: Number(fechado.FP_VL_ESTOQUE_INI || 0),
+            K_vlr: Number(fechado.FP_VL_COMPRAS || 0),
+            L_vlr: Number(fechado.FP_VL_TRANSF_ENT || 0),
+            M_val: Number(fechado.FP_VL_ESTOQUE_INI || 0) + Number(fechado.FP_VL_COMPRAS || 0) + Number(fechado.FP_VL_TRANSF_ENT || 0),
+            N: Number(fechado.FP_VL_NUTRICAO || 0),
+            O: Number(fechado.FP_VL_PASTO || 0),
+            Q_cavu: Number(fechado.FP_CAV_U || 0),
+            R_cav: Number(fechado.FP_CAV || 0),
+            cam_perdas: Number(fechado.FP_CAM_PERDAS || 0),
+            cam_consumo: Number(fechado.FP_CAM_CONSUMO || 0),
+            vl_estoque_fin: Number(fechado.FP_VL_ESTOQUE_FIN || 0),
+            status: 'fechado',
+            dtFechamento: fechado.FP_DT_FECHAMENTO
+          };
+          data.P = data.M_val + data.N + data.O;
+          data.dif_estoque = data.I - data.estoque_fazenda;
+          porEmpresa[filial] = data;
+          // Atualizar cascata
+          cascata[filial].qtd_fin = data.I;
+          cascata[filial].vlr_fin = data.vl_estoque_fin;
+          cascata[filial].cavu = data.Q_cavu;
+
+        } else {
+          // Mês não fechado (dinâmico, histórico pendente ou futuro)
+          const pfil = pecParams[filial] || {};
+          const manual = getPecuariaManualMes(pecParams, filial, m.ano, m.mes);
+
+          // Regra do estoque inicial:
+          // Se for o mês de início da apuração (Maio/2026), usa o parâmetro se não houver cascata anterior.
+          // Se for anterior a Maio/2026, começa e acumula com base em 0.
+          // Se for posterior, herda por cascata.
+          const isInicioApuracao = m.ano === 2026 && m.mes === 5;
+          const isAnteriorInicio = m.ano < 2026 || (m.ano === 2026 && m.mes < 5);
+
+          let A_qtd = 0;
+          let J_vlr = 0;
+
+          if (isInicioApuracao) {
+            A_qtd = (cascata[filial].qtd_fin !== null && cascata[filial].qtd_fin !== 0)
+              ? cascata[filial].qtd_fin
+              : (Number(pfil.estoque_ini_safra_qtd) || 0);
+
+            J_vlr = (cascata[filial].vlr_fin !== null && cascata[filial].vlr_fin !== 0)
+              ? cascata[filial].vlr_fin
+              : (Number(pfil.estoque_ini_safra_vlr) || 0);
+          } else {
+            A_qtd = cascata[filial].qtd_fin !== null ? cascata[filial].qtd_fin : 0;
+            J_vlr = cascata[filial].vlr_fin !== null ? cascata[filial].vlr_fin : 0;
+          }
+
+          const cavuPrev = cascata[filial].cavu || 0;
+
+          // Se for dinâmico, carrega valores do Oracle. Caso contrário (meses anteriores que não fechamos ou futuro), assume 0
+          const key = `${filial}_${m.ano}_${m.mes}`;
+          const B_qtd = isDinamico ? Number(s1Agg[key]?.qtd || 0) : 0;
+          const K_vlr = isDinamico ? Number(s1Agg[key]?.total || 0) : 0;
+          const C_qtd = isDinamico ? Number(s2Agg[key]?.qtd || 0) : 0;
+          const L_vlr = isDinamico ? Number(s2Agg[key]?.total || 0) : 0;
+          const D_qtd = isDinamico ? Number(s3Agg[key]?.qtd || 0) : 0;
+          const G_qtd = isDinamico ? Number(s4Agg[key]?.qtd || 0) : 0;
+          const nutricao_peso = isDinamico ? Number(s5Agg[key]?.pesagem || 0) : 0;
+
+          // Ajustes manuais só se aplicam se o mês for dinâmico (apuração ativa)
+          const E_nascimentos = isDinamico ? Number(manual.nascimentos || 0) : 0;
+          const F_perda = isDinamico ? Number(manual.mortes_perda || 0) : 0;
+          const F_consumo = isDinamico ? Number(manual.mortes_consumo || 0) : 0;
+          const H_ajuste = isDinamico ? Number(manual.ajuste_inv || 0) : 0;
+          const O_pasto = isDinamico ? Number(manual.pasto || 0) : 0;
+          const est_fazenda = isDinamico ? Number(manual.estoque_fazenda || 0) : 0;
+
+          const calc = calcPecuariaMes({
+            A_qtd, J_vlr, B_qtd, K_vlr, C_qtd, L_vlr, D_qtd,
+            E: E_nascimentos,
+            F_perda,
+            F_consumo,
+            G_qtd, H: H_ajuste,
+            nutricao_peso, cavu_prev: cavuPrev,
+            pasto: O_pasto
+          });
+
+          const dif = calc.I - est_fazenda;
+          porEmpresa[filial] = {
+            ...calc,
+            estoque_fazenda: est_fazenda,
+            dif_estoque: dif,
+            status: defaultStatus
+          };
+
+          // Atualizar cascata para o mês seguinte
+          cascata[filial].qtd_fin = calc.I;
+          cascata[filial].vlr_fin = calc.vl_estoque_fin;
+          cascata[filial].cavu = calc.Q_cavu;
+        }
+      }
+
+      // Consolidado TOTAL
+      const t = { status: 'futuro' };
+      const statuses = new Set();
+      for (const [fk, fv] of Object.entries(porEmpresa)) {
+        statuses.add(fv.status);
+        for (const k of ['A_qtd', 'B_qtd', 'C_qtd', 'D_qtd', 'E', 'F_perda', 'F_consumo', 'F', 'G_qtd', 'H', 'I',
+          'estoque_fazenda', 'J_vlr', 'K_vlr', 'L_vlr', 'M_val', 'N', 'O', 'P', 'R_cav',
+          'cam_perdas', 'cam_consumo', 'vl_estoque_fin']) {
+          t[k] = (t[k] || 0) + (fv[k] || 0);
+        }
+      }
+      // Recalcular Q_cavu e dif do total
+      const heads_tot = t.A_qtd + t.B_qtd + t.C_qtd;
+      t.Q_cavu = heads_tot > 0 ? t.P / heads_tot : 0;
+      t.dif_estoque = t.I - t.estoque_fazenda;
+      t.status = statuses.has('fechado') && statuses.size === 1 ? 'fechado'
+        : statuses.has('dinamico_anterior') ? 'dinamico_anterior'
+          : statuses.has('dinamico_atual') ? 'dinamico_atual'
+            : defaultStatus;
+      porEmpresa['TOTAL'] = t;
+
+      return { ano: m.ano, mes: m.mes, status: t.status, porEmpresa };
+    });
+
+    res.json({ success: true, anoSafra, tipoCalend, meses: resultado });
+  } catch (err) {
+    console.error('[pec/resumo-anual]', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /api/pecuaria/fechados — lista meses fechados para pills no hub
+app.get('/api/pecuaria/fechados', async (req, res) => {
+  try {
+    let rows = [];
+    try {
+      rows = await db.execute(`SELECT DISTINCT FP_EMPRESA, FP_ANO, FP_MES, FP_DT_FECHAMENTO FROM FECHAMENTO_PECUARIA ORDER BY FP_ANO, FP_MES`);
+    } catch (e) { console.warn('[pec/fechados] tabela não existe:', e.message); }
+    res.json({ success: true, count: rows.length, data: rows });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+
+// POST /api/pecuaria/fechar-mes — grava fechamento completo na tabela
+app.post('/api/pecuaria/fechar-mes', async (req, res) => {
+  try {
+    const { empresa, mes, ano } = req.body;
+    if (!empresa || !mes || !ano) return res.status(400).json({ success: false, error: 'empresa, mes e ano são obrigatórios.' });
+
+    const { dataDe, dataAte } = getMonthRangePec(parseInt(ano), parseInt(mes));
+    const binds = { data_de: dataDe, data_ate: dataAte };
+    const pecParams = getPecuariaParams();
+
+    // Buscar dados Oracle
+    let s1 = {}, s2 = {}, s3 = {}, s4 = {}, s5 = {};
+    try { s1 = agregarPecPorMesFilial(await db.execute(buildSQL1Pec(), binds)); } catch (e) { }
+    try { s2 = agregarPecPorMesFilial(await db.execute(buildSQL2Pec(), binds)); } catch (e) { }
+    try { s3 = agregarPecPorMesFilial(await db.execute(buildSQL3Pec(), binds)); } catch (e) { }
+    try { s4 = agregarPecPorMesFilial(await db.execute(buildSQL4Pec(), binds)); } catch (e) { }
+    try { s5 = agregarSQL5PorMesFilial(await db.execute(buildSQL5Pec(), binds)); } catch (e) { }
+
+    const empresas = empresa === 'TODAS' ? ['028501', '028503'] : [empresa];
+    const resultados = [];
+
+    for (const filial of empresas) {
+      // Buscar fechamento do mês anterior para cascata
+      const prevDate = new Date(parseInt(ano), parseInt(mes) - 2, 1);
+      const prevAno = prevDate.getFullYear();
+      const prevMes = prevDate.getMonth() + 1;
+      let prevFechado = null;
+      try {
+        const rows = await db.execute(`SELECT * FROM FECHAMENTO_PECUARIA WHERE FP_EMPRESA=:emp AND FP_ANO=:ano AND FP_MES=:mes`,
+          { emp: filial, ano: prevAno, mes: prevMes });
+        if (rows.length > 0) prevFechado = rows[0];
+      } catch (e) { }
+
+      const pfil = pecParams[filial] || {};
+      const manual = getPecuariaManualMes(pecParams, filial, parseInt(ano), parseInt(mes));
+
+      const A_qtd = prevFechado ? Number(prevFechado.FP_ESTOQUE_FIN) : (Number(pfil.estoque_ini_safra_qtd) || 0);
+      const J_vlr = prevFechado ? Number(prevFechado.FP_VL_ESTOQUE_FIN) : (Number(pfil.estoque_ini_safra_vlr) || 0);
+      const cavuPrev = prevFechado ? Number(prevFechado.FP_CAV_U) : 0;
+
+      const key = `${filial}_${ano}_${mes}`;
+      const B_qtd = Number(s1[key]?.qtd || 0), K_vlr = Number(s1[key]?.total || 0);
+      const C_qtd = Number(s2[key]?.qtd || 0), L_vlr = Number(s2[key]?.total || 0);
+      const D_qtd = Number(s3[key]?.qtd || 0);
+      const G_qtd = Number(s4[key]?.qtd || 0);
+      const nutricao_peso = Number(s5[key]?.pesagem || 0);
+
+      const calc = calcPecuariaMes({
+        A_qtd, J_vlr, B_qtd, K_vlr, C_qtd, L_vlr, D_qtd,
+        E: Number(manual.nascimentos || 0),
+        F_perda: Number(manual.mortes_perda || 0),
+        F_consumo: Number(manual.mortes_consumo || 0),
+        G_qtd, H: Number(manual.ajuste_inv || 0),
+        nutricao_peso, cavu_prev: cavuPrev,
+        pasto: Number(manual.pasto || 0)
+      });
+
+      const mergeSql = `
+        MERGE INTO FECHAMENTO_PECUARIA fp
+        USING DUAL ON (fp.FP_EMPRESA=:empresa AND fp.FP_ANO=:ano AND fp.FP_MES=:mes)
+        WHEN MATCHED THEN UPDATE SET
+          fp.FP_ESTOQUE_INI=:estoqueIni, fp.FP_COMPRAS_QTD=:comprasQtd,
+          fp.FP_TRANSF_ENT_QTD=:transfEntQtd, fp.FP_TRANSF_SAI_QTD=:transfSaiQtd,
+          fp.FP_NASCIMENTOS=:nascimentos, fp.FP_MORTES_PERDA=:mortesPerda,
+          fp.FP_MORTES_CONSUMO=:mortesConsumo, fp.FP_VENDAS_QTD=:vendasQtd,
+          fp.FP_AJUSTE_INV=:ajusteInv, fp.FP_ESTOQUE_FIN=:estoqueFin,
+          fp.FP_ESTOQUE_FAZENDA=:estoqueFazenda,
+          fp.FP_VL_ESTOQUE_INI=:vlEstoqueIni, fp.FP_VL_COMPRAS=:vlCompras,
+          fp.FP_VL_TRANSF_ENT=:vlTransfEnt, fp.FP_VL_NUTRICAO=:vlNutricao,
+          fp.FP_VL_PASTO=:vlPasto, fp.FP_CAV_U=:cavU, fp.FP_CAV=:cav,
+          fp.FP_CAM_PERDAS=:camPerdas, fp.FP_CAM_CONSUMO=:camConsumo,
+          fp.FP_VL_ESTOQUE_FIN=:vlEstoqueFin, fp.FP_DT_FECHAMENTO=SYSDATE
+        WHEN NOT MATCHED THEN INSERT (
+          FP_EMPRESA, FP_ANO, FP_MES,
+          FP_ESTOQUE_INI, FP_COMPRAS_QTD, FP_TRANSF_ENT_QTD, FP_TRANSF_SAI_QTD,
+          FP_NASCIMENTOS, FP_MORTES_PERDA, FP_MORTES_CONSUMO, FP_VENDAS_QTD,
+          FP_AJUSTE_INV, FP_ESTOQUE_FIN, FP_ESTOQUE_FAZENDA,
+          FP_VL_ESTOQUE_INI, FP_VL_COMPRAS, FP_VL_TRANSF_ENT,
+          FP_VL_NUTRICAO, FP_VL_PASTO, FP_CAV_U, FP_CAV,
+          FP_CAM_PERDAS, FP_CAM_CONSUMO, FP_VL_ESTOQUE_FIN, FP_DT_FECHAMENTO
+        ) VALUES (
+          :empresa, :ano, :mes,
+          :estoqueIni, :comprasQtd, :transfEntQtd, :transfSaiQtd,
+          :nascimentos, :mortesPerda, :mortesConsumo, :vendasQtd,
+          :ajusteInv, :estoqueFin, :estoqueFazenda,
+          :vlEstoqueIni, :vlCompras, :vlTransfEnt,
+          :vlNutricao, :vlPasto, :cavU, :cav,
+          :camPerdas, :camConsumo, :vlEstoqueFin, SYSDATE
+        )
+      `;
+      await db.execute(mergeSql, {
+        empresa: filial, ano: parseInt(ano), mes: parseInt(mes),
+        estoqueIni: calc.A_qtd, comprasQtd: calc.B_qtd,
+        transfEntQtd: calc.C_qtd, transfSaiQtd: calc.D_qtd,
+        nascimentos: calc.E, mortesPerda: calc.F_perda,
+        mortesConsumo: calc.F_consumo, vendasQtd: calc.G_qtd,
+        ajusteInv: calc.H, estoqueFin: calc.I,
+        estoqueFazenda: Number(manual.estoque_fazenda || 0),
+        vlEstoqueIni: calc.J_vlr, vlCompras: calc.K_vlr,
+        vlTransfEnt: calc.L_vlr, vlNutricao: calc.N,
+        vlPasto: calc.O, cavU: calc.Q_cavu,
+        cav: calc.R_cav, camPerdas: calc.cam_perdas,
+        camConsumo: calc.cam_consumo, vlEstoqueFin: calc.vl_estoque_fin
+      }, { autoCommit: true });
+      resultados.push({ filial, ...calc });
+    }
+
+    res.json({ success: true, mensagem: `Mês ${mes}/${ano} fechado com sucesso.`, dados: resultados });
+  } catch (err) {
+    console.error('[pec/fechar-mes]', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /api/pecuaria/fechamentos — CRUD lista completa
+app.get('/api/pecuaria/fechamentos', async (req, res) => {
+  try {
+    const { ano, mes, filial } = req.query;
+    let where = 'WHERE 1=1';
+    const binds = {};
+    if (ano) { where += ' AND FP_ANO=:ano'; binds.ano = parseInt(ano); }
+    if (mes) { where += ' AND FP_MES=:mes'; binds.mes = parseInt(mes); }
+    if (filial) { where += ' AND FP_EMPRESA=:filial'; binds.filial = filial; }
+    let rows = [];
+    try { rows = await db.execute(`SELECT * FROM FECHAMENTO_PECUARIA ${where} ORDER BY FP_ANO DESC, FP_MES DESC, FP_EMPRESA`, binds); }
+    catch (e) { console.warn('[pec/fechamentos]', e.message); }
+    res.json({ success: true, count: rows.length, data: rows });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+
+// POST /api/pecuaria/fechamento — inclui um novo fechamento manual de pecuária
+app.post('/api/pecuaria/fechamento', async (req, res) => {
+  try {
+    const {
+      periodo, filial, estoqueIni, comprasQtd, transfEntQtd, transfSaiQtd,
+      nascimentos, mortesPerda, mortesConsumo, vendasQtd, ajusteInv, estoqueFin,
+      estoqueFazenda, vlEstoqueIni, vlCompras, vlTransfEnt, vlNutricao, vlPasto,
+      cavu, cav, camPerdas, camConsumo, vlEstoqueFin, obs
+    } = req.body;
+
+    if (!periodo || !filial) {
+      return res.status(400).json({ success: false, error: 'Período e filial são obrigatórios.' });
+    }
+
+    const [ano, mes] = periodo.split('-');
+
+    // Controle de integridade
+    const checkSql = `
+      SELECT COUNT(*) as QTD FROM FECHAMENTO_PECUARIA
+      WHERE FP_EMPRESA = :filial AND FP_ANO = :ano AND FP_MES = :mes
+    `;
+    const checkResult = await db.execute(checkSql, { filial, ano: parseInt(ano), mes: parseInt(mes) });
+    if (checkResult[0] && checkResult[0].QTD > 0) {
+      return res.status(400).json({ success: false, error: 'Já existe um fechamento para esta Filial e Período.' });
+    }
+
+    const sql = `
+      INSERT INTO FECHAMENTO_PECUARIA (
+        FP_EMPRESA, FP_ANO, FP_MES, FP_ESTOQUE_INI, FP_COMPRAS_QTD, FP_TRANSF_ENT_QTD, FP_TRANSF_SAI_QTD,
+        FP_NASCIMENTOS, FP_MORTES_PERDA, FP_MORTES_CONSUMO, FP_VENDAS_QTD, FP_AJUSTE_INV, FP_ESTOQUE_FIN, FP_ESTOQUE_FAZENDA,
+        FP_VL_ESTOQUE_INI, FP_VL_COMPRAS, FP_VL_TRANSF_ENT, FP_VL_NUTRICAO, FP_VL_PASTO, FP_CAV_U, FP_CAV,
+        FP_CAM_PERDAS, FP_CAM_CONSUMO, FP_VL_ESTOQUE_FIN, FP_OBS, FP_DT_FECHAMENTO
+      ) VALUES (
+        :filial, :ano, :mes, :estoqueIni, :comprasQtd, :transfEntQtd, :transfSaiQtd,
+        :nascimentos, :mortesPerda, :mortesConsumo, :vendasQtd, :ajusteInv, :estoqueFin, :estoqueFazenda,
+        :vlEstoqueIni, :vlCompras, :vlTransfEnt, :vlNutricao, :vlPasto, :cavu, :cav,
+        :camPerdas, :camConsumo, :vlEstoqueFin, :obs, SYSDATE
+      )
+    `;
+
+    await db.execute(sql, {
+      filial, ano: parseInt(ano), mes: parseInt(mes),
+      estoqueIni: Number(estoqueIni || 0),
+      comprasQtd: Number(comprasQtd || 0),
+      transfEntQtd: Number(transfEntQtd || 0),
+      transfSaiQtd: Number(transfSaiQtd || 0),
+      nascimentos: parseInt(nascimentos || 0),
+      mortesPerda: parseInt(mortesPerda || 0),
+      mortesConsumo: parseInt(mortesConsumo || 0),
+      vendasQtd: Number(vendasQtd || 0),
+      ajusteInv: Number(ajusteInv || 0),
+      estoqueFin: Number(estoqueFin || 0),
+      estoqueFazenda: Number(estoqueFazenda || 0),
+      vlEstoqueIni: Number(vlEstoqueIni || 0),
+      vlCompras: Number(vlCompras || 0),
+      vlTransfEnt: Number(vlTransfEnt || 0),
+      vlNutricao: Number(vlNutricao || 0),
+      vlPasto: Number(vlPasto || 0),
+      cavu: Number(cavu || 0),
+      cav: Number(cav || 0),
+      camPerdas: Number(camPerdas || 0),
+      camConsumo: Number(camConsumo || 0),
+      vlEstoqueFin: Number(vlEstoqueFin || 0),
+      obs: obs || ''
+    }, { autoCommit: true });
+
+    res.json({ success: true, mensagem: 'Fechamento inserido com sucesso.' });
+  } catch (err) {
+    console.error('[pecuaria/fechamento/insert]', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// PUT /api/pecuaria/fechamento/:id — atualiza fechamento manual de pecuária
+app.put('/api/pecuaria/fechamento/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      estoqueIni, comprasQtd, transfEntQtd, transfSaiQtd,
+      nascimentos, mortesPerda, mortesConsumo, vendasQtd, ajusteInv, estoqueFin,
+      estoqueFazenda, vlEstoqueIni, vlCompras, vlTransfEnt, vlNutricao, vlPasto,
+      cavu, cav, camPerdas, camConsumo, vlEstoqueFin, obs
+    } = req.body;
+
+    const sql = `
+      UPDATE FECHAMENTO_PECUARIA SET
+        FP_ESTOQUE_INI = :estoqueIni, FP_COMPRAS_QTD = :comprasQtd,
+        FP_TRANSF_ENT_QTD = :transfEntQtd, FP_TRANSF_SAI_QTD = :transfSaiQtd,
+        FP_NASCIMENTOS = :nascimentos, FP_MORTES_PERDA = :mortesPerda,
+        FP_MORTES_CONSUMO = :mortesConsumo, FP_VENDAS_QTD = :vendasQtd,
+        FP_AJUSTE_INV = :ajusteInv, FP_ESTOQUE_FIN = :estoqueFin,
+        FP_ESTOQUE_FAZENDA = :estoqueFazenda,
+        FP_VL_ESTOQUE_INI = :vlEstoqueIni, FP_VL_COMPRAS = :vlCompras,
+        FP_VL_TRANSF_ENT = :vlTransfEnt, FP_VL_NUTRICAO = :vlNutricao,
+        FP_VL_PASTO = :vlPasto, FP_CAV_U = :cavu, FP_CAV = :cav,
+        FP_CAM_PERDAS = :camPerdas, FP_CAM_CONSUMO = :camConsumo,
+        FP_VL_ESTOQUE_FIN = :vlEstoqueFin, FP_OBS = :obs,
+        FP_DT_FECHAMENTO = SYSDATE
+      WHERE FP_ID = :id
+    `;
+
+    await db.execute(sql, {
+      id: parseInt(id),
+      estoqueIni: Number(estoqueIni || 0),
+      comprasQtd: Number(comprasQtd || 0),
+      transfEntQtd: Number(transfEntQtd || 0),
+      transfSaiQtd: Number(transfSaiQtd || 0),
+      nascimentos: parseInt(nascimentos || 0),
+      mortesPerda: parseInt(mortesPerda || 0),
+      mortesConsumo: parseInt(mortesConsumo || 0),
+      vendasQtd: Number(vendasQtd || 0),
+      ajusteInv: Number(ajusteInv || 0),
+      estoqueFin: Number(estoqueFin || 0),
+      estoqueFazenda: Number(estoqueFazenda || 0),
+      vlEstoqueIni: Number(vlEstoqueIni || 0),
+      vlCompras: Number(vlCompras || 0),
+      vlTransfEnt: Number(vlTransfEnt || 0),
+      vlNutricao: Number(vlNutricao || 0),
+      vlPasto: Number(vlPasto || 0),
+      cavu: Number(cavu || 0),
+      cav: Number(cav || 0),
+      camPerdas: Number(camPerdas || 0),
+      camConsumo: Number(camConsumo || 0),
+      vlEstoqueFin: Number(vlEstoqueFin || 0),
+      obs: obs || ''
+    }, { autoCommit: true });
+
+    res.json({ success: true, mensagem: 'Fechamento atualizado com sucesso.' });
+  } catch (err) {
+    console.error('[pecuaria/fechamento/update]', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// DELETE /api/pecuaria/fechamento/:id — exclui fechamento pelo ID
+app.delete('/api/pecuaria/fechamento/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await db.execute('DELETE FROM FECHAMENTO_PECUARIA WHERE FP_ID=:id', { id: parseInt(id) }, { autoCommit: true });
+    res.json({ success: true, mensagem: 'Fechamento excluído.' });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+
+
 // Inicialização do Servidor e do Pool de Banco de Dados
+
 async function startServer() {
   try {
     await db.initialize();

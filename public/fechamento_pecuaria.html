@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Custos Pecuária — Fechamento Financeiro | FuturazBI</title>
+  <meta name="description" content="Painel de Custos Pecuária — CAV/U, CAV, Compras, Transferências, Vendas, Abates — Fechamento Financeiro FuturazBI">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    /* ── Cores e Tema Pecuária ──────────────────── */
+    :root { --pec-amber: #f59e0b; --pec-amber-dim: rgba(245,158,11,.12); --pec-amber-border: rgba(245,158,11,.3); }
+
+    /* ── Layout ──────────────────────────────────── */
+    .main-content { max-height: 100vh; }
+    .page-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .page-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .btn-toggle-cal {
+      background: rgba(245,158,11,.15);
+      color: #fbbf24;
+      border: 1px solid rgba(245,158,11,.3);
+    }
+    .btn-toggle-cal:hover { background: rgba(245,158,11,.25); }
+    .breadcrumb {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+    .breadcrumb a { color: var(--color-primary); text-decoration: none; }
+    .breadcrumb a:hover { text-decoration: underline; }
+
+    /* ── KPI Grid ─────────────────────────────────── */
+    .kpi-grid-5 { display:grid; grid-template-columns:repeat(5,1fr); gap:16px; }
+    @media (max-width:1400px) { .kpi-grid-5 { grid-template-columns:repeat(3,1fr); } }
+    @media (max-width:900px)  { .kpi-grid-5 { grid-template-columns:repeat(2,1fr); } }
+    .kpi-card { background:var(--bg-card); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:18px 20px; position:relative; overflow:hidden; transition:border-color .2s; }
+    .kpi-card:hover { border-color:var(--pec-amber-border); }
+    .kpi-card::before { content:''; position:absolute; inset:0; background:linear-gradient(135deg,var(--pec-amber-dim),transparent); opacity:0; transition:opacity .3s; pointer-events:none; }
+    .kpi-card:hover::before { opacity:1; }
+    .kpi-label { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.08em; color:var(--text-muted); margin-bottom:6px; }
+    .kpi-value { font-size:24px; font-weight:700; font-family:'Outfit',sans-serif; color:var(--pec-amber); }
+    .kpi-sub   { font-size:12px; color:var(--text-muted); margin-top:4px; }
+    .kpi-icon  { position:absolute; right:16px; top:16px; font-size:28px; opacity:.12; color:var(--pec-amber); }
+    .kpi-badge { display:inline-block; font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px; margin-left:6px; vertical-align:middle; }
+
+    /* ── Moeda / Período Toggle ───────────────────── */
+    .moeda-toggle-group { display:flex; gap:0; border-radius:8px; overflow:hidden; border:1px solid var(--border-color); }
+    .moeda-btn { padding:8px 14px; font-size:12px; font-weight:700; cursor:pointer; border:none; background:rgba(255,255,255,.04); color:var(--text-muted); transition:all .2s; display:flex; align-items:center; gap:5px; }
+    .moeda-btn:hover { background:rgba(255,255,255,.08); color:var(--text-white); }
+    .moeda-btn.active[data-moeda="BRL"]  { background:rgba(16,185,129,.15); color:#10b981; }
+    .moeda-btn.active[data-moeda="USD"]  { background:var(--pec-amber-dim); color:var(--pec-amber); }
+    .moeda-btn.active[data-periodo="anterior"] { background:var(--pec-amber-dim); color:var(--pec-amber); }
+    .moeda-btn.active[data-periodo="atual"]    { background:rgba(59,130,246,.15); color:var(--color-primary); }
+    .moeda-btn.active[data-kpi-periodo="atual"]    { background:rgba(59,130,246,.15); color:var(--color-primary); }
+    .moeda-btn.active[data-kpi-periodo="anterior"] { background:var(--pec-amber-dim); color:var(--pec-amber); }
+    .moeda-btn.active[data-empresa="TOTAL"]        { background:rgba(255,255,255,.1); color:var(--text-white); }
+    .moeda-btn.active[data-empresa="028501"]       { background:rgba(59,130,246,.15); color:var(--color-primary); }
+    .moeda-btn.active[data-empresa="028503"]       { background:var(--pec-amber-dim); color:var(--pec-amber); }
+    .moeda-btn + .moeda-btn { border-left:1px solid var(--border-color); }
+
+    /* ── Painel de Parâmetros Manuais ─────────────── */
+    .params-panel { background:var(--bg-card); border:1px solid var(--pec-amber-border); border-radius:var(--radius-md); overflow:hidden; }
+    .params-panel-header { display:flex; justify-content:space-between; align-items:center; padding:16px 20px; cursor:pointer; transition:background .2s; }
+    .params-panel-header:hover { background:rgba(255,255,255,.03); }
+    .params-panel-header h3 { font-size:15px; color:var(--pec-amber); display:flex; align-items:center; gap:8px; }
+    .params-panel-body { padding:20px; border-top:1px solid var(--border-color); }
+    .params-row { display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; margin-bottom:16px; }
+    @media (max-width:900px) { .params-row { grid-template-columns:1fr 1fr; } }
+    .params-group { display:flex; flex-direction:column; gap:4px; }
+    .params-group label { font-size:11px; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:.06em; }
+    .params-group input, .params-group select {
+      background:rgba(255,255,255,.06); border:1px solid var(--border-color);
+      border-radius:6px; padding:8px 10px; color:var(--text-white); font-size:13px;
+      transition:border-color .2s; width:100%;
+    }
+    .params-group input:focus, .params-group select:focus { border-color:var(--pec-amber); outline:none; }
+    .params-separator { grid-column:1/-1; height:1px; background:var(--border-color); margin:4px 0; }
+    .params-section-label { grid-column:1/-1; font-size:10px; font-weight:700; color:var(--pec-amber); text-transform:uppercase; letter-spacing:.1em; padding-top:4px; }
+
+    /* ── Grid Anual (Tabela A-R) ──────────────────── */
+    .anual-section { background:var(--bg-card); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:24px; }
+    .anual-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; gap:10px; flex-wrap:wrap; }
+    .anual-header h2 { font-size:17px; color:var(--text-white); display:flex; align-items:center; gap:8px; }
+    .anual-table-wrap { overflow-x:auto; max-width:100%; width:100%; border:1px solid var(--border-color); border-radius:var(--radius-sm); display:block; }
+    .anual-table { width:100%; border-collapse:collapse; font-size:12px; table-layout:auto; }
+    .anual-table th { background:var(--bg-sidebar); color:var(--text-white); font-weight:600; padding:8px 10px; border-bottom:2px solid var(--border-color); white-space:nowrap; text-align:center; position:sticky; top:0; z-index:5; }
+    .anual-table th.col-label { text-align:left; min-width:200px; }
+    .anual-table td { padding:6px 10px; border-bottom:1px solid rgba(255,255,255,.04); white-space:nowrap; text-align:right; color:var(--text-muted); }
+    .anual-table td.col-label { text-align:left; color:var(--text-white); font-weight:500; }
+    .anual-table tr:hover td { background:rgba(255,255,255,.015); }
+
+    /* Seções especiais */
+    .row-section-header td { background:rgba(245,158,11,.06)!important; color:var(--pec-amber)!important; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.1em; border-bottom:1px solid var(--pec-amber-border)!important; }
+    .row-calculated td { color:#10b981; font-weight:600; background:rgba(16,185,129,.04); }
+    .row-kpi td { color:#fbbf24; font-weight:700; font-size:13px; background:rgba(245,158,11,.06); border-top:1px solid var(--pec-amber-border)!important; }
+    .row-cam td { color:#f87171; }
+    .row-estoque-final td { color:#60a5fa; font-weight:700; border-top:2px solid rgba(96,165,250,.3)!important; }
+
+    /* Destaque de meses */
+    .col-mes-anterior { background:rgba(245,158,11,.04); }
+    .col-mes-atual    { background:rgba(59,130,246,.04); }
+    .col-fechado      { background:rgba(16,185,129,.03); }
+    .th-mes-anterior  { color:var(--pec-amber)!important; border-bottom:2px solid var(--pec-amber)!important; }
+    .th-mes-atual     { color:var(--color-primary)!important; border-bottom:2px solid var(--color-primary)!important; }
+    .th-fechado       { color:#10b981!important; border-bottom:2px solid #10b981!important; }
+
+    /* Status pills na tabela */
+    .pill-status { display:inline-block; font-size:9px; font-weight:700; padding:1px 5px; border-radius:3px; margin-top:2px; }
+    .pill-fechado      { background:rgba(16,185,129,.15); color:#10b981; }
+    .pill-din-ant      { background:rgba(245,158,11,.15); color:var(--pec-amber); }
+    .pill-din-atu      { background:rgba(59,130,246,.15); color:var(--color-primary); }
+    .pill-aguardando   { background:rgba(100,116,139,.1); color:#64748b; }
+    .pill-futuro       { background:rgba(51,65,85,.2); color:#475569; }
+
+    /* Botão fechar mês na tabela */
+    .btn-fechar-mes { font-size:10px; padding:3px 8px; border-radius:4px; cursor:pointer; background:var(--pec-amber-dim); color:var(--pec-amber); border:1px solid var(--pec-amber-border); transition:all .15s; white-space:nowrap; }
+    .btn-fechar-mes:hover { background:rgba(245,158,11,.3); }
+    .btn-fechar-mes:disabled { opacity:.4; cursor:not-allowed; }
+
+    /* ── Seções Drill-Down ────────────────────────── */
+    .drill-section { background:var(--bg-card); border:1px solid var(--border-color); border-radius:var(--radius-md); overflow:hidden; width:100%; display:block; }
+    .drill-header { display:flex; justify-content:space-between; align-items:center; padding:16px 20px; cursor:pointer; transition:background .2s; }
+    .drill-header:hover { background:rgba(255,255,255,.02); }
+    .drill-header h3 { font-size:14px; color:var(--text-white); display:flex; align-items:center; gap:8px; margin:0; padding:0; line-height:1.2; }
+    .drill-header h3 i { font-size:16px; }
+    .drill-header .drill-badge { font-size:10px; font-weight:700; padding:2px 7px; border-radius:4px; }
+    .drill-body { padding:0; border-top:1px solid var(--border-color); display:none; }
+    .drill-body.open { display:block; }
+    .drill-toolbar { display:flex; gap:8px; padding:14px 16px; border-bottom:1px solid var(--border-color); flex-wrap:wrap; align-items:center; }
+    .drill-table-wrap { overflow-x:auto; max-height:380px; overflow-y:auto; }
+    .drill-table { width:100%; border-collapse:collapse; font-size:12px; }
+    .drill-table th { background:var(--bg-sidebar); color:var(--text-white); font-weight:600; padding:8px 10px; white-space:nowrap; position:sticky; top:0; z-index:3; border-bottom:2px solid var(--border-color); }
+    .drill-table td { padding:6px 10px; border-bottom:1px solid rgba(255,255,255,.04); white-space:nowrap; color:var(--text-muted); }
+    .drill-table tr:hover td { background:rgba(255,255,255,.02); }
+    .drill-table .text-right { text-align:right; }
+    .drill-empty { padding:40px; text-align:center; color:var(--text-muted); font-style:italic; }
+    .drill-total-row td { background:rgba(255,255,255,.03); font-weight:700; color:var(--text-white); border-top:2px solid var(--border-color); }
+
+    /* ── Modals ───────────────────────────────────── */
+    .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.7); z-index:1000; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px); opacity:0; pointer-events:none; transition:opacity .25s; }
+    .modal-overlay.open { opacity:1; pointer-events:all; }
+    .modal-box { background:var(--bg-card); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:28px; width:520px; max-width:90vw; max-height:90vh; overflow-y:auto; transform:scale(.94); transition:transform .25s; }
+    .modal-overlay.open .modal-box { transform:scale(1); }
+    .modal-title { font-size:18px; font-weight:700; color:var(--text-white); margin-bottom:20px; display:flex; align-items:center; gap:10px; }
+    .modal-detail-row { display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid rgba(255,255,255,.05); font-size:13px; }
+    .modal-detail-row:last-child { border-bottom:none; }
+    .modal-detail-row .label { color:var(--text-muted); }
+    .modal-detail-row .value { color:var(--text-white); font-weight:600; }
+    .modal-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:24px; }
+
+    /* ── Misc ──────────────────────────────────────── */
+    .toggle-icon { transition:transform .2s; }
+    .collapsed .toggle-icon { transform:rotate(-90deg); }
+    .loading-overlay { position:absolute; inset:0; background:rgba(0,0,0,.5); display:flex; align-items:center; justify-content:center; border-radius:var(--radius-md); z-index:10; }
+    .spin { animation:spin 1s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    .btn-pec { background:var(--pec-amber-dim); color:var(--pec-amber); border:1px solid var(--pec-amber-border); }
+    .btn-pec:hover { background:rgba(245,158,11,.3); }
+    .separator-section { display:flex; align-items:center; gap:8px; color:var(--text-muted); font-size:11px; margin:4px 0; }
+    .separator-section::before, .separator-section::after { content:''; flex:1; height:1px; background:var(--border-color); }
+  </style>
+</head>
+<body>
+  <div class="dashboard-container">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="brand">
+        <i class="fa-solid fa-chart-line logo-icon"></i>
+        <h2>Futurazy<span>BI</span></h2>
+      </div>
+      <nav class="nav-menu">
+        <a href="index.html"><i class="fa-solid fa-house"></i> Dashboard</a>
+        <a href="notas.html"><i class="fa-solid fa-file-invoice-dollar"></i> Central XML</a>
+        <a href="fechamento.html" class="active"><i class="fa-solid fa-file-chart-column"></i> Fechamento</a>
+        <a href="#" class="nav-disabled"><i class="fa-solid fa-database"></i> Conexões</a>
+        <a href="#" class="nav-disabled"><i class="fa-solid fa-gears"></i> Configurações</a>
+      </nav>
+      <div class="connection-status">
+        <div class="status-indicator online"></div>
+        <span>Oracle DB: Conectado</span>
+      </div>
+    </aside>
+
+    <!-- Conteúdo Principal -->
+    <main class="main-content">
+
+      <!-- Cabeçalho -->
+      <header class="page-header">
+        <div>
+          <div class="breadcrumb">
+            <a href="fechamento.html"><i class="fa-solid fa-file-chart-column"></i> Fechamento</a>
+            <i class="fa-solid fa-chevron-right" style="font-size:10px"></i>
+            <span style="color:var(--text-white)"><i class="fa-solid fa-cow" style="color:var(--pec-amber);"></i> Custos Pecuária</span>
+          </div>
+          <h1 style="font-size:26px; color:var(--text-white); margin-bottom:4px;">
+            Custos Pecuária
+            <span style="font-size:13px; font-weight:500; color:var(--text-muted); margin-left:10px;">Safra <span id="txt-safra">—</span></span>
+          </h1>
+          <p style="color:var(--text-muted); font-size:14px;">Bovinos · Compras · Transferências · Abates — CAV/U e CAV por mês de apuração</p>
+        </div>
+        <div class="page-header-actions">
+          <!-- Toggle Período dos Cards -->
+          <div class="moeda-toggle-group" title="Selecionar período dos cards">
+            <button class="moeda-btn" data-kpi-periodo="atual" id="btn-kpi-atual">
+              Mês Corrente
+            </button>
+            <button class="moeda-btn active" data-kpi-periodo="anterior" id="btn-kpi-anterior">
+              Mês Anterior
+            </button>
+          </div>
+          <!-- Botão Ajustes Manuais -->
+          <button class="btn btn-secondary" id="btn-open-edit-fechamento" style="background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3);">
+            <i class="fa-solid fa-pen-to-square"></i> Ajustes Manuais
+          </button>
+          <!-- Toggle Moeda -->
+          <div class="moeda-toggle-group" title="Selecionar moeda de visualização">
+            <button class="moeda-btn active" data-moeda="BRL" id="btn-moeda-brl">
+              <i class="fa-solid fa-brazilian-real-sign"></i> Real
+            </button>
+            <button class="moeda-btn" data-moeda="USD" id="btn-moeda-usd">
+              <i class="fa-solid fa-dollar-sign"></i> Dólar
+            </button>
+          </div>
+          <!-- Filtro Empresa -->
+          <div class="moeda-toggle-group" id="empresa-toggle" title="Selecionar Filial">
+            <button class="moeda-btn active" data-empresa="TOTAL"  id="btn-emp-tot">Todas</button>
+            <button class="moeda-btn" data-empresa="028501" id="btn-emp-1">028501</button>
+            <button class="moeda-btn" data-empresa="028503" id="btn-emp-3">028503</button>
+          </div>
+          <!-- Toggle Calendário -->
+          <button class="btn btn-toggle-cal" id="btn-toggle-cal">
+            <i class="fa-solid fa-seedling"></i>
+            <span id="label-cal">Safra Agrícola</span>
+          </button>
+          <!-- Refresh -->
+          <button class="btn btn-secondary" id="btn-refresh">
+            <i class="fa-solid fa-rotate"></i> Atualizar
+          </button>
+        </div>
+      </header>
+
+      <!-- KPI Cards (5) -->
+      <section class="kpi-grid-5">
+        <div class="kpi-card">
+          <div class="kpi-label">CAV/U (R$/cab)</div>
+          <div class="kpi-value" id="kpi-cavu">—</div>
+          <div class="kpi-sub" id="kpi-cavu-sub">Custo médio por cabeça</div>
+          <i class="fa-solid fa-cow kpi-icon"></i>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">CAV (R$)</div>
+          <div class="kpi-value" id="kpi-cav">—</div>
+          <div class="kpi-sub" id="kpi-cav-sub">Custo abates + transferências</div>
+          <i class="fa-solid fa-scale-balanced kpi-icon"></i>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Estoque Final (cab)</div>
+          <div class="kpi-value" id="kpi-ef-qtd">—</div>
+          <div class="kpi-sub" id="kpi-ef-sub">Contábil vs. Fazenda (SBC)</div>
+          <i class="fa-solid fa-warehouse kpi-icon"></i>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Valor Disponível (R$)</div>
+          <div class="kpi-value" id="kpi-vd">—</div>
+          <div class="kpi-sub">P = M + Nutrição + Pasto</div>
+          <i class="fa-solid fa-sack-dollar kpi-icon"></i>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Dif. Estoque (cab)</div>
+          <div class="kpi-value" id="kpi-dif">—</div>
+          <div class="kpi-sub">Contábil menos SBC</div>
+          <i class="fa-solid fa-triangle-exclamation kpi-icon"></i>
+        </div>
+      </section>
+
+      <!-- Painel de Parâmetros Manuais (PECCode) -->
+      <section class="params-panel-pec" style="margin-top:20px; background:var(--bg-card); border:1px solid var(--border-color); border-radius:var(--radius-md);">
+        <div class="params-panel-header" id="params-toggle" style="display:flex; justify-content:space-between; align-items:center; padding:16px 20px; cursor:pointer; transition:background .2s;">
+          <h3><i class="fa-solid fa-sliders" style="color:var(--pec-amber);"></i> Parâmetros Manuais (PECCode) <span style="font-size:11px;color:var(--text-muted);font-weight:400;">— salvos no servidor, persistem entre sessões</span></h3>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span id="params-save-status" style="font-size:11px;color:var(--text-muted);"></span>
+            <button class="btn btn-pec" id="btn-save-params" style="font-size:12px;padding:7px 14px;" onclick="event.stopPropagation()">
+              <i class="fa-solid fa-floppy-disk"></i> Salvar
+            </button>
+            <i class="fa-solid fa-chevron-down toggle-icon" id="params-chevron" style="transform: rotate(-90deg);"></i>
+          </div>
+        </div>
+        <div class="params-panel-body" id="params-body" style="display:none; padding:20px; border-top:1px solid var(--border-color);">
+          <!-- Seletor de contexto -->
+          <div class="params-row" style="margin-bottom:20px;">
+            <div class="params-group">
+              <label>Filial</label>
+              <select id="params-filial">
+                <option value="028501">028501 — Futurazy Agrícola</option>
+                <option value="028503">028503 — Futurazy Pecuária</option>
+              </select>
+            </div>
+            <div class="params-group">
+              <label>Mês / Ano</label>
+              <input type="month" id="params-mes-ano">
+            </div>
+          </div>
+
+          <!-- Estoque Inicial da Safra (fixo) -->
+          <div class="params-row">
+            <div class="params-section-label" style="color:var(--pec-amber);">Estoque Inicial da Safra (configurado 1 vez — cascata automática)</div>
+            <div class="params-group">
+              <label>Estoque Inicial Safra (cab)</label>
+              <input type="number" id="p-estoque-ini-qtd" placeholder="Ex: 7131" step="0.01">
+            </div>
+            <div class="params-group">
+              <label>Valor Estoque Inicial (R$)</label>
+              <input type="number" id="p-estoque-ini-vlr" placeholder="Ex: 35791209" step="0.01">
+            </div>
+          </div>
+          <div class="separator-section">Dados mensais — PECCode</div>
+
+          <!-- Dados mensais -->
+          <div class="params-row">
+            <div class="params-group">
+              <label>Nascimentos (cab)</label>
+              <input type="number" id="p-nascimentos" placeholder="0" step="1" min="0">
+            </div>
+            <div class="params-group">
+              <label>Mortes — Perda (cab)</label>
+              <input type="number" id="p-mortes-perda" placeholder="0" step="1" min="0">
+            </div>
+            <div class="params-group">
+              <label>Mortes — Consumo Interno (cab)</label>
+              <input type="number" id="p-mortes-consumo" placeholder="0" step="1" min="0">
+            </div>
+            <div class="params-group">
+              <label>Estoque Fazenda SBC (cab)</label>
+              <input type="number" id="p-estoque-fazenda" placeholder="0" step="0.01">
+            </div>
+            <div class="params-group">
+              <label>Ajuste de Inventário (+/-)</label>
+              <input type="number" id="p-ajuste-inv" placeholder="0" step="0.01">
+            </div>
+            <div class="params-group">
+              <label>Pasto/Capim — Valor (R$)</label>
+              <input type="number" id="p-pasto" placeholder="0" step="0.01">
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Grid de Resumo Anual -->
+      <section class="anual-section" id="anual-section" style="margin-top:20px; position:relative;">
+        <div class="anual-header">
+          <h2>
+            <i class="fa-solid fa-table" style="color:var(--pec-amber);"></i>
+            Resultado da Pecuária — Safra <span id="anual-safra-lbl">—</span>
+          </h2>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <span style="font-size:11px;color:var(--text-muted);padding:6px 0;">
+              <span style="color:#10b981;">●</span> Fechado &nbsp;
+              <span style="color:var(--pec-amber);">●</span> Mês Anterior &nbsp;
+              <span style="color:var(--color-primary);">●</span> Mês Atual &nbsp;
+              <span style="color:#64748b;">●</span> Aguardando
+            </span>
+            <button class="btn btn-outline" id="btn-export-anual" style="font-size:11px;padding:6px 12px;">
+              <i class="fa-solid fa-file-excel"></i> Exportar
+            </button>
+          </div>
+        </div>
+        <div id="anual-loading" style="display:none;" class="loading-overlay">
+          <i class="fa-solid fa-spinner spin" style="font-size:28px;color:var(--pec-amber);"></i>
+        </div>
+        <div class="anual-table-wrap">
+          <table class="anual-table" id="anual-table">
+            <thead id="anual-thead"></thead>
+            <tbody id="anual-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Drill-Down SQL 1: Compras -->
+      <section class="drill-section" id="drill1" style="margin-top:20px;">
+        <div class="drill-header" onclick="toggleDrill('drill1')">
+          <h3><i class="fa-solid fa-cart-shopping" style="color:#10b981;"></i> SQL1 — Compras de Bovinos
+            <span class="drill-badge" style="background:rgba(16,185,129,.15);color:#10b981;" id="d1-count">—</span>
+          </h3>
+          <i class="fa-solid fa-chevron-down toggle-icon"></i>
+        </div>
+        <div class="drill-body" id="drill1-body">
+          <div class="drill-toolbar">
+            <div class="params-group" style="flex-direction:row;align-items:center;gap:8px;margin:0;">
+              <label style="white-space:nowrap;font-size:11px;">De:</label>
+              <input type="date" id="d1-de" style="width:130px;padding:5px 8px;background:rgba(255,255,255,.06);border:1px solid var(--border-color);border-radius:6px;color:var(--text-white);font-size:12px;">
+              <label style="white-space:nowrap;font-size:11px;">Até:</label>
+              <input type="date" id="d1-ate" style="width:130px;padding:5px 8px;background:rgba(255,255,255,.06);border:1px solid var(--border-color);border-radius:6px;color:var(--text-white);font-size:12px;">
+            </div>
+            <button class="btn btn-pec" onclick="loadDrill(1)" style="font-size:12px;padding:6px 12px;"><i class="fa-solid fa-magnifying-glass"></i> Consultar</button>
+          </div>
+          <div class="drill-table-wrap"><div class="drill-empty" id="d1-empty">Clique em Consultar para carregar os dados de Compras de Bovinos.</div><table class="drill-table" id="d1-table" style="display:none;"><thead id="d1-thead"></thead><tbody id="d1-tbody"></tbody><tfoot id="d1-tfoot"></tfoot></table></div>
+        </div>
+      </section>
+
+      <!-- Drill-Down SQL 2: Transferências Entrada -->
+      <section class="drill-section" id="drill2" style="margin-top:20px;">
+        <div class="drill-header" onclick="toggleDrill('drill2')">
+          <h3><i class="fa-solid fa-arrow-right-to-bracket" style="color:#60a5fa;"></i> SQL2 — Transferências Entrada
+            <span class="drill-badge" style="background:rgba(96,165,250,.15);color:#60a5fa;" id="d2-count">—</span>
+          </h3>
+          <i class="fa-solid fa-chevron-down toggle-icon"></i>
+        </div>
+        <div class="drill-body" id="drill2-body">
+          <div class="drill-toolbar">
+            <div class="params-group" style="flex-direction:row;align-items:center;gap:8px;margin:0;">
+              <label style="white-space:nowrap;font-size:11px;">De:</label>
+              <input type="date" id="d2-de" style="width:130px;padding:5px 8px;background:rgba(255,255,255,.06);border:1px solid var(--border-color);border-radius:6px;color:var(--text-white);font-size:12px;">
+              <label style="white-space:nowrap;font-size:11px;">Até:</label>
+              <input type="date" id="d2-ate" style="width:130px;padding:5px 8px;background:rgba(255,255,255,.06);border:1px solid var(--border-color);border-radius:6px;color:var(--text-white);font-size:12px;">
+            </div>
+            <button class="btn btn-pec" onclick="loadDrill(2)" style="font-size:12px;padding:6px 12px;"><i class="fa-solid fa-magnifying-glass"></i> Consultar</button>
+          </div>
+          <div class="drill-table-wrap"><div class="drill-empty" id="d2-empty">Clique em Consultar para carregar os dados de Transferências Entrada.</div><table class="drill-table" id="d2-table" style="display:none;"><thead id="d2-thead"></thead><tbody id="d2-tbody"></tbody><tfoot id="d2-tfoot"></tfoot></table></div>
+        </div>
+      </section>
+
+      <!-- Drill-Down SQL 3: Transferências Saída -->
+      <section class="drill-section" id="drill3" style="margin-top:20px;">
+        <div class="drill-header" onclick="toggleDrill('drill3')">
+          <h3><i class="fa-solid fa-arrow-right-from-bracket" style="color:#f87171;"></i> SQL3 — Transferências Saída
+            <span class="drill-badge" style="background:rgba(248,113,113,.15);color:#f87171;" id="d3-count">—</span>
+          </h3>
+          <i class="fa-solid fa-chevron-down toggle-icon"></i>
+        </div>
+        <div class="drill-body" id="drill3-body">
+          <div class="drill-toolbar">
+            <div class="params-group" style="flex-direction:row;align-items:center;gap:8px;margin:0;">
+              <label style="white-space:nowrap;font-size:11px;">De:</label>
+              <input type="date" id="d3-de" style="width:130px;padding:5px 8px;background:rgba(255,255,255,.06);border:1px solid var(--border-color);border-radius:6px;color:var(--text-white);font-size:12px;">
+              <label style="white-space:nowrap;font-size:11px;">Até:</label>
+              <input type="date" id="d3-ate" style="width:130px;padding:5px 8px;background:rgba(255,255,255,.06);border:1px solid var(--border-color);border-radius:6px;color:var(--text-white);font-size:12px;">
+            </div>
+            <button class="btn btn-pec" onclick="loadDrill(3)" style="font-size:12px;padding:6px 12px;"><i class="fa-solid fa-magnifying-glass"></i> Consultar</button>
+          </div>
+          <div class="drill-table-wrap"><div class="drill-empty" id="d3-empty">Clique em Consultar para carregar os dados de Transferências Saída.</div><table class="drill-table" id="d3-table" style="display:none;"><thead id="d3-thead"></thead><tbody id="d3-tbody"></tbody><tfoot id="d3-tfoot"></tfoot></table></div>
+        </div>
+      </section>
+
+      <!-- Drill-Down SQL 4: Vendas / Abates -->
+      <section class="drill-section" id="drill4" style="margin-top:20px;">
+        <div class="drill-header" onclick="toggleDrill('drill4')">
+          <h3><i class="fa-solid fa-receipt" style="color:#e879f9;"></i> SQL4 — Vendas / Abates
+            <span class="drill-badge" style="background:rgba(232,121,249,.15);color:#e879f9;" id="d4-count">—</span>
+          </h3>
+          <i class="fa-solid fa-chevron-down toggle-icon"></i>
+        </div>
+        <div class="drill-body" id="drill4-body">
+          <div class="drill-toolbar">
+            <div class="params-group" style="flex-direction:row;align-items:center;gap:8px;margin:0;">
+              <label style="white-space:nowrap;font-size:11px;">De:</label>
+              <input type="date" id="d4-de" style="width:130px;padding:5px 8px;background:rgba(255,255,255,.06);border:1px solid var(--border-color);border-radius:6px;color:var(--text-white);font-size:12px;">
+              <label style="white-space:nowrap;font-size:11px;">Até:</label>
+              <input type="date" id="d4-ate" style="width:130px;padding:5px 8px;background:rgba(255,255,255,.06);border:1px solid var(--border-color);border-radius:6px;color:var(--text-white);font-size:12px;">
+            </div>
+            <button class="btn btn-pec" onclick="loadDrill(4)" style="font-size:12px;padding:6px 12px;"><i class="fa-solid fa-magnifying-glass"></i> Consultar</button>
+          </div>
+          <div class="drill-table-wrap"><div class="drill-empty" id="d4-empty">Clique em Consultar para carregar os dados de Vendas e Abates.</div><table class="drill-table" id="d4-table" style="display:none;"><thead id="d4-thead"></thead><tbody id="d4-tbody"></tbody><tfoot id="d4-tfoot"></tfoot></table></div>
+        </div>
+      </section>
+
+      <!-- Drill-Down SQL 5: Pesagens -->
+      <section class="drill-section" id="drill5" style="margin-top:20px;">
+        <div class="drill-header" onclick="toggleDrill('drill5')">
+          <h3><i class="fa-solid fa-weight-scale" style="color:#34d399;"></i> SQL5 — Pesagens (Nutrição Animal / NJH020)
+            <span class="drill-badge" style="background:rgba(52,211,153,.15);color:#34d399;" id="d5-count">—</span>
+          </h3>
+          <i class="fa-solid fa-chevron-down toggle-icon"></i>
+        </div>
+        <div class="drill-body" id="drill5-body">
+          <div class="drill-toolbar">
+            <div class="params-group" style="flex-direction:row;align-items:center;gap:8px;margin:0;">
+              <label style="white-space:nowrap;font-size:11px;">De:</label>
+              <input type="date" id="d5-de" style="width:130px;padding:5px 8px;background:rgba(255,255,255,.06);border:1px solid var(--border-color);border-radius:6px;color:var(--text-white);font-size:12px;">
+              <label style="white-space:nowrap;font-size:11px;">Até:</label>
+              <input type="date" id="d5-ate" style="width:130px;padding:5px 8px;background:rgba(255,255,255,.06);border:1px solid var(--border-color);border-radius:6px;color:var(--text-white);font-size:12px;">
+            </div>
+            <button class="btn btn-pec" onclick="loadDrill(5)" style="font-size:12px;padding:6px 12px;"><i class="fa-solid fa-magnifying-glass"></i> Consultar</button>
+          </div>
+          <div class="drill-table-wrap"><div class="drill-empty" id="d5-empty">Clique em Consultar para carregar os dados de Pesagens.</div><table class="drill-table" id="d5-table" style="display:none;"><thead id="d5-thead"></thead><tbody id="d5-tbody"></tbody><tfoot id="d5-tfoot"></tfoot></table></div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       MODAL — Confirmar Fechamento de Mês
+  ════════════════════════════════════════════ -->
+  <div class="modal-overlay" id="modal-fechar">
+    <div class="modal-box">
+      <div class="modal-title"><i class="fa-solid fa-lock" style="color:var(--pec-amber);"></i> Confirmar Fechamento</div>
+      <p style="color:var(--text-muted);font-size:13px;margin-bottom:20px;">
+        Os dados do mês serão calculados a partir dos SQLs Oracle + parâmetros manuais e gravados na tabela <strong style="color:var(--text-white);">FECHAMENTO_PECUARIA</strong>.
+        Após o fechamento, o mês ficará bloqueado (somente exibição) e o estoque final será usado como entrada do mês seguinte.
+      </p>
+      <div id="modal-fechar-detalhe"></div>
+      <div class="modal-actions">
+        <button class="btn btn-outline" onclick="closeModal('modal-fechar')">Cancelar</button>
+        <button class="btn btn-pec" id="btn-confirmar-fechamento" style="font-size:13px;padding:10px 20px;">
+          <i class="fa-solid fa-lock"></i> Confirmar Fechamento
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       MODAL — Excluir Fechamento
+  ════════════════════════════════════════════ -->
+  <div class="modal-overlay" id="modal-excluir">
+    <div class="modal-box">
+      <div class="modal-title" style="color:#f87171;"><i class="fa-solid fa-triangle-exclamation"></i> Excluir Fechamento</div>
+      <p style="color:var(--text-muted);font-size:13px;margin-bottom:20px;">Confirma a exclusão do fechamento?<br>O mês voltará ao status "Aguardando" e a cascata de estoque será interrompida.</p>
+      <div id="modal-excluir-detalhe"></div>
+      <div class="modal-actions">
+        <button class="btn btn-outline" onclick="closeModal('modal-excluir')">Cancelar</button>
+        <button class="btn" id="btn-confirmar-exclusao" style="background:rgba(248,113,113,.15);color:#f87171;border:1px solid rgba(248,113,113,.3);font-size:13px;padding:10px 20px;">
+          <i class="fa-solid fa-trash"></i> Excluir
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       MODAL — AJUSTES MANUAIS (CRUD completo)
+  ════════════════════════════════════════════ -->
+  <div class="modal-overlay" id="modal-edit-fechamento">
+    <div class="modal-box" style="max-width: 1100px; width: 95%; max-height: 90vh; overflow-y: auto;">
+      <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; margin-bottom: 16px;">
+        <h2 class="modal-title" style="margin: 0; text-align: left; display: flex; align-items: center; gap: 8px; color: var(--pec-amber);">
+          <i class="fa-solid fa-pen-to-square"></i> Ajustes Manuais — FECHAMENTO_PECUARIA
+        </h2>
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-primary btn-sm" id="btn-new-fechamento" style="padding: 4px 10px; background:var(--pec-amber-dim); color:var(--pec-amber); border:1px solid var(--pec-amber-border);" onclick="openNewFechamentoForm()">
+            <i class="fa-solid fa-plus"></i> Incluir Novo
+          </button>
+          <button class="toggle-btn" id="btn-close-edit-fechamento-modal" style="margin: 0; padding: 4px 8px;" onclick="closeModal('modal-edit-fechamento')">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- LISTA DE FECHAMENTOS -->
+      <div id="edit-fechamento-list-view">
+        <div style="display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap;">
+          <div class="filter-group" style="flex: 1; min-width: 130px;">
+            <input type="month" id="filter-modal-periodo" class="form-control" title="Filtrar por Mês/Ano">
+          </div>
+          <div class="filter-group" style="flex: 1; min-width: 130px;">
+            <select id="filter-modal-filial" class="form-control" title="Filtrar por Filial">
+              <option value="">Todas as Filiais</option>
+              <option value="028501">028501</option>
+              <option value="028503">028503</option>
+            </select>
+          </div>
+        </div>
+        <div class="table-wrapper" style="max-height: 400px; overflow-y: auto;">
+          <table class="anual-table" style="width: 100%; font-size: 13px;">
+            <thead>
+              <tr>
+                <th>Mês/Ano</th>
+                <th>Filial</th>
+                <th class="text-right">Estoque Inicial (cab)</th>
+                <th class="text-right">Estoque Final Contábil (cab)</th>
+                <th class="text-right">CAV/U (R$/cab)</th>
+                <th class="text-right">CAV Total (R$)</th>
+                <th>Dt. Fechamento</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody id="edit-fechamento-list-body">
+              <!-- Inserido dinamicamente -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- FORMULÁRIO DE EDIÇÃO -->
+      <div id="edit-fechamento-form-view" style="display: none;">
+        <form id="form-edit-fechamento" onsubmit="event.preventDefault();">
+          <input type="hidden" id="edit-fp-id">
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
+            <div class="filter-group">
+              <label>Período (Mês/Ano)</label>
+              <input type="month" id="edit-fp-periodo" class="form-control" required>
+            </div>
+            <div class="filter-group">
+              <label>Filial</label>
+              <select id="edit-fp-filial" class="form-control" required>
+                <option value="028501">028501</option>
+                <option value="028503">028503</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="separator-section" style="color:var(--pec-amber);">QUANTIDADES (cab)</div>
+          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px;">
+            <div class="filter-group">
+              <label>Estoque Inicial (A)</label>
+              <input type="number" step="0.01" id="edit-fp-est-ini" class="form-control" required>
+            </div>
+            <div class="filter-group">
+              <label>Compras (B)</label>
+              <input type="number" step="0.01" id="edit-fp-compras-qtd" class="form-control">
+            </div>
+            <div class="filter-group">
+              <label>Transf. Entrada (C)</label>
+              <input type="number" step="0.01" id="edit-fp-transf-ent-qtd" class="form-control">
+            </div>
+            <div class="filter-group">
+              <label>Transf. Saída (D)</label>
+              <input type="number" step="0.01" id="edit-fp-transf-sai-qtd" class="form-control">
+            </div>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px;">
+            <div class="filter-group">
+              <label>Nascimentos (E)</label>
+              <input type="number" step="1" id="edit-fp-nascimentos" class="form-control">
+            </div>
+            <div class="filter-group">
+              <label>Mortes Perda (F1)</label>
+              <input type="number" step="1" id="edit-fp-mortes-perda" class="form-control">
+            </div>
+            <div class="filter-group">
+              <label>Mortes Consumo (F2)</label>
+              <input type="number" step="1" id="edit-fp-mortes-consumo" class="form-control">
+            </div>
+            <div class="filter-group">
+              <label>Vendas / Abates (G)</label>
+              <input type="number" step="0.01" id="edit-fp-vendas-qtd" class="form-control">
+            </div>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px;">
+            <div class="filter-group">
+              <label>Ajuste Inventário (H)</label>
+              <input type="number" step="0.01" id="edit-fp-ajuste-inv" class="form-control">
+            </div>
+            <div class="filter-group">
+              <label>Estoque Final (I)</label>
+              <input type="number" step="0.01" id="edit-fp-est-fin" class="form-control" required>
+            </div>
+            <div class="filter-group">
+              <label>Estoque Fazenda (SBC)</label>
+              <input type="number" step="0.01" id="edit-fp-est-fazenda" class="form-control">
+            </div>
+          </div>
+
+          <div class="separator-section" style="color:var(--pec-amber);">VALORES (R$)</div>
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px;">
+            <div class="filter-group">
+              <label>Valor Est. Inicial (J)</label>
+              <input type="number" step="0.01" id="edit-fp-vl-est-ini" class="form-control" required>
+            </div>
+            <div class="filter-group">
+              <label>Valor Compras (K)</label>
+              <input type="number" step="0.01" id="edit-fp-vl-compras" class="form-control">
+            </div>
+            <div class="filter-group">
+              <label>Valor Transf. Ent. (L)</label>
+              <input type="number" step="0.01" id="edit-fp-vl-transf-ent" class="form-control">
+            </div>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px;">
+            <div class="filter-group">
+              <label>Nutrição Animal (N)</label>
+              <input type="number" step="0.01" id="edit-fp-vl-nutricao" class="form-control">
+            </div>
+            <div class="filter-group">
+              <label>Pasto / Capim (O)</label>
+              <input type="number" step="0.01" id="edit-fp-vl-pasto" class="form-control">
+            </div>
+            <div class="filter-group">
+              <label>CAV/U (Q)</label>
+              <input type="number" step="0.000001" id="edit-fp-cavu" class="form-control" required>
+            </div>
+            <div class="filter-group">
+              <label>CAV Total (R)</label>
+              <input type="number" step="0.01" id="edit-fp-cav" class="form-control" required>
+            </div>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px;">
+            <div class="filter-group">
+              <label>CAM Perdas</label>
+              <input type="number" step="0.01" id="edit-fp-cam-perdas" class="form-control">
+            </div>
+            <div class="filter-group">
+              <label>CAM Consumo</label>
+              <input type="number" step="0.01" id="edit-fp-cam-consumo" class="form-control">
+            </div>
+            <div class="filter-group">
+              <label>Valor Est. Final</label>
+              <input type="number" step="0.01" id="edit-fp-vl-est-fin" class="form-control" required>
+            </div>
+          </div>
+
+          <div style="margin-bottom: 16px;">
+            <div class="filter-group">
+              <label>Observações</label>
+              <input type="text" id="edit-fp-obs" class="form-control" placeholder="Observações opcionais...">
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 10px; justify-content: flex-end;">
+            <button type="button" class="btn btn-secondary" id="btn-cancel-edit-form" onclick="closeFechamentoForm()">Cancelar</button>
+            <button type="button" class="btn btn-success" id="btn-save-edit-form" style="background:rgba(16,185,129,.15); color:#10b981; border:1px solid rgba(16,185,129,.3);">
+              <i class="fa-solid fa-floppy-disk"></i> Salvar
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast-pec" style="position:fixed;bottom:24px;right:24px;z-index:9999;display:none;background:var(--bg-card);border:1px solid var(--border-color);border-radius:10px;padding:14px 18px;font-size:13px;color:var(--text-white);box-shadow:0 8px 32px rgba(0,0,0,.4);max-width:360px;transition:opacity .3s;"></div>
+
+  <script src="app_pecuaria.js"></script>
+</body>
+</html>
