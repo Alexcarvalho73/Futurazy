@@ -15,7 +15,6 @@
     :root { --pec-amber: #f59e0b; --pec-amber-dim: rgba(245,158,11,.12); --pec-amber-border: rgba(245,158,11,.3); }
 
     /* ── Layout ──────────────────────────────────── */
-    .main-content { max-height: 100vh; }
     .page-header {
       display: flex;
       justify-content: space-between;
@@ -151,7 +150,11 @@
     .drill-table tr:hover td { background:rgba(255,255,255,.02); }
     .drill-table .text-right { text-align:right; }
     .drill-empty { padding:40px; text-align:center; color:var(--text-muted); font-style:italic; }
-    .drill-total-row td { background:rgba(255,255,255,.03); font-weight:700; color:var(--text-white); border-top:2px solid var(--border-color); }
+    .drill-table tfoot { position:sticky; bottom:0; z-index:2; }
+    .drill-total-row td { background:rgba(245,158,11,.08); font-weight:700; color:var(--pec-amber); border-top:2px solid var(--pec-amber-border); padding:8px 10px; font-size:12px; }
+    .drill-total-row td:first-child { color:var(--text-muted); font-style:italic; }
+    .drill-footer-bar { display:flex; justify-content:flex-end; align-items:center; padding:8px 16px; border-top:1px solid var(--border-color); background:rgba(255,255,255,.015); font-size:11px; color:var(--text-muted); gap:16px; }
+    .drill-footer-bar strong { color:var(--text-white); }
 
     /* ── Modals ───────────────────────────────────── */
     .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.7); z-index:1000; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px); opacity:0; pointer-events:none; transition:opacity .25s; }
@@ -199,6 +202,7 @@
     </aside>
 
     <!-- Conteúdo Principal -->
+    <div class="content-wrapper">
     <main class="main-content">
 
       <!-- Cabeçalho -->
@@ -392,8 +396,13 @@
         </div>
       </section>
 
+    </main>
+
+    <!-- ── Drill-Downs: painel inferior independente ── -->
+    <div class="drill-content">
+
       <!-- Drill-Down SQL 1: Compras -->
-      <section class="drill-section" id="drill1" style="margin-top:20px;">
+      <section class="drill-section" id="drill1">
         <div class="drill-header" onclick="toggleDrill('drill1')">
           <h3><i class="fa-solid fa-cart-shopping" style="color:#10b981;"></i> SQL1 — Compras de Bovinos
             <span class="drill-badge" style="background:rgba(16,185,129,.15);color:#10b981;" id="d1-count">—</span>
@@ -411,11 +420,16 @@
             <button class="btn btn-pec" onclick="loadDrill(1)" style="font-size:12px;padding:6px 12px;"><i class="fa-solid fa-magnifying-glass"></i> Consultar</button>
           </div>
           <div class="drill-table-wrap"><div class="drill-empty" id="d1-empty">Clique em Consultar para carregar os dados de Compras de Bovinos.</div><table class="drill-table" id="d1-table" style="display:none;"><thead id="d1-thead"></thead><tbody id="d1-tbody"></tbody><tfoot id="d1-tfoot"></tfoot></table></div>
+          <div class="drill-footer-bar" id="d1-footer" style="display:none;">
+            <span><i class="fa-solid fa-list" style="margin-right:4px;"></i> <strong id="d1-total-count">0</strong> registros encontrados</span>
+            <span style="color:var(--border-color);">|</span>
+            <span><i class="fa-solid fa-sigma" style="margin-right:4px;color:var(--pec-amber);"></i> Totalizadores exibidos no rodapé da tabela</span>
+          </div>
         </div>
       </section>
 
       <!-- Drill-Down SQL 2: Transferências Entrada -->
-      <section class="drill-section" id="drill2" style="margin-top:20px;">
+      <section class="drill-section" id="drill2">
         <div class="drill-header" onclick="toggleDrill('drill2')">
           <h3><i class="fa-solid fa-arrow-right-to-bracket" style="color:#60a5fa;"></i> SQL2 — Transferências Entrada
             <span class="drill-badge" style="background:rgba(96,165,250,.15);color:#60a5fa;" id="d2-count">—</span>
@@ -437,7 +451,7 @@
       </section>
 
       <!-- Drill-Down SQL 3: Transferências Saída -->
-      <section class="drill-section" id="drill3" style="margin-top:20px;">
+      <section class="drill-section" id="drill3">
         <div class="drill-header" onclick="toggleDrill('drill3')">
           <h3><i class="fa-solid fa-arrow-right-from-bracket" style="color:#f87171;"></i> SQL3 — Transferências Saída
             <span class="drill-badge" style="background:rgba(248,113,113,.15);color:#f87171;" id="d3-count">—</span>
@@ -459,7 +473,7 @@
       </section>
 
       <!-- Drill-Down SQL 4: Vendas / Abates -->
-      <section class="drill-section" id="drill4" style="margin-top:20px;">
+      <section class="drill-section" id="drill4">
         <div class="drill-header" onclick="toggleDrill('drill4')">
           <h3><i class="fa-solid fa-receipt" style="color:#e879f9;"></i> SQL4 — Vendas / Abates
             <span class="drill-badge" style="background:rgba(232,121,249,.15);color:#e879f9;" id="d4-count">—</span>
@@ -481,7 +495,7 @@
       </section>
 
       <!-- Drill-Down SQL 5: Pesagens -->
-      <section class="drill-section" id="drill5" style="margin-top:20px;">
+      <section class="drill-section" id="drill5">
         <div class="drill-header" onclick="toggleDrill('drill5')">
           <h3><i class="fa-solid fa-weight-scale" style="color:#34d399;"></i> SQL5 — Pesagens (Nutrição Animal / NJH020)
             <span class="drill-badge" style="background:rgba(52,211,153,.15);color:#34d399;" id="d5-count">—</span>
@@ -502,7 +516,8 @@
         </div>
       </section>
 
-    </main>
+    </div><!-- /drill-content -->
+    </div><!-- /content-wrapper -->
   </div>
 
   <!-- ═══════════════════════════════════════════

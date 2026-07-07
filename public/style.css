@@ -69,6 +69,7 @@ h1, h2, h3, h4, h5, h6 {
   grid-template-columns: 260px 1fr;
   height: 100vh;
   width: 100vw;
+  overflow: hidden;
 }
 
 /* Sidebar */
@@ -77,6 +78,10 @@ h1, h2, h3, h4, h5, h6 {
   border-right: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
+  height: 100vh;
+  overflow-y: auto;
+  position: sticky;
+  top: 0;
   padding: 24px;
   justify-content: space-between;
 }
@@ -160,12 +165,30 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* Área de Conteúdo Principal */
-.main-content {
-  padding: 40px;
+.content-wrapper {
+  height: 100vh;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
+}
+
+.main-content {
+  flex: 0 0 auto;
+  padding: 40px;
+  display: flex;
+  flex-direction: column;
   gap: 32px;
+}
+
+.drill-content {
+  flex: 0 0 auto;
+  padding: 0 40px 60px;
+  border-top: 2px solid var(--border-color);
+  background: var(--bg-main);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 24px;
 }
 
 /* Cabeçalho */

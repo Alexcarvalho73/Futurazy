@@ -444,9 +444,18 @@ function renderDrillTable(n, rows) {
   if (rows.length === 0) {
     empty.style.display = 'block'; table.style.display = 'none';
     empty.textContent = 'Nenhum registro encontrado para o período.';
+    // hide footer bar if present
+    const footerBar = document.getElementById(`d${n}-footer`);
+    if (footerBar) footerBar.style.display = 'none';
     return;
   }
   empty.style.display = 'none'; table.style.display = 'table';
+
+  // Show footer bar with count if it exists (SQL1)
+  const footerBar = document.getElementById(`d${n}-footer`);
+  const totalCount = document.getElementById(`d${n}-total-count`);
+  if (footerBar) { footerBar.style.display = 'flex'; }
+  if (totalCount) { totalCount.textContent = rows.length.toLocaleString('pt-BR'); }
 
   // Header
   thead.innerHTML = '<tr>' + cols.map(([k,lbl,isNum]) => `<th${isNum?' class="text-right"':''}>${lbl}</th>`).join('') + '</tr>';
@@ -477,9 +486,11 @@ function renderDrillTable(n, rows) {
   tbody.innerHTML = tbodyHtml;
 
   // Footer totais
+  let firstText = true;
   const tfootCells = cols.map(([k,,isNum]) => {
     if (isNum) return `<td class="text-right" style="color:var(--pec-amber);font-weight:700;">${fmtNum(totais[k], k==='PESO_SUBTOTAL'?2:0)}</td>`;
-    return `<td style="color:var(--text-muted);font-weight:700;">TOTAL</td>`;
+    if (firstText) { firstText = false; return `<td style="color:var(--text-muted);font-weight:600;font-style:italic;">TOTAIS (${rows.length.toLocaleString('pt-BR')} reg.)</td>`; }
+    return `<td></td>`;
   });
   tfoot.innerHTML = '<tr class="drill-total-row">' + tfootCells.join('') + '</tr>';
 }
