@@ -1589,9 +1589,9 @@ function buildInsumosSQL(opts = {}) {
       z0.zo0_anoagr                 AS SAFRA,
       TO_DATE(z0.zo0_data, 'yyyy/mm/dd') AS DDATA,
       z0.zo0_codigo                 AS O_S,
-      TRIM(bm.bm_desc)              AS TIPO_PRODUTO,
-      substr(b1_grupo, 1, 4)        AS GRUPO,
-      TRIM(bm.bm_desc)              AS SUBGRUPO,
+      b1_grupo                      AS GRUPO,
+      decode(b1_grupo,'0202002','CORRETIVOS',TRIM(bm.bm_desc)) AS TIPO_PRODUTO,
+      TRIM(bm2.bm_desc)              AS SUBGRUPO,
       z1.zo1_codpro                 AS CODPROD,
       b1.b1_desc                    AS PRODUTO,
       u3.qt_area_prod               AS AREA_PLAN,
@@ -1612,6 +1612,7 @@ function buildInsumosSQL(opts = {}) {
          protheus11.zo0020         z0,
          protheus11.sb1020         b1,
          protheus11.sbm020         bm,
+         protheus11.sbm020         bm2,
          protheus11.za5020         za,
          unidadeadm@PIMSGRAOSAGR   ua,
          upnivel2@PIMSGRAOSAGR     u2,
@@ -1628,6 +1629,7 @@ function buildInsumosSQL(opts = {}) {
      AND z0.zo0_codigo = z1.zo1_codigo
      AND z1.zo1_codpro = b1.b1_cod
      AND substr(b1.b1_grupo, 1, 4) || '   ' = bm.bm_grupo
+     AND b1.b1_grupo = bm2.bm_grupo
      AND ua.id_filial = f.id_filial
      AND f.id_empresa = e.id_empresa
      AND CAST(TRIM(z0.zo0_codagl) AS VARCHAR(6)) = ua.cd_int_erp

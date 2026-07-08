@@ -518,26 +518,31 @@ function renderCube(data) {
   const body = document.getElementById('cube-body');
   if (!body) return;
 
-  // Agregar: Tipo → Produto
-  const tree = {}; // { tipo: { _brl, _usd, _consumo, produtos: { prod: { rows: [...], _brl, _usd, _consumo } } } }
+  // Agregar: Tipo → Subgrupo → Produto
+  const tree = {}; // { tipo: { _brl, _usd, _consumo, subgrupos: { subgrp: { _brl, _usd, _consumo, produtos: { prod: { rows: [...], _brl, _usd, _consumo } } } } } }
 
   let grandBrl = 0, grandUsd = 0, grandConsumo = 0;
 
   for (const r of data) {
     const tipo = r.TIPO_PRODUTO || 'OUTROS';
+    const subgrp = r.SUBGRUPO || '(sem subgrupo)';
     const prod = r.PRODUTO     || '(sem produto)';
 
-    if (!tree[tipo]) tree[tipo] = { _brl: 0, _usd: 0, _consumo: 0, produtos: {} };
+    if (!tree[tipo]) tree[tipo] = { _brl: 0, _usd: 0, _consumo: 0, subgrupos: {} };
     const T = tree[tipo];
+
+    if (!T.subgrupos[subgrp]) T.subgrupos[subgrp] = { _brl: 0, _usd: 0, _consumo: 0, produtos: {} };
+    const SG = T.subgrupos[subgrp];
     
-    if (!T.produtos[prod]) T.produtos[prod] = { _brl: 0, _usd: 0, _consumo: 0, rows: [] };
-    const P = T.produtos[prod];
+    if (!SG.produtos[prod]) SG.produtos[prod] = { _brl: 0, _usd: 0, _consumo: 0, rows: [] };
+    const P = SG.produtos[prod];
 
     const brl  = Number(r.CUSTO_BRL || 0);
     const usd  = Number(r.CUSTO_USD || 0);
     const cons = Number(r.CONSUMO   || 0);
 
     T._brl     += brl; T._usd     += usd; T._consumo     += cons;
+    SG._brl    += brl; SG._usd    += usd; SG._consumo    += cons;
     P._brl     += brl; P._usd     += usd; P._consumo     += cons;
     P.rows.push(r);
     grandBrl += brl; grandUsd += usd; grandConsumo += cons;
@@ -546,7 +551,7 @@ function renderCube(data) {
   const rows = [];
   let uid = 0;
 
-    const tiposOrdem = Object.keys(tree).sort((a, b) => a.localeCompare(b));
+  const tiposOrdem = Object.keys(tree).sort((a, b) => a.localeCompare(b));
 
   const finalRows = [];
   for (const tipo of tiposOrdem) {
@@ -572,20 +577,22 @@ function renderCube(data) {
       </tr>
     `);
 
-    let prUid = 0;
-    for (const [prod, P] of Object.entries(T.produtos)) {
-      const prId = `pr_${tipoId}_${prUid++}`;
-      const prValUsd = P._usd;
-      const prValBrl = P._brl;
-      const exRow = P.rows[0] || {};
+    let sgUid = 0;
+    const subgruposOrdem = Object.keys(T.subgrupos).sort((a, b) => a.localeCompare(b));
+    
+    for (const subgrp of subgruposOrdem) {
+      const SG = T.subgrupos[subgrp];
+      const sgId = `sg_${tipoId}_${sgUid++}`;
+      const sgValUsd = SG._usd;
+      const sgValBrl = SG._brl;
 
       finalRows.push(`
-        <tr class="lvl-1 row-hidden" data-parent="${tipoId}" data-id="${prId}">
-          <td><span class="toggle-btn" onclick="toggleRows('${prId}')">▶</span>${escHtml(prod)}</td>
-          <td class="text-right">${escHtml(exRow.FAZENDA || '—')}</td>
-          <td class="text-right">${fmtN(P._consumo)}</td>
-          <td class="text-right">${fmtMoedaUsd(prValUsd)}</td>
-          <td class="text-right">${fmtMoedaBrl(prValBrl)}</td>
+        <tr class="lvl-1 row-hidden" data-parent="${tipoId}" data-id="${sgId}">
+          <td><span class="toggle-btn" onclick="toggleRows('${sgId}')">▶</span>${escHtml(subgrp)}</td>
+          <td class="text-right">—</td>
+          <td class="text-right">${fmtN(SG._consumo)}</td>
+          <td class="text-right">${fmtMoedaUsd(sgValUsd)}</td>
+          <td class="text-right">${fmtMoedaBrl(sgValBrl)}</td>
           <td class="text-right">—</td>
           <td class="text-right">—</td>
           <td>—</td>
@@ -593,29 +600,51 @@ function renderCube(data) {
         </tr>
       `);
 
-      for (const row of P.rows) {
-        const ddata  = row.DDATA ? formatDate(row.DDATA) : '—';
-        const cBrl   = Number(row.CUSTO_BRL || 0);
-        const cUsd   = Number(row.CUSTO_USD || 0);
-        const vBrl   = Number(row.VLR_BRL   || 0);
-        const vUsd   = Number(row.VLR_USD   || 0);
-        const dValUsd = cUsd;
-        const dValBrl = cBrl;
+      let prUid = 0;
+      for (const [prod, P] of Object.entries(SG.produtos)) {
+        const prId = `pr_${sgId}_${prUid++}`;
+        const prValUsd = P._usd;
+        const prValBrl = P._brl;
+        const exRow = P.rows[0] || {};
+
         finalRows.push(`
-          <tr class="lvl-2 row-hidden" data-parent="${prId}">
-            <td style="padding-left:100px !important; font-style:italic; color:#475569;">
-              O.S. ${escHtml(row.O_S || '—')}
-            </td>
-            <td class="text-right">${escHtml(row.FAZENDA || '—')}</td>
-            <td class="text-right">${fmtN(row.CONSUMO)}</td>
-            <td class="text-right">${fmtMoedaUsd(dValUsd)}</td>
-            <td class="text-right">${fmtMoedaBrl(dValBrl)}</td>
-            <td class="text-right">${fmtMoedaBrl(vBrl)}</td>
-            <td class="text-right">${fmtMoedaUsd(vUsd)}</td>
-            <td>${escHtml(row.TALHAO || '—')}</td>
-            <td>${ddata}</td>
+          <tr class="lvl-2 row-hidden" data-parent="${sgId}" data-id="${prId}">
+            <td><span class="toggle-btn" onclick="toggleRows('${prId}')">▶</span>${escHtml(prod)}</td>
+            <td class="text-right">${escHtml(exRow.FAZENDA || '—')}</td>
+            <td class="text-right">${fmtN(P._consumo)}</td>
+            <td class="text-right">${fmtMoedaUsd(prValUsd)}</td>
+            <td class="text-right">${fmtMoedaBrl(prValBrl)}</td>
+            <td class="text-right">—</td>
+            <td class="text-right">—</td>
+            <td>—</td>
+            <td>—</td>
           </tr>
         `);
+
+        for (const row of P.rows) {
+          const ddata  = row.DDATA ? formatDate(row.DDATA) : '—';
+          const cBrl   = Number(row.CUSTO_BRL || 0);
+          const cUsd   = Number(row.CUSTO_USD || 0);
+          const vBrl   = Number(row.VLR_BRL   || 0);
+          const vUsd   = Number(row.VLR_USD   || 0);
+          const dValUsd = cUsd;
+          const dValBrl = cBrl;
+          finalRows.push(`
+            <tr class="lvl-3 row-hidden" data-parent="${prId}">
+              <td style="padding-left:100px !important; font-style:italic; color:#475569;">
+                O.S. ${escHtml(row.O_S || '—')}
+              </td>
+              <td class="text-right">${escHtml(row.FAZENDA || '—')}</td>
+              <td class="text-right">${fmtN(row.CONSUMO)}</td>
+              <td class="text-right">${fmtMoedaUsd(dValUsd)}</td>
+              <td class="text-right">${fmtMoedaBrl(dValBrl)}</td>
+              <td class="text-right">${fmtMoedaBrl(vBrl)}</td>
+              <td class="text-right">${fmtMoedaUsd(vUsd)}</td>
+              <td>${escHtml(row.TALHAO || '—')}</td>
+              <td>${ddata}</td>
+            </tr>
+          `);
+        }
       }
     }
   }
