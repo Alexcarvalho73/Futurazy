@@ -246,7 +246,7 @@ function renderAnualGrid() {
     { label: 'K — (+) Compras (R$)', cls: '', key: 'K_vlr', fn: v => fmtR$(v) },
     { label: 'L — (+) Transf. Entrada (R$)', cls: '', key: 'L_vlr', fn: v => fmtR$(v) },
     { label: 'M — (=) Cabeças Disponíveis', cls: 'row-calculated', key: 'M_val', fn: v => fmtR$(v) },
-    { label: 'N — (+) Nutrição Animal (SQL5 × CAV/U ant.)', cls: '', key: 'N', fn: v => fmtR$(v) },
+    { label: 'N — (+) Nutrição Animal (SQL5 ValorR$)', cls: '', key: 'N', fn: v => fmtR$(v) },
     { label: 'O — (+) Pasto / Capim (R$)', cls: '', key: 'O', fn: v => fmtR$(v) },
     { label: 'P — (=) Valor Disponível', cls: 'row-calculated', key: 'P', fn: v => fmtR$(v) },
     { label: 'Q — (=) CAV/U (R$/cab)', cls: 'row-kpi', key: 'Q_cavu', fn: v => `R$ ${fmtNum(v,2)}` },
@@ -407,7 +407,7 @@ const DRILL_COLS = {
   2: [['EMPRESA','Empresa'],['NF','NF'],['NOME','Fornecedor'],['CFOP','CFOP'],['PRODUTO','Produto'],['QUANT','Qtd',true],['TOTAL','Total (R$)',true]],
   3: [['EMPRESA','Empresa'],['NF','NF'],['NOME','Destino'],['CFOP','CFOP'],['PRODUTO','Produto'],['QUANT','Qtd',true],['TOTAL','Total (R$)',true]],
   4: [['EMPRESA','Empresa'],['NF','NF'],['NOME','Cliente'],['CFOP','CFOP'],['PRODUTO','Produto'],['QUANT','Qtd',true],['TOTAL','Total (R$)',true]],
-  5: [['EMPRESA','Filial'],['NJH_DATA','Data'],['NOMENT','Entidade'],['PLACA','Placa'],['HORA_INI','H.Ini'],['HORA_FIM','H.Fim'],['PESO_SUBTOTAL','Peso Sub.',true]],
+  5: [['Filial','Filial'],['Data','Data'],['Safra','Safra'],['CodProduto','Cód.Produto'],['DescProduto','Descrição'],['Unidade','Un'],['Placa','Placa'],['Motorista','Motorista'],['Qtde','Qtde (kg)',true],['CustoMedio','Custo Médio',true],['VALORR$','Valor R$',true]],
 };
 
 function defaultDates() {
@@ -473,11 +473,15 @@ function renderDrillTable(n, rows) {
       if (isNum) {
         const n = Number(v || 0);
         totais[k] = (totais[k] || 0) + n;
-        tbodyHtml += `<td class="text-right">${fmtNum(n, k === 'PESO_SUBTOTAL' ? 2 : 0)}</td>`;
+        tbodyHtml += `<td class="text-right">${fmtNum(n, ['PESO_SUBTOTAL','Qtde','CustoMedio','VALORR$'].includes(k) ? 2 : 0)}</td>`;
       } else {
         // Date handling
         let val = v;
         if (v instanceof Date || (typeof v === 'string' && v.includes('T'))) val = fmtDate(v);
+        else if (typeof v === 'string' && /^\d{8}$/.test(v.trim())) {
+          // YYYYMMDD → DD/MM/YYYY
+          val = `${v.slice(6,8)}/${v.slice(4,6)}/${v.slice(0,4)}`;
+        }
         tbodyHtml += `<td>${val ?? '—'}</td>`;
       }
     });
@@ -488,7 +492,7 @@ function renderDrillTable(n, rows) {
   // Footer totais
   let firstText = true;
   const tfootCells = cols.map(([k,,isNum]) => {
-    if (isNum) return `<td class="text-right" style="color:var(--pec-amber);font-weight:700;">${fmtNum(totais[k], k==='PESO_SUBTOTAL'?2:0)}</td>`;
+    if (isNum) return `<td class="text-right" style="color:var(--pec-amber);font-weight:700;">${fmtNum(totais[k], ['PESO_SUBTOTAL','Qtde','CustoMedio','VALORR$'].includes(k)?2:0)}</td>`;
     if (firstText) { firstText = false; return `<td style="color:var(--text-muted);font-weight:600;font-style:italic;">TOTAIS (${rows.length.toLocaleString('pt-BR')} reg.)</td>`; }
     return `<td></td>`;
   });

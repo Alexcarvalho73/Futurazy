@@ -2235,18 +2235,18 @@ function agregarPecPorMesFilial(rows) {
   return map;
 }
 
-// Agrega pesagens SQL5 (NJH_PSSUBT) por filial+mes
+// Agrega SQL5 (ValorR$) por filial+mes
 function agregarSQL5PorMesFilial(rows) {
   const map = {};
   for (const r of rows) {
-    const dateStr = String(r.NJH_DATA || '').trim().replace(/[^0-9]/g, '');
+    const dateStr = String(r.DATA || r.NJH_DATA || '').trim().replace(/[^0-9]/g, '');
     if (dateStr.length < 8) continue;
     const ano = parseInt(dateStr.substring(0, 4));
     const mes = parseInt(dateStr.substring(4, 6));
-    const filial = mapFilialPec(r.EMPRESA);
+    const filial = mapFilialPec(r.FILIAL || r.EMPRESA);
     const key = `${filial}_${ano}_${mes}`;
-    if (!map[key]) map[key] = { filial, ano, mes, pesagem: 0 };
-    map[key].pesagem += Number(r.PESO_SUBTOTAL || 0);
+    if (!map[key]) map[key] = { filial, ano, mes, valor: 0 };
+    map[key].valor += Number(r['VALORR$'] || r.VALORRS || 0);
   }
   return map;
 }
@@ -2442,29 +2442,48 @@ function buildSQL4Pec() {
 
 function buildSQL5Pec() {
   return `
-    SELECT TRIM(NJH_FILIAL) AS EMPRESA,
-           NJH_DATA,
-           TRIM(NJH_DESPRO) AS DESCRICAO,
-           TRIM(NJH_NOMENT) AS NOMENT,
-           TRIM(NJH_PLACA) AS PLACA,
-           NJH_HORPS1 AS HORA_INI,
-           NJH_HORPS2 AS HORA_FIM,
-           NJH_PSSUBT AS PESO_SUBTOTAL
-    FROM protheus11.njh020
-    WHERE NJH_STATUS='3' AND d_e_l_e_t_=' '
-      AND NJH_FILIAL IN ('028501','028503')
-      AND NJH_DATA >= REPLACE(:data_de,'-','')
-      AND NJH_DATA <= REPLACE(:data_ate,'-','')
-    ORDER BY NJH_DATA, NJH_FILIAL
+    SELECT njh_filial as Filial,
+           njh_codpav,
+           njh_data as Data,
+           njh_codsaf as Safra,
+           njh_codpro as CodProduto,
+           njh_despro as DescProduto,
+           njh_um1pro as Unidade,
+           njh_placa as Placa,
+           njh_nommot as Motorista,
+           njh_peso1 as Peso1,
+           njh_datps1 as Hora1,
+           njh_peso2 as Peso2,
+           njh_datps2 as Hora2,
+           njh_modps2 as ModoPeso,
+           njh_pssubt as Qtde,
+           dq_cm1 as CustoMedio,
+           njh_pssubt*dq_cm1 as "VALORR$"
+    FROM protheus11.NJH020 e,
+        (SELECT dq_cod,dq_cm1
+           FROM protheus11.SDQ020 c1
+          where DQ_cod IN ('199473','199472','199475')
+            and d_e_l_e_t_ = ' '
+            and dq_data = (SELECT max(dq_data)
+                             FROM protheus11.SDQ020 c2
+                             where c2.dq_cod=c1.dq_cod
+                               and d_e_l_e_t_ = ' ')) CM
+    WHERE e.njh_codpro=cm.dq_cod
+      and NJH_FILIAL = '028501'
+      AND NJH_STATUS = '3'
+      AND NJH_CODPRO IN ('199473','199472','199475')
+      AND e.d_e_l_e_t_ = ' '
+      AND njh_data >= REPLACE(:data_de,'-','')
+      AND njh_data <= REPLACE(:data_ate,'-','')
   `;
 }
 
 // ─── Cálculo A-R para um mês/filial ─────────────────────────
-function calcPecuariaMes({ A_qtd, J_vlr, B_qtd, K_vlr, C_qtd, L_vlr, D_qtd, E, F_perda, F_consumo, G_qtd, H, nutricao_peso, cavu_prev, pasto }) {
+function calcPecuariaMes({ A_qtd, J_vlr, B_qtd, K_vlr, C_qtd, L_vlr, D_qtd, E, F_perda, F_consumo, G_qtd, H, nutricao_valor, pasto }) {
   const F = F_perda + F_consumo;
   const I = A_qtd + B_qtd + C_qtd - D_qtd + E - F - G_qtd + H;
   const M_val = J_vlr + K_vlr + L_vlr;
-  const N = nutricao_peso * (cavu_prev || 0);
+  const N = nutricao_valor || 0;
   const P = M_val + N + pasto;
   const heads_disp = A_qtd + B_qtd + C_qtd;
   const Q_cavu = heads_disp > 0 ? P / heads_disp : 0;
@@ -2582,13 +2601,8 @@ app.get('/api/pecuaria/sql5', async (req, res) => {
   try {
     const dataDe = req.query.data_de || '2026-05-01';
     const dataAte = req.query.data_ate || '2026-07-31';
-    const filial = req.query.filial;
-    let sql = buildSQL5Pec();
+    const sql = buildSQL5Pec();
     const binds = { data_de: dataDe, data_ate: dataAte };
-    if (filial && filial !== 'TOTAL') {
-      sql = `SELECT * FROM (${sql}) WHERE EMPRESA = :filial`;
-      binds.filial = filial;
-    }
     const rows = await db.execute(sql, binds);
     res.json({ success: true, count: rows.length, data: rows });
   } catch (err) { console.error('[pec/sql5]', err); res.status(500).json({ success: false, error: err.message }); }
@@ -2736,7 +2750,7 @@ app.get('/api/pecuaria/resumo-anual', async (req, res) => {
           const L_vlr = isDinamico ? Number(s2Agg[key]?.total || 0) : 0;
           const D_qtd = isDinamico ? Number(s3Agg[key]?.qtd || 0) : 0;
           const G_qtd = isDinamico ? Number(s4Agg[key]?.qtd || 0) : 0;
-          const nutricao_peso = isDinamico ? Number(s5Agg[key]?.pesagem || 0) : 0;
+          const nutricao_valor = isDinamico ? Number(s5Agg[key]?.valor || 0) : 0;
 
           // Ajustes manuais só se aplicam se o mês for dinâmico (apuração ativa)
           const E_nascimentos = isDinamico ? Number(manual.nascimentos || 0) : 0;
@@ -2752,7 +2766,7 @@ app.get('/api/pecuaria/resumo-anual', async (req, res) => {
             F_perda,
             F_consumo,
             G_qtd, H: H_ajuste,
-            nutricao_peso, cavu_prev: cavuPrev,
+            nutricao_valor,
             pasto: O_pasto
           });
 
@@ -2858,7 +2872,7 @@ app.post('/api/pecuaria/fechar-mes', async (req, res) => {
       const C_qtd = Number(s2[key]?.qtd || 0), L_vlr = Number(s2[key]?.total || 0);
       const D_qtd = Number(s3[key]?.qtd || 0);
       const G_qtd = Number(s4[key]?.qtd || 0);
-      const nutricao_peso = Number(s5[key]?.pesagem || 0);
+      const nutricao_valor = Number(s5[key]?.valor || 0);
 
       const calc = calcPecuariaMes({
         A_qtd, J_vlr, B_qtd, K_vlr, C_qtd, L_vlr, D_qtd,
@@ -2866,7 +2880,7 @@ app.post('/api/pecuaria/fechar-mes', async (req, res) => {
         F_perda: Number(manual.mortes_perda || 0),
         F_consumo: Number(manual.mortes_consumo || 0),
         G_qtd, H: Number(manual.ajuste_inv || 0),
-        nutricao_peso, cavu_prev: cavuPrev,
+        nutricao_valor,
         pasto: Number(manual.pasto || 0)
       });
 
