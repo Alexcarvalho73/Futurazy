@@ -142,7 +142,7 @@ async function init() {
     else if (isAtual)   { cls = 'pill-atual'; }
     else if (!isFuturo) { cls = 'pill-pendente'; }
 
-    return `<div class="mes-pill ${cls}" title="${label}/${m.ano}" style="background:${cls==='pill-fechado'?'rgba(245,158,11,.2)':''};color:${cls==='pill-fechado'?'#f59e0b':''}">${label.substring(0,3)}</div>`;
+    return `<div class="mes-pill ${cls}" title="${label}/${m.ano}">${label.substring(0,3)}</div>`;
   }).join('');
 
   const pillsPec = document.getElementById('pills-pecuaria');
