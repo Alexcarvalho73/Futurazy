@@ -346,33 +346,32 @@
             </div>
           </a>
 
-          <!-- CUSTO OPERACIONAL INDIRETO — Em breve -->
-          <div class="modulo-card disabled" style="--card-accent: #8b5cf6;">
+          <!-- CUSTOS FINANCEIROS E ADMINISTRATIVOS — Ativo -->
+          <a href="fechamento_financeiro.html" class="modulo-card" id="card-financeiro"
+             style="--card-accent: #8b5cf6;">
             <div class="modulo-top">
               <div class="modulo-icon" style="background:rgba(139,92,246,.12); color:#8b5cf6;">
-                <i class="fa-solid fa-gears"></i>
-              </div>
-              <span class="modulo-badge badge-breve">Em Breve</span>
-            </div>
-            <div>
-              <div class="modulo-titulo">Custo Operacional Indireto</div>
-              <div class="modulo-subtitulo">Dia-a-Dia, Manutenções, Combustíveis, Logística, Arrendamentos</div>
-            </div>
-          </div>
-
-          <!-- DESPESAS ADMINISTRATIVAS — Em breve -->
-          <div class="modulo-card disabled" style="--card-accent: #f59e0b;">
-            <div class="modulo-top">
-              <div class="modulo-icon" style="background:rgba(245,158,11,.12); color:#f59e0b;">
                 <i class="fa-solid fa-building-columns"></i>
               </div>
-              <span class="modulo-badge badge-breve">Em Breve</span>
+              <span class="modulo-badge badge-ativo">Ativo</span>
             </div>
             <div>
-              <div class="modulo-titulo">Despesas Administrativas</div>
-              <div class="modulo-subtitulo">Rateios administrativos e despesas de suporte</div>
+              <div class="modulo-titulo">Custos Administrativos e Indiretos</div>
+              <div class="modulo-subtitulo">Despesas Administrativas Rateadas e Custos Operacionais Indiretos</div>
             </div>
-          </div>
+            <div class="modulo-progresso">
+              <div class="progresso-label">
+                <span>Progresso da Safra</span>
+                <span id="pct-financeiro">Carregando…</span>
+              </div>
+              <div class="progresso-bar">
+                <div class="progresso-fill" id="bar-financeiro" style="width:0%; background:linear-gradient(90deg,#8b5cf6,rgba(255,255,255,.3));"></div>
+              </div>
+              <div class="meses-pills" id="pills-financeiro">
+                <!-- Renderizado pelo JS -->
+              </div>
+            </div>
+          </a>
 
           <!-- EBITDA — Em breve -->
           <div class="modulo-card disabled" style="--card-accent: #06b6d4;">

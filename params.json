@@ -33,5 +33,37 @@
       "estoque_ini_safra_vlr": 0,
       "meses": {}
     }
+  },
+  "financeiro": {
+    "028501": {
+      "2026_07": {
+        "pecuaria": 100,
+        "agricultura": 0
+      },
+      "2026_06": {
+        "pecuaria": 100,
+        "agricultura": 0
+      }
+    },
+    "geral": {
+      "2026_07": {
+        "aba": 30,
+        "agp": 70
+      },
+      "2026_06": {
+        "aba": 30,
+        "agp": 70
+      }
+    },
+    "028503": {
+      "2026_07": {
+        "pecuaria": 60,
+        "agricultura": 40
+      },
+      "2026_06": {
+        "pecuaria": 60,
+        "agricultura": 40
+      }
+    }
   }
 }
