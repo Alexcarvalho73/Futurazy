@@ -56,14 +56,32 @@ document.addEventListener('DOMContentLoaded', () => {
 function setupEventListeners() {
   document.getElementById('btn-refresh')?.addEventListener('click', loadAll);
   
+  document.getElementById('btn-toggle-cal')?.addEventListener('click', () => {
+    state.tipoCalendario = state.tipoCalendario === 'safra' ? 'calendario' : 'safra';
+    const btn = document.getElementById('btn-toggle-cal');
+    const lbl = document.getElementById('label-cal');
+    if (state.tipoCalendario === 'safra') {
+      btn.classList.remove('cal-contabil');
+      lbl.textContent = 'Safra Agrícola';
+    } else {
+      btn.classList.add('cal-contabil');
+      lbl.textContent = 'Calendário Contábil';
+    }
+    const filtered = applyFilters(state.allData);
+    renderAnual(filtered);
+  });
+
+  // Toggle moeda
   document.querySelectorAll('.moeda-btn[data-moeda]').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.moeda-btn[data-moeda]').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       state.moeda = btn.dataset.moeda;
       const filtered = applyFilters(state.allData);
-      updateKpis(filtered);
-      renderCube(filtered);
+      const periodFiltered = applyPeriodFilter(filtered);
+      updateKpis(periodFiltered);
+      renderCube(periodFiltered);
+      renderAnual(filtered);
     });
   });
 
@@ -74,14 +92,42 @@ function setupEventListeners() {
       btn.classList.add('active');
       state.kpiPeriodo = btn.dataset.kpiPeriodo;
       const filtered = applyFilters(state.allData);
-      updateKpis(filtered);
+      const periodFiltered = applyPeriodFilter(filtered);
+      updateKpis(periodFiltered);
+      renderCube(periodFiltered);
     });
   });
 
-  document.getElementById('f-empresa')?.addEventListener('change', () => {
+  document.getElementById('f-empresa')?.addEventListener('change', (e) => {
+    const val = e.target.value;
+    document.querySelectorAll('.empresa-tab').forEach(b => b.classList.remove('active'));
+    const targetId = val === 'todas' ? 'tab-total' : `tab-${val}`;
+    document.getElementById(targetId)?.classList.add('active');
+
     const filtered = applyFilters(state.allData);
-    updateKpis(filtered);
-    renderCube(filtered);
+    const periodFiltered = applyPeriodFilter(filtered);
+    updateKpis(periodFiltered);
+    renderCube(periodFiltered);
+    renderAnual(filtered);
+  });
+
+  document.querySelectorAll('.empresa-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.empresa-tab').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const emp = btn.dataset.emp;
+      
+      const select = document.getElementById('f-empresa');
+      if (select) {
+        select.value = emp === 'TOTAL' ? 'todas' : emp;
+      }
+      
+      const filtered = applyFilters(state.allData);
+      const periodFiltered = applyPeriodFilter(filtered);
+      updateKpis(periodFiltered);
+      renderCube(periodFiltered);
+      renderAnual(filtered);
+    });
   });
   
   // Rateio params toggle
@@ -203,12 +249,19 @@ async function loadAll() {
   const dataAte = dateToStr(new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0));
 
   try {
-    const resDados = await fetch(`/api/financeiro/dados?data_de=${dataDe}&data_ate=${dataAte}`).then(r => r.json());
+    const safraAno = getSafraYear(hoje);
+    
+    const [resDados, resFechados] = await Promise.all([
+      fetch(`/api/financeiro/dados?data_de=${dataDe}&data_ate=${dataAte}`).then(r => r.json()),
+      fetch(`/api/financeiro/fechados`).then(r => r.json())
+    ]);
 
     if (resDados.success) {
       // Process Rateio
       const processed = [];
       for (const r of resDados.data || []) {
+        r.ANO_MES = `${r.ANO}${String(r.MES).padStart(2, '0')}`;
+        
         const vlrBrl = Number(r.VALOR_R$ || 0);
         const ptax = Number(r.PTAX || 1) || 1;
         const vlrUsd = vlrBrl / ptax;
@@ -260,11 +313,46 @@ async function loadAll() {
         }
       }
       
+      const mesesFechados = new Set();
+      if (resFechados && resFechados.success && resFechados.data) {
+        for (const f of resFechados.data) {
+          mesesFechados.add(`${f.FF_ANO}_${f.FF_MES}`);
+        }
+        
+        // Remove from processed any SQL data that is already closed
+        const dadosSQLFiltrados = processed.filter(p => !mesesFechados.has(`${p.ANO}_${p.MES}`));
+        processed.length = 0;
+        processed.push(...dadosSQLFiltrados);
+        
+        for (const f of resFechados.data) {
+           const ptax = Number(f.FF_PTAX || 1) || 1;
+           const vlrBrl = Number(f.FF_VALOR_BRL || 0);
+           const vlrUsd = vlrBrl / ptax;
+           
+           processed.push({
+             ANO: f.FF_ANO,
+             MES: f.FF_MES,
+             ANO_MES: `${f.FF_ANO}${String(f.FF_MES).padStart(2, '0')}`,
+             FILIAL: f.FF_EMPRESA,
+             NEGOCIO: f.FF_NEGOCIO,
+             CC_GRUPO: f.FF_CC_GRUPO,
+             CC_SUBGRUPO: f.FF_CC_SUBGRUPO,
+             TIPO_RATEIO: f.FF_TIPO_RATEIO || '',
+             VLR_BRL: vlrBrl,
+             VLR_USD: vlrUsd,
+             PTAX: ptax,
+             isFechado: true
+           });
+        }
+      }
+      state.mesesFechados = mesesFechados;
+      
       state.allData = processed;
       const filtered = applyFilters(state.allData);
-      updateKpis(filtered);
-      renderCube(filtered);
-      renderAnual(state.allData); // Using allData to show all columns
+      const periodFiltered = applyPeriodFilter(filtered);
+      updateKpis(periodFiltered);
+      renderCube(periodFiltered);
+      renderAnual(filtered);
     } else {
       console.error('Erro /api/financeiro/dados:', resDados.error);
     }
@@ -276,7 +364,7 @@ async function loadAll() {
 function applyFilters(data) {
   const empresa = document.getElementById('f-empresa')?.value;
   return data.filter(r => {
-    if (empresa && empresa !== 'todas' && r.NEGOCIO !== empresa) return false;
+    if (empresa && empresa !== 'todas' && r.FILIAL !== empresa) return false;
     return true;
   });
 }
@@ -288,6 +376,17 @@ function getTipoConfig(tipoName) {
   return { badge: 'badge-out',  cor: '#94a3b8', icon: '📦' };
 }
 
+function applyPeriodFilter(data) {
+  const hoje = new Date();
+  const prevDate = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+  const mesAtual    = { ano: hoje.getFullYear(), mes: hoje.getMonth() + 1 };
+  const mesAnterior = { ano: prevDate.getFullYear(), mes: prevDate.getMonth() + 1 };
+  const periodo = state.kpiPeriodo === 'anterior' ? mesAnterior : mesAtual;
+  return data.filter(r => {
+    return Number(r.ANO) === periodo.ano && Number(r.MES) === periodo.mes;
+  });
+}
+
 function updateKpis(data) {
   const hoje = new Date();
   const prevDate = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
@@ -296,14 +395,10 @@ function updateKpis(data) {
 
   const periodo = state.kpiPeriodo === 'anterior' ? mesAnterior : mesAtual;
 
-  const filtered = data.filter(r => {
-    return Number(r.ANO) === periodo.ano && Number(r.MES) === periodo.mes;
-  });
-
   let custoTotal = 0, custoUsd = 0;
   const porNegocio  = {};
 
-  for (const r of filtered) {
+  for (const r of data) {
     const brl = Number(r.VLR_BRL || 0);
     const usd = Number(r.VLR_USD || 0);
     custoTotal += brl;
@@ -377,44 +472,104 @@ function renderCube(data) {
   const body = document.getElementById('cube-body');
   if (!body) return;
 
-  // Hierarquia: TIPO_RATEIO -> FILIAL -> CC_GRUPO -> CC_SUBGRUPO -> TIPO_GERENCIAL -> Detalhes
   const tree = {}; 
+  const grandTotal = {
+    pecAba: { brl: 0, usd: 0 },
+    pecAgp: { brl: 0, usd: 0 },
+    sojaAgp: { brl: 0, usd: 0 },
+    consolidado: { brl: 0, usd: 0 }
+  };
 
-  let grandBrl = 0, grandUsd = 0;
+  const createNode = () => ({
+    pecAba: { brl: 0, usd: 0 },
+    pecAgp: { brl: 0, usd: 0 },
+    sojaAgp: { brl: 0, usd: 0 },
+    consolidado: { brl: 0, usd: 0 },
+    children: {}
+  });
+
+  const addValue = (node, filial, negocio, brl, usd) => {
+    if (filial === '028501' && negocio === 'PECUARIA') {
+      node.pecAba.brl += brl; node.pecAba.usd += usd;
+    } else if (filial === '028503' && negocio === 'PECUARIA') {
+      node.pecAgp.brl += brl; node.pecAgp.usd += usd;
+    } else if (filial === '028503' && negocio === 'AGRICULTURA') {
+      node.sojaAgp.brl += brl; node.sojaAgp.usd += usd;
+    }
+    node.consolidado.brl += brl; node.consolidado.usd += usd;
+  };
 
   for (const r of data) {
     const tpRat = r.TIPO_RATEIO || 'Sem Tipo Rateio';
-    const filial = r.FILIAL || 'Sem Filial';
     const grupo = r.CC_GRUPO || '(sem grupo)';
     const subgrp = r.CC_SUBGRUPO || '(sem subgrupo)';
     const tpGer = r.TIPO_GERENCIAL || 'Sem Classificação';
+    
+    const fil = r.FILIAL;
+    const neg = r.NEGOCIO;
+    let colName = 'unknown';
+    if (fil === '028501' && neg === 'PECUARIA') colName = 'pecAba';
+    else if (fil === '028503' && neg === 'PECUARIA') colName = 'pecAgp';
+    else if (fil === '028503' && neg === 'AGRICULTURA') colName = 'sojaAgp';
 
-    if (!tree[tpRat]) tree[tpRat] = { _brl: 0, _usd: 0, filiais: {} };
+    const titulo = `${r.PREFIXO || ''} ${r.NUMERO || ''} ${r.PARCELA || ''}`.trim();
+    let baseDocKey = `${r.DATA_PAGAMENTO}_${titulo}_${r.NATUREZA || ''}_${r.HISTORICO_BAIXA || ''}`;
+
+    if (!tree[tpRat]) tree[tpRat] = createNode();
     const TR = tree[tpRat];
 
-    if (!TR.filiais[filial]) TR.filiais[filial] = { _brl: 0, _usd: 0, grupos: {} };
-    const F = TR.filiais[filial];
+    if (!TR.children[grupo]) TR.children[grupo] = createNode();
+    const G = TR.children[grupo];
 
-    if (!F.grupos[grupo]) F.grupos[grupo] = { _brl: 0, _usd: 0, subgrupos: {} };
-    const G = F.grupos[grupo];
-
-    if (!G.subgrupos[subgrp]) G.subgrupos[subgrp] = { _brl: 0, _usd: 0, tpGers: {} };
-    const SG = G.subgrupos[subgrp];
+    if (!G.children[subgrp]) G.children[subgrp] = createNode();
+    const SG = G.children[subgrp];
     
-    if (!SG.tpGers[tpGer]) SG.tpGers[tpGer] = { _brl: 0, _usd: 0, rows: [] };
-    const TG = SG.tpGers[tpGer];
+    if (!SG.children[tpGer]) SG.children[tpGer] = createNode();
+    const TG = SG.children[tpGer];
+
+    // Documentos no último nível
+    if (!TG.docsMap) { TG.docsMap = {}; TG.docs = []; }
+    const docKey = r.REGSE5 ? String(r.REGSE5) : baseDocKey;
+
+    if (!TG.docsMap[docKey]) {
+      const DOC = {
+        REGSE5: r.REGSE5 || '',
+        DATA: r.DATA_PAGAMENTO,
+        TITULO: titulo || 'Sem Título',
+        NATUREZA: r.NATUREZA,
+        HISTORICO: r.HISTORICO_BAIXA,
+        FORNECEDOR: r.BENEF || r.CLI_FOR,
+        vals: createNode()
+      };
+      TG.docsMap[docKey] = DOC;
+      TG.docs.push(DOC);
+    }
+    const DOC = TG.docsMap[docKey];
 
     const brl  = Number(r.VLR_BRL || 0);
     const usd  = Number(r.VLR_USD || 0);
 
-    TR._brl += brl; TR._usd += usd;
-    F._brl += brl; F._usd += usd;
-    G._brl += brl; G._usd += usd;
-    SG._brl += brl; SG._usd += usd;
-    TG._brl += brl; TG._usd += usd;
-    TG.rows.push(r);
-    grandBrl += brl; grandUsd += usd;
+    addValue(TR, fil, neg, brl, usd);
+    addValue(G, fil, neg, brl, usd);
+    addValue(SG, fil, neg, brl, usd);
+    addValue(TG, fil, neg, brl, usd);
+    addValue(DOC.vals, fil, neg, brl, usd);
+    addValue(grandTotal, fil, neg, brl, usd);
   }
+
+  const renderCols = (node) => {
+    const usarUsd = state.moeda === 'USD';
+    const vPecAba = usarUsd ? node.pecAba.usd : node.pecAba.brl;
+    const vPecAgp = usarUsd ? node.pecAgp.usd : node.pecAgp.brl;
+    const vSojaAgp = usarUsd ? node.sojaAgp.usd : node.sojaAgp.brl;
+    const vConsol = usarUsd ? node.consolidado.usd : node.consolidado.brl;
+    return `
+      <td class="text-right">${vPecAba === 0 ? '—' : fmtMoeda(vPecAba)}</td>
+      <td class="text-right">${vPecAgp === 0 ? '—' : fmtMoeda(vPecAgp)}</td>
+      <td class="text-right">${vSojaAgp === 0 ? '—' : fmtMoeda(vSojaAgp)}</td>
+      <td class="text-right" style="font-weight:bold; color:var(--text-white);">${vConsol === 0 ? '—' : fmtMoeda(vConsol)}</td>
+    `;
+  };
 
   const rowsHtml = [];
   let uid = 0;
@@ -427,84 +582,63 @@ function renderCube(data) {
     rowsHtml.push(`
       <tr class="lvl-0" data-id="${trId}">
         <td><span class="toggle-btn" onclick="toggleRows('${trId}')">▶</span><strong>${escHtml(tpRat)}</strong></td>
-        <td>—</td><td>—</td>
-        <td class="text-right">${fmtMoedaUsd(TR._usd)}</td><td class="text-right">${fmtMoedaBrl(TR._brl)}</td>
-        <td class="text-right">—</td><td class="text-right">—</td>
+        <td>—</td><td>—</td><td>—</td>
+        ${renderCols(TR)}
       </tr>
     `);
 
-    const fOrdem = Object.keys(TR.filiais).sort((a, b) => a.localeCompare(b));
-    let fUid = 0;
-    for (const filial of fOrdem) {
-      const F = TR.filiais[filial];
-      const fId = `f_${trId}_${fUid++}`;
-
+    const gOrdem = Object.keys(TR.children).sort((a, b) => a.localeCompare(b));
+    let gUid = 0;
+    for (const grupo of gOrdem) {
+      const G = TR.children[grupo];
+      const gId = `g_${trId}_${gUid++}`;
+      
       rowsHtml.push(`
-        <tr class="lvl-1 row-hidden" data-parent="${trId}" data-id="${fId}">
-          <td><span class="toggle-btn" onclick="toggleRows('${fId}')">▶</span>${escHtml(filial)}</td>
-          <td>—</td><td>—</td>
-          <td class="text-right">${fmtMoedaUsd(F._usd)}</td><td class="text-right">${fmtMoedaBrl(F._brl)}</td>
-          <td class="text-right">—</td><td class="text-right">—</td>
+        <tr class="lvl-1 row-hidden" data-parent="${trId}" data-id="${gId}">
+          <td style="padding-left: 28px;"><span class="toggle-btn" onclick="toggleRows('${gId}')">▶</span>${escHtml(grupo)}</td>
+          <td>—</td><td>—</td><td>—</td>
+          ${renderCols(G)}
         </tr>
       `);
 
-      const gOrdem = Object.keys(F.grupos).sort((a, b) => a.localeCompare(b));
-      let gUid = 0;
-      for (const grupo of gOrdem) {
-        const G = F.grupos[grupo];
-        const gId = `g_${fId}_${gUid++}`;
-        
+      const sgOrdem = Object.keys(G.children).sort((a, b) => a.localeCompare(b));
+      let sgUid = 0;
+      for (const subgrp of sgOrdem) {
+        const SG = G.children[subgrp];
+        const sgId = `sg_${gId}_${sgUid++}`;
+
         rowsHtml.push(`
-          <tr class="lvl-2 row-hidden" data-parent="${fId}" data-id="${gId}">
-            <td style="padding-left: 52px;"><span class="toggle-btn" onclick="toggleRows('${gId}')">▶</span>${escHtml(grupo)}</td>
-            <td>—</td><td>—</td>
-            <td class="text-right">${fmtMoedaUsd(G._usd)}</td><td class="text-right">${fmtMoedaBrl(G._brl)}</td>
-            <td class="text-right">—</td><td class="text-right">—</td>
+          <tr class="lvl-2 row-hidden" data-parent="${gId}" data-id="${sgId}">
+            <td style="padding-left: 52px;"><span class="toggle-btn" onclick="toggleRows('${sgId}')">▶</span>${escHtml(subgrp)}</td>
+            <td>—</td><td>—</td><td>—</td>
+            ${renderCols(SG)}
           </tr>
         `);
 
-        const sgOrdem = Object.keys(G.subgrupos).sort((a, b) => a.localeCompare(b));
-        let sgUid = 0;
-        for (const subgrp of sgOrdem) {
-          const SG = G.subgrupos[subgrp];
-          const sgId = `sg_${gId}_${sgUid++}`;
+        const tgsOrdem = Object.keys(SG.children).sort((a, b) => a.localeCompare(b));
+        let tgUid = 0;
+        for (const tpGer of tgsOrdem) {
+          const TG = SG.children[tpGer];
+          const tgId = `tg_${sgId}_${tgUid++}`;
 
           rowsHtml.push(`
-            <tr class="lvl-3 row-hidden" data-parent="${gId}" data-id="${sgId}">
-              <td style="padding-left: 76px;"><span class="toggle-btn" onclick="toggleRows('${sgId}')">▶</span>${escHtml(subgrp)}</td>
-              <td>—</td><td>—</td>
-              <td class="text-right">${fmtMoedaUsd(SG._usd)}</td><td class="text-right">${fmtMoedaBrl(SG._brl)}</td>
-              <td class="text-right">—</td><td class="text-right">—</td>
+            <tr class="lvl-3 row-hidden" data-parent="${sgId}" data-id="${tgId}">
+              <td style="padding-left: 76px; font-style: italic;"><span class="toggle-btn" onclick="toggleRows('${tgId}')">▶</span>${escHtml(tpGer)}</td>
+              <td>—</td><td>—</td><td>—</td>
+              ${renderCols(TG)}
             </tr>
           `);
-
-          const tgsOrdem = Object.keys(SG.tpGers).sort((a, b) => a.localeCompare(b));
-          let tgUid = 0;
-          for (const tpGer of tgsOrdem) {
-            const TG = SG.tpGers[tpGer];
-            const tgId = `tg_${sgId}_${tgUid++}`;
-
-            rowsHtml.push(`
-              <tr class="lvl-3 row-hidden" data-parent="${sgId}" data-id="${tgId}">
-                <td style="padding-left: 100px; font-style: italic;"><span class="toggle-btn" onclick="toggleRows('${tgId}')">▶</span>${escHtml(tpGer)}</td>
-                <td>—</td><td>—</td>
-                <td class="text-right">${fmtMoedaUsd(TG._usd)}</td><td class="text-right">${fmtMoedaBrl(TG._brl)}</td>
-                <td class="text-right">—</td><td class="text-right">—</td>
-              </tr>
-            `);
-            
-            for (const detail of TG.rows) {
-              const d = detail.DATA_PAGAMENTO ? new Date(detail.DATA_PAGAMENTO).toLocaleDateString('pt-BR') : '—';
-              const titulo = `${detail.PREFIXO || ''} ${detail.NUMERO || ''} ${detail.PARCELA || ''}`.trim();
+          
+          if (TG.docs) {
+            for (const doc of TG.docs) {
+              const d = doc.DATA ? new Date(doc.DATA).toLocaleDateString('pt-BR') : '—';
               rowsHtml.push(`
                 <tr class="lvl-3 row-hidden" data-parent="${tgId}">
-                  <td style="padding-left: 124px; color: #475569;">${escHtml(titulo || 'Sem Título')} - ${escHtml(detail.NATUREZA)} - ${escHtml(detail.HISTORICO_BAIXA)}</td>
+                  <td style="padding-left: 100px; color: #94a3b8;">${escHtml(doc.TITULO)} - ${escHtml(doc.NATUREZA)} - ${escHtml(doc.HISTORICO)}</td>
+                  <td>${escHtml(doc.REGSE5)}</td>
                   <td>${d}</td>
-                  <td>${escHtml(detail.BENEF || detail.CLI_FOR)}</td>
-                  <td class="text-right">${fmtMoedaUsd(detail.VLR_USD)}</td>
-                  <td class="text-right">${fmtMoedaBrl(detail.VLR_BRL)}</td>
-                  <td class="text-right">${escHtml(detail.NEGOCIO)}</td>
-                  <td class="text-right"><span class="badge" style="background:#eee;color:#333;font-size:10px;">${detail.FILIAL}</span></td>
+                  <td>${escHtml(doc.FORNECEDOR)}</td>
+                  ${renderCols(doc.vals)}
                 </tr>
               `);
             }
@@ -516,17 +650,41 @@ function renderCube(data) {
 
   body.innerHTML = rowsHtml.join('');
 
-  const tfoot = document.querySelector('#cube-table tfoot');
-  if (tfoot) {
-    tfoot.innerHTML = `
-      <tr>
-        <th colspan="3">Total Geral</th>
-        <th class="text-right">${fmtMoedaUsd(grandUsd)}</th>
-        <th class="text-right">${fmtMoedaBrl(grandBrl)}</th>
-        <th colspan="2"></th>
-      </tr>
-    `;
+  // Update Grand Total in Tfoot
+  const usarUsd = state.moeda === 'USD';
+  const elTotPecAba = document.getElementById('tot-pec-aba');
+  const elTotPecAgp = document.getElementById('tot-pec-agp');
+  const elTotSojaAgp = document.getElementById('tot-soja-agp');
+  const elTotConsol = document.getElementById('tot-consolidado');
+  
+  if (elTotPecAba) elTotPecAba.textContent = fmtMoeda(usarUsd ? grandTotal.pecAba.usd : grandTotal.pecAba.brl);
+  if (elTotPecAgp) elTotPecAgp.textContent = fmtMoeda(usarUsd ? grandTotal.pecAgp.usd : grandTotal.pecAgp.brl);
+  if (elTotSojaAgp) elTotSojaAgp.textContent = fmtMoeda(usarUsd ? grandTotal.sojaAgp.usd : grandTotal.sojaAgp.brl);
+  if (elTotConsol) elTotConsol.textContent = fmtMoeda(usarUsd ? grandTotal.consolidado.usd : grandTotal.consolidado.brl);
+}
+
+function getSafraMonths(hoje = new Date()) {
+  const safraAno = getSafraYear(hoje);
+  const arr = [];
+  for (let i = 0; i < 12; i++) {
+    let m = 9 + i;
+    let y = safraAno - 1;
+    if (m > 12) {
+      m -= 12;
+      y = safraAno;
+    }
+    arr.push(`${y}${String(m).padStart(2,'0')}`);
   }
+  return arr;
+}
+
+function getContabilMonths(hoje = new Date()) {
+  const ano = hoje.getFullYear();
+  const arr = [];
+  for (let i = 1; i <= 12; i++) {
+    arr.push(`${ano}${String(i).padStart(2,'0')}`);
+  }
+  return arr;
 }
 
 function renderAnual(data) {
@@ -534,17 +692,31 @@ function renderAnual(data) {
   const tbody = document.getElementById('anual-tbody');
   if (!thead || !tbody) return;
 
+  const safraAno = getSafraYear(new Date());
+  const anoAtual = new Date().getFullYear();
+  const labelPeriodo = document.getElementById('label-periodo');
+  if (labelPeriodo) {
+     labelPeriodo.textContent = state.tipoCalendario === 'safra' 
+       ? `Safra ${safraAno - 1}/${String(safraAno).substring(2)}`
+       : `Ano ${anoAtual}`;
+  }
+
   const sections = {
     'DIRETO': { title: 'Custeio Operacional Direto', rows: {} },
     'INDIRETO': { title: 'Custeio Operacional Indireto', rows: {} },
     'RATEADO': { title: 'Despesas Administrativas rateadas', rows: {} }
   };
 
-  const mesesSet = new Set();
+  const mesesArr = state.tipoCalendario === 'safra' ? getSafraMonths() : getContabilMonths();
+  const dolarStats = {};
+  for (const m of mesesArr) {
+    dolarStats[m] = { brl: 0, usd: 0 };
+  }
+  let totalBrl = 0, totalUsd = 0;
+  
   
   for (const r of data) {
     if (!r.ANO_MES) continue;
-    mesesSet.add(r.ANO_MES);
     
     let secKey = 'DIRETO';
     const tipoRateio = r.TIPO_RATEIO || '';
@@ -562,20 +734,29 @@ function renderAnual(data) {
     }
     
     const mData = sections[secKey].rows[grupo][r.ANO_MES];
-    const val = state.moeda === 'USD' ? Number(r.VLR_USD || 0) : Number(r.VLR_BRL || 0);
-    
-    let col = null;
-    if (r.FILIAL === '028501' && r.NEGOCIO === 'PECUARIA') col = 'pecAba';
-    if (r.FILIAL === '028503' && r.NEGOCIO === 'PECUARIA') col = 'pecAgp';
-    if (r.FILIAL === '028503' && r.NEGOCIO === 'AGRICULTURA') col = 'sojaAgp';
-    
-    if (col) {
-      mData[col] += val;
+    if (mData) {
+      const valBrl = Number(r.VLR_BRL || 0);
+      const valUsd = Number(r.VLR_USD || 0);
+      const val = state.moeda === 'USD' ? valUsd : valBrl;
+      
+      if (dolarStats[r.ANO_MES]) {
+        dolarStats[r.ANO_MES].brl += valBrl;
+        dolarStats[r.ANO_MES].usd += valUsd;
+      }
+      totalBrl += valBrl;
+      totalUsd += valUsd;
+      
+      let col = null;
+      if (r.FILIAL === '028501' && r.NEGOCIO === 'PECUARIA') col = 'pecAba';
+      if (r.FILIAL === '028503' && r.NEGOCIO === 'PECUARIA') col = 'pecAgp';
+      if (r.FILIAL === '028503' && r.NEGOCIO === 'AGRICULTURA') col = 'sojaAgp';
+      
+      if (col) {
+        mData[col] += val;
+      }
+      mData.consolidado += val;
     }
-    mData.consolidado += val;
   }
-
-  const mesesArr = Array.from(mesesSet).sort();
   const formatMes = (anoMes) => {
     if (!anoMes || anoMes.length !== 6) return anoMes;
     const y = anoMes.substring(0,4);
@@ -596,7 +777,7 @@ function renderAnual(data) {
       <th style="font-size: 11px; font-weight: normal;">Pecuaria Aba</th>
       <th style="font-size: 11px; font-weight: normal;">Pecuaria AGP</th>
       <th style="font-size: 11px; font-weight: normal;">Soja AGP</th>
-      <th style="font-size: 11px; font-weight: bold;">Consolidado</th>
+      <th style="font-size: 11px; font-weight: bold;" class="col-consolidado">Consolidado</th>
     `;
   }
   theadHtml += `</tr>`;
@@ -611,9 +792,9 @@ function renderAnual(data) {
   for (const sk of secKeys) {
     const sec = sections[sk];
     
-    // Section Header row
-    tbodyHtml += `<tr class="grand-total-row" style="background-color: #fde047; color: #1e293b; font-weight: bold;">`;
-    tbodyHtml += `<td>${sec.title}</td>`;
+    // Section Header row (Subtotal)
+    tbodyHtml += `<tr class="section-total-row">`;
+    tbodyHtml += `<td style="background-color: #334155; color: #f8fafc; font-weight: bold;">${sec.title}</td>`;
     
     // Aggregate totals for the section header
     const secTotals = {};
@@ -644,10 +825,10 @@ function renderAnual(data) {
     for (const m of [...mesesArr, 'TOTAL']) {
       const t = secTotals[m];
       tbodyHtml += `
-        <td style="color: #1e293b;">${fmt(t.pecAba)}</td>
-        <td style="color: #1e293b;">${fmt(t.pecAgp)}</td>
-        <td style="color: #1e293b;">${fmt(t.sojaAgp)}</td>
-        <td style="color: #1e293b; font-weight: bold;">${fmt(t.consolidado)}</td>
+        <td style="background-color: #334155; color: #f8fafc; font-weight: bold;">${fmt(t.pecAba)}</td>
+        <td style="background-color: #334155; color: #f8fafc; font-weight: bold;">${fmt(t.pecAgp)}</td>
+        <td style="background-color: #334155; color: #f8fafc; font-weight: bold;">${fmt(t.sojaAgp)}</td>
+        <td style="background-color: #334155; color: #f8fafc; font-weight: 900;" class="col-consolidado">${fmt(t.consolidado)}</td>
       `;
     }
     tbodyHtml += `</tr>`;
@@ -670,7 +851,7 @@ function renderAnual(data) {
           <td>${fmt(d.pecAba)}</td>
           <td>${fmt(d.pecAgp)}</td>
           <td>${fmt(d.sojaAgp)}</td>
-          <td style="font-weight: bold;">${fmt(d.consolidado)}</td>
+          <td class="col-consolidado">${fmt(d.consolidado)}</td>
         `;
       }
       
@@ -678,7 +859,7 @@ function renderAnual(data) {
         <td>${fmt(gTot.pecAba)}</td>
         <td>${fmt(gTot.pecAgp)}</td>
         <td>${fmt(gTot.sojaAgp)}</td>
-        <td style="font-weight: bold;">${fmt(gTot.consolidado)}</td>
+        <td class="col-consolidado">${fmt(gTot.consolidado)}</td>
       </tr>`;
     }
     
@@ -686,5 +867,285 @@ function renderAnual(data) {
     tbodyHtml += `<tr><td colspan="${(mesesArr.length + 1) * 4 + 1}" style="height: 20px; border: none; background: transparent;"></td></tr>`;
   }
 
+  // Valor Dólar row
+  tbodyHtml += `
+    <tr style="border-top: 2px solid rgba(255,255,255,0.1);">
+      <td style="font-weight:bold;"><i class="fa-solid fa-brazilian-real-sign" style="color:#22c55e;"></i> Valor Dólar</td>
+  `;
+  for (const m of mesesArr) {
+     const dStat = dolarStats[m];
+     const dolar = dStat.usd ? (dStat.brl / dStat.usd) : 0;
+     const v = dolar ? dolar.toLocaleString('pt-BR', {minimumFractionDigits:4, maximumFractionDigits:4}) : '—';
+     tbodyHtml += `<td colspan="4" class="text-center" style="font-weight:bold; color:var(--text-muted);">${v}</td>`;
+  }
+  const dolarTot = totalUsd ? (totalBrl / totalUsd) : 0;
+  const vTot = dolarTot ? dolarTot.toLocaleString('pt-BR', {minimumFractionDigits:4, maximumFractionDigits:4}) : '—';
+  tbodyHtml += `<td colspan="4" class="text-center" style="font-weight:bold; color:var(--text-muted);">${vTot}</td></tr>`;
+
+  // Status and Action Rows
+  const dataHoje = new Date();
+  const currAnoMes = `${dataHoje.getFullYear()}${String(dataHoje.getMonth() + 1).padStart(2,'0')}`;
+  
+  const statusRowHtml = [];
+  const actionRowHtml = [];
+  statusRowHtml.push(`<tr style="background: rgba(0,0,0,0.2);"><td style="font-weight:bold; color:var(--text-muted);">Status</td>`);
+  actionRowHtml.push(`<tr style="background: rgba(0,0,0,0.2);"><td style="font-weight:bold; color:var(--text-muted);">Ação</td>`);
+  
+  for (const m of mesesArr) {
+     const fechado = state.mesesFechados && state.mesesFechados.has(`${m.substring(0,4)}_${parseInt(m.substring(4,6), 10)}`);
+     
+     let statusHtml = '';
+     let actionHtml = '';
+     
+     if (fechado) {
+        statusHtml = `<span style="color:#22c55e;"><i class="fa-solid fa-check"></i> Fechado</span>`;
+        actionHtml = `<span style="color:#22c55e;"><i class="fa-solid fa-check"></i> Fechado</span>`;
+     } else {
+        if (m < currAnoMes) {
+           statusHtml = `<span style="color:#f59e0b;"><i class="fa-solid fa-triangle-exclamation"></i> Pendente</span>`;
+           actionHtml = `<button class="btn btn-sm" style="background:#059669;color:#fff;font-size:11px;padding:4px 8px;border:none;border-radius:4px;cursor:pointer;" onclick="fecharMesFinanceiro('${m}')"><i class="fa-solid fa-lock"></i> Fechar Mês</button>`;
+        } else if (m === currAnoMes) {
+           statusHtml = `<span style="color:#3b82f6;"><i class="fa-solid fa-hourglass-half"></i> Em Curso</span>`;
+           actionHtml = `—`;
+        } else {
+           statusHtml = `—`;
+           actionHtml = `—`;
+        }
+     }
+     statusRowHtml.push(`<td colspan="4" class="text-center">${statusHtml}</td>`);
+     actionRowHtml.push(`<td colspan="4" class="text-center">${actionHtml}</td>`);
+  }
+  
+  statusRowHtml.push(`<td colspan="4"></td></tr>`);
+  actionRowHtml.push(`<td colspan="4"></td></tr>`);
+  
+  tbodyHtml += `<tr><td colspan="${(mesesArr.length + 1) * 4 + 1}" style="background:rgba(255,255,255,0.05); font-weight:bold; padding: 8px 10px; font-size:11px; letter-spacing:1px; margin-top:10px;">STATUS DE FECHAMENTO</td></tr>`;
+  tbodyHtml += statusRowHtml.join('');
+  tbodyHtml += actionRowHtml.join('');
+
   tbody.innerHTML = tbodyHtml;
 }
+
+window.fecharMesFinanceiro = async function(anoMes) {
+  if (!confirm(`Deseja fechar o mês ${anoMes.substring(4,6)}/${anoMes.substring(0,4)}?`)) return;
+  
+  const mData = state.allData.filter(d => d.ANO_MES === anoMes && !d.isFechado);
+  
+  if (mData.length === 0) {
+     alert('Nenhum dado aberto encontrado para o fechamento deste mês.');
+     return;
+  }
+  
+  const payloadDados = mData.map(d => ({
+    empresa: d.FILIAL,
+    negocio: d.NEGOCIO,
+    grupo: d.CC_GRUPO,
+    subgrupo: d.CC_SUBGRUPO,
+    tipoRateio: d.TIPO_RATEIO,
+    vlrBrl: d.VLR_BRL,
+    ptax: d.PTAX
+  }));
+  
+  const body = {
+    ano: anoMes.substring(0,4),
+    mes: parseInt(anoMes.substring(4,6), 10),
+    dados: payloadDados
+  };
+  
+  try {
+    const res = await fetch('/api/financeiro/fechar-mes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    }).then(r => r.json());
+    
+    if (res.success) {
+      alert('Mês fechado com sucesso!');
+      loadAll();
+    } else {
+      alert('Erro: ' + res.error);
+    }
+  } catch (e) {
+    alert('Erro ao fechar mês: ' + e.message);
+  }
+};
+
+// ==========================================
+// MODAL DE AJUSTES MANUAIS (CRUD)
+// ==========================================
+let allFechamentosModal = [];
+
+document.getElementById('btn-open-edit-fechamento')?.addEventListener('click', () => {
+  document.getElementById('modal-edit-fechamento').classList.add('open');
+  loadClosedFechamentos();
+});
+
+document.getElementById('btn-close-edit-fechamento-modal')?.addEventListener('click', closeEditFechamentoModal);
+document.getElementById('btn-cancel-edit-form')?.addEventListener('click', () => {
+  document.getElementById('edit-fechamento-form-view').style.display = 'none';
+  document.getElementById('edit-fechamento-list-view').style.display = 'block';
+});
+document.getElementById('btn-save-edit-form')?.addEventListener('click', saveFechamentoForm);
+
+document.getElementById('modal-edit-fechamento')?.addEventListener('click', e => {
+  if (e.target.id === 'modal-edit-fechamento') closeEditFechamentoModal();
+});
+
+['filter-modal-periodo', 'filter-modal-filial', 'filter-modal-negocio'].forEach(id => {
+  document.getElementById(id)?.addEventListener('input', renderFechamentosList);
+});
+
+function closeEditFechamentoModal() {
+  document.getElementById('modal-edit-fechamento').classList.remove('open');
+  document.getElementById('edit-fechamento-form-view').style.display = 'none';
+  document.getElementById('edit-fechamento-list-view').style.display = 'block';
+  loadAll(); // Recarrega os dados da tela principal ao fechar
+}
+
+async function loadClosedFechamentos() {
+  try {
+    const res = await fetch('/api/financeiro/fechados');
+    const json = await res.json();
+    if (json.success) {
+      allFechamentosModal = json.data || [];
+      renderFechamentosList();
+    } else {
+      console.error(json.error);
+    }
+  } catch(e) {
+    console.error(e);
+  }
+}
+
+function renderFechamentosList() {
+  const tbody = document.getElementById('edit-fechamento-list-body');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  const fPeriodo = document.getElementById('filter-modal-periodo')?.value.replace('-', ''); // YYYYMM
+  const fFilial = document.getElementById('filter-modal-filial')?.value;
+  const fNegocio = document.getElementById('filter-modal-negocio')?.value;
+
+  const filtered = allFechamentosModal.filter(r => {
+    const rm = `${r.FF_ANO}${String(r.FF_MES).padStart(2,'0')}`;
+    if (fPeriodo && rm !== fPeriodo) return false;
+    if (fFilial && r.FF_EMPRESA !== fFilial) return false;
+    if (fNegocio && r.FF_NEGOCIO !== fNegocio) return false;
+    return true;
+  });
+
+  filtered.forEach(r => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${String(r.FF_MES).padStart(2,'0')}/${r.FF_ANO}</td>
+      <td>${r.FF_EMPRESA || ''}</td>
+      <td>${r.FF_NEGOCIO || ''}</td>
+      <td>${r.FF_CC_GRUPO || ''}</td>
+      <td>${r.FF_CC_SUBGRUPO || ''}</td>
+      <td>${r.FF_TIPO_RATEIO || ''}</td>
+      <td class="text-right">${fmtMoedaBrl(r.FF_VALOR_BRL || 0)}</td>
+      <td class="text-right">${Number(r.FF_PTAX || 1).toFixed(4)}</td>
+      <td>
+        <button class="btn btn-sm" style="color:var(--text-color);background:rgba(255,255,255,0.1)" onclick="editFechamento('${r.ID}')" title="Editar">
+          <i class="fa-solid fa-pen"></i>
+        </button>
+        <button class="btn btn-sm" style="color:#ef4444;background:rgba(239,68,68,0.1)" onclick="deleteFechamento('${r.ID}')" title="Excluir">
+          <i class="fa-solid fa-trash"></i>
+        </button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+window.openNewFechamentoForm = function() {
+  document.getElementById('edit-fi-id').value = '';
+  document.getElementById('edit-fi-periodo').value = '';
+  document.getElementById('edit-fi-filial').value = '028501';
+  document.getElementById('edit-fi-negocio').value = 'PECUARIA';
+  document.getElementById('edit-fi-grupo').value = '';
+  document.getElementById('edit-fi-subgrupo').value = '';
+  document.getElementById('edit-fi-tiporateio').value = '';
+  document.getElementById('edit-fi-custo-brl').value = '';
+  document.getElementById('edit-fi-ptax').value = '5.0000';
+  document.getElementById('edit-fi-obs').value = '';
+
+  document.getElementById('edit-fechamento-list-view').style.display = 'none';
+  document.getElementById('edit-fechamento-form-view').style.display = 'block';
+};
+
+window.editFechamento = function(id) {
+  const r = allFechamentosModal.find(x => x.ID === id);
+  if (!r) return;
+
+  document.getElementById('edit-fi-id').value = r.ID;
+  document.getElementById('edit-fi-periodo').value = `${r.FF_ANO}-${String(r.FF_MES).padStart(2,'0')}`;
+  document.getElementById('edit-fi-filial').value = r.FF_EMPRESA;
+  document.getElementById('edit-fi-negocio').value = r.FF_NEGOCIO;
+  document.getElementById('edit-fi-grupo').value = r.FF_CC_GRUPO || '';
+  document.getElementById('edit-fi-subgrupo').value = r.FF_CC_SUBGRUPO || '';
+  document.getElementById('edit-fi-tiporateio').value = r.FF_TIPO_RATEIO || '';
+  document.getElementById('edit-fi-custo-brl').value = r.FF_VALOR_BRL || 0;
+  document.getElementById('edit-fi-ptax').value = r.FF_PTAX || 1;
+  document.getElementById('edit-fi-obs').value = ''; // OBS não tem no banco para essa tabela, apenas front visual
+
+  document.getElementById('edit-fechamento-list-view').style.display = 'none';
+  document.getElementById('edit-fechamento-form-view').style.display = 'block';
+};
+
+async function saveFechamentoForm() {
+  const id = document.getElementById('edit-fi-id').value;
+  const periodo = document.getElementById('edit-fi-periodo').value; // YYYY-MM
+  if (!periodo) {
+    alert('Informe o período.');
+    return;
+  }
+  
+  const payload = {
+    ano: periodo.split('-')[0],
+    mes: parseInt(periodo.split('-')[1], 10),
+    filial: document.getElementById('edit-fi-filial').value,
+    negocio: document.getElementById('edit-fi-negocio').value,
+    grupo: document.getElementById('edit-fi-grupo').value,
+    subgrupo: document.getElementById('edit-fi-subgrupo').value,
+    tiporateio: document.getElementById('edit-fi-tiporateio').value,
+    vlrBrl: parseFloat(document.getElementById('edit-fi-custo-brl').value || 0),
+    ptax: parseFloat(document.getElementById('edit-fi-ptax').value || 1)
+  };
+
+  try {
+    const url = id ? `/api/financeiro/ajuste/${id}` : '/api/financeiro/ajuste';
+    const method = id ? 'PUT' : 'POST';
+
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const json = await res.json();
+    if (json.success) {
+      document.getElementById('edit-fechamento-form-view').style.display = 'none';
+      document.getElementById('edit-fechamento-list-view').style.display = 'block';
+      loadClosedFechamentos();
+    } else {
+      alert('Erro: ' + json.error);
+    }
+  } catch(e) {
+    alert('Erro ao salvar: ' + e.message);
+  }
+}
+
+window.deleteFechamento = async function(id) {
+  if (!confirm('Excluir este lançamento manual permanentemente?')) return;
+  try {
+    const res = await fetch(`/api/financeiro/ajuste/${id}`, { method: 'DELETE' });
+    const json = await res.json();
+    if (json.success) {
+      loadClosedFechamentos();
+    } else {
+      alert('Erro: ' + json.error);
+    }
+  } catch(e) {
+    alert('Erro: ' + e.message);
+  }
+};

@@ -3114,7 +3114,7 @@ function buildFinanceiroSQL() {
   return `
     SELECT  
       TRIM(SUBSTR(SE5.E5_FILIAL, 3, 2)) AS EMPRESA,
-      TRIM(SE5.E5_FILIAL) AS FILIAL,
+      DECODE(E5_CLVLDB,'01','028501','02','028501','03','028501',E5_FILorig) AS Filial,
       TO_DATE(SE5.E5_DTDISPO, 'yyyy/mm/dd') AS DATA_PAGAMENTO,
       CASE SE5.E5_RECPAG 
           WHEN 'P' THEN SE5.E5_VALOR * -1
@@ -3126,7 +3126,7 @@ function buildFinanceiroSQL() {
          '2','Dia-a-Dia',
          '3','Manutenção',
          '6','Arrendamentos ','Sem Classificação') as cc_grupo,
-      case when E5_CLVLDB = '01' then 
+      case when E5_CLVLDB = '02' then 
            'Rateio Geral'
       else DECODE(substr(E5_CCD,1,2),'01','PECUARIA','02','SOJA','Rateio Interno')  end Tipo_rateio,
       TRIM(cc2.ctt_desc01) as CC_SUBGRUPO,
@@ -3239,7 +3239,7 @@ app.get('/api/financeiro/fechados', async (req, res) => {
       binds.ano = ano;
       binds.mes = mes;
     }
-    const rows = await db.execute(`SELECT * FROM FECHAMENTO_FINANCEIRO ${where} ORDER BY FF_ANO DESC, FF_MES DESC`, binds);
+    const rows = await db.execute(`SELECT ROWID AS "ID", FECHAMENTO_FINANCEIRO.* FROM FECHAMENTO_FINANCEIRO ${where} ORDER BY FF_ANO DESC, FF_MES DESC`, binds);
     res.json({ success: true, count: rows.length, data: rows });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
@@ -3260,10 +3260,10 @@ app.post('/api/financeiro/fechar-mes', async (req, res) => {
       const sql = `
         INSERT INTO FECHAMENTO_FINANCEIRO (
           FF_ANO, FF_MES, FF_EMPRESA, FF_NEGOCIO, 
-          FF_CC_GRUPO, FF_CC_SUBGRUPO, FF_VALOR_BRL, FF_PTAX
+          FF_CC_GRUPO, FF_CC_SUBGRUPO, FF_TIPO_RATEIO, FF_VALOR_BRL, FF_PTAX
         ) VALUES (
           :ano, :mes, :empresa, :negocio, 
-          :grupo, :subgrupo, :vlrBrl, :ptax
+          :grupo, :subgrupo, :tipoRateio, :vlrBrl, :ptax
         )
       `;
       const binds = {
@@ -3273,6 +3273,7 @@ app.post('/api/financeiro/fechar-mes', async (req, res) => {
         negocio: d.negocio || 'ND',
         grupo: d.grupo || 'ND',
         subgrupo: d.subgrupo || '',
+        tipoRateio: d.tipoRateio || '',
         vlrBrl: d.vlrBrl || 0,
         ptax: d.ptax || 0
       };
@@ -3299,6 +3300,88 @@ app.delete('/api/financeiro/fechados/:ano/:mes', async (req, res) => {
   }
 });
 
+
+// POST /api/financeiro/ajuste — Adiciona linha manual
+app.post('/api/financeiro/ajuste', async (req, res) => {
+  const { ano, mes, filial, negocio, grupo, subgrupo, tiporateio, vlrBrl, ptax } = req.body;
+
+  if (!ano || !mes) return res.status(400).json({ success: false, error: 'Ano e Mês obrigatórios.' });
+
+  try {
+    const sql = `
+      INSERT INTO FECHAMENTO_FINANCEIRO (
+        FF_ANO, FF_MES, FF_EMPRESA, FF_NEGOCIO, 
+        FF_CC_GRUPO, FF_CC_SUBGRUPO, FF_TIPO_RATEIO, FF_VALOR_BRL, FF_PTAX
+      ) VALUES (
+        :ano, :mes, :filial, :negocio, 
+        :grupo, :subgrupo, :tiporateio, :vlrBrl, :ptax
+      )
+    `;
+    const binds = {
+      ano: ano,
+      mes: mes,
+      filial: filial || '',
+      negocio: negocio || '',
+      grupo: grupo || '',
+      subgrupo: subgrupo || '',
+      tiporateio: tiporateio || '',
+      vlrBrl: vlrBrl || 0,
+      ptax: ptax || 1
+    };
+
+    await db.execute(sql, binds, { autoCommit: true });
+    res.json({ success: true, mensagem: 'Ajuste salvo com sucesso.' });
+  } catch (err) {
+    console.error('Erro POST financeiro ajuste:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// PUT /api/financeiro/ajuste/:id — Edita linha manual
+app.put('/api/financeiro/ajuste/:id', async (req, res) => {
+  const { id } = req.params;
+  const { ano, mes, filial, negocio, grupo, subgrupo, tiporateio, vlrBrl, ptax } = req.body;
+
+  try {
+    const sql = `
+      UPDATE FECHAMENTO_FINANCEIRO SET
+        FF_ANO = :ano, FF_MES = :mes, FF_EMPRESA = :filial, FF_NEGOCIO = :negocio,
+        FF_CC_GRUPO = :grupo, FF_CC_SUBGRUPO = :subgrupo, FF_TIPO_RATEIO = :tiporateio,
+        FF_VALOR_BRL = :vlrBrl, FF_PTAX = :ptax
+      WHERE ROWID = :id
+    `;
+    const binds = {
+      ano: ano,
+      mes: mes,
+      filial: filial || '',
+      negocio: negocio || '',
+      grupo: grupo || '',
+      subgrupo: subgrupo || '',
+      tiporateio: tiporateio || '',
+      vlrBrl: vlrBrl || 0,
+      ptax: ptax || 1,
+      id: id
+    };
+
+    await db.execute(sql, binds, { autoCommit: true });
+    res.json({ success: true, mensagem: 'Ajuste atualizado com sucesso.' });
+  } catch (err) {
+    console.error('Erro PUT financeiro ajuste:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// DELETE /api/financeiro/ajuste/:id — Exclui linha manual
+app.delete('/api/financeiro/ajuste/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    await db.execute('DELETE FROM FECHAMENTO_FINANCEIRO WHERE ROWID = :id', { id }, { autoCommit: true });
+    res.json({ success: true, mensagem: 'Ajuste removido com sucesso.' });
+  } catch (err) {
+    console.error('Erro DELETE financeiro ajuste:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 async function startServer() {
   try {
