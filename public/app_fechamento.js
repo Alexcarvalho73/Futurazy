@@ -152,6 +152,43 @@ async function init() {
   const pctPecuaria = Math.round((qtdFechadosPecuaria / 12) * 100);
   if (barPec)  barPec.style.width = pctPecuaria + '%';
   if (pctPec)  pctPec.textContent = `${qtdFechadosPecuaria}/12 meses (${pctPecuaria}%)`;
+
+  // ==========================================
+  // Renderizar Financeiro (Custos Administrativos)
+  // ==========================================
+  let fechadosFinanceiro = [];
+  try {
+    const resp = await fetch('/api/financeiro/fechados');
+    const json = await resp.json();
+    if (json.success) fechadosFinanceiro = json.data;
+  } catch(e) {
+    console.warn('Não foi possível carregar fechados Financeiro:', e.message);
+  }
+
+  const fechadosSetFinanceiro = new Set(fechadosFinanceiro.map(f => `${f.FF_ANO}_${f.FF_MES}`));
+
+  let qtdFechadosFinanceiro = 0;
+  const pillsHtmlFinanceiro = meses.map(m => {
+    const isFuturo  = new Date(m.ano, m.mes - 1, 1) > hoje2;
+    const isAtual   = m.ano === mesAtual.ano && m.mes === mesAtual.mes;
+    const fechado   = fechadosSetFinanceiro.has(`${m.ano}_${m.mes}`);
+    const label     = NOMES_MES[m.mes - 1];
+
+    let cls = 'pill-futuro';
+    if (fechado)        { cls = 'pill-fechado';  qtdFechadosFinanceiro++; }
+    else if (isAtual)   { cls = 'pill-atual'; }
+    else if (!isFuturo) { cls = 'pill-pendente'; }
+
+    return `<div class="mes-pill ${cls}" title="${label}/${m.ano}">${label.substring(0,3)}</div>`;
+  }).join('');
+
+  const pillsFin = document.getElementById('pills-financeiro');
+  const barFin   = document.getElementById('bar-financeiro');
+  const pctFin   = document.getElementById('pct-financeiro');
+  if (pillsFin) pillsFin.innerHTML = pillsHtmlFinanceiro;
+  const pctFinanceiro = Math.round((qtdFechadosFinanceiro / 12) * 100);
+  if (barFin)  barFin.style.width = pctFinanceiro + '%';
+  if (pctFin)  pctFin.textContent = `${qtdFechadosFinanceiro}/12 meses (${pctFinanceiro}%)`;
 }
 
 document.addEventListener('DOMContentLoaded', init);
