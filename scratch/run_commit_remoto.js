@@ -13,9 +13,15 @@ $env:PATH = "C:\\Program Files\\nodejs;C:\\Program Files\\Git\\cmd;" + $env:PATH
 $workDir = "C:\\Projetos\\QlikFuturazy"
 Set-Location -Path $workDir
 
+Write-Host "Salvando arquivos modificados no servidor..."
+Start-Process -FilePath "git.exe" -ArgumentList "stash" -PassThru -Wait -NoNewWindow
+
 Write-Host "Puxando alteracoes do Git..."
 $proc = Start-Process -FilePath "git.exe" -ArgumentList "pull" -PassThru -Wait -NoNewWindow
 Write-Host "Git pull finalizado com codigo de saida: $($proc.ExitCode)"
+
+Write-Host "Restaurando arquivos modificados..."
+Start-Process -FilePath "git.exe" -ArgumentList "stash", "pop" -PassThru -Wait -NoNewWindow
 
 if ($proc.ExitCode -eq 0) {
     Write-Host "Parando o processo Node antigo..."
