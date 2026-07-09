@@ -710,8 +710,20 @@ function renderAnual(data) {
   const mesesArr = state.tipoCalendario === 'safra' ? getSafraMonths() : getContabilMonths();
   const dolarStats = {};
   for (const m of mesesArr) {
-    dolarStats[m] = { brl: 0, usd: 0 };
+    dolarStats[m] = { 
+      pecAba: {brl:0, usd:0}, 
+      pecAgp: {brl:0, usd:0}, 
+      sojaAgp: {brl:0, usd:0}, 
+      consolidado: {brl:0, usd:0} 
+    };
   }
+  const totalAnoDolarStats = { 
+    pecAba: {brl:0, usd:0}, 
+    pecAgp: {brl:0, usd:0}, 
+    sojaAgp: {brl:0, usd:0}, 
+    consolidado: {brl:0, usd:0} 
+  };
+  
   let totalBrl = 0, totalUsd = 0;
   
   
@@ -739,17 +751,26 @@ function renderAnual(data) {
       const valUsd = Number(r.VLR_USD || 0);
       const val = state.moeda === 'USD' ? valUsd : valBrl;
       
-      if (dolarStats[r.ANO_MES]) {
-        dolarStats[r.ANO_MES].brl += valBrl;
-        dolarStats[r.ANO_MES].usd += valUsd;
-      }
-      totalBrl += valBrl;
-      totalUsd += valUsd;
       
       let col = null;
       if (r.FILIAL === '028501' && r.NEGOCIO === 'PECUARIA') col = 'pecAba';
       if (r.FILIAL === '028503' && r.NEGOCIO === 'PECUARIA') col = 'pecAgp';
       if (r.FILIAL === '028503' && r.NEGOCIO === 'AGRICULTURA') col = 'sojaAgp';
+      
+      if (dolarStats[r.ANO_MES]) {
+        if (col) {
+          dolarStats[r.ANO_MES][col].brl += valBrl;
+          dolarStats[r.ANO_MES][col].usd += valUsd;
+          totalAnoDolarStats[col].brl += valBrl;
+          totalAnoDolarStats[col].usd += valUsd;
+        }
+        dolarStats[r.ANO_MES].consolidado.brl += valBrl;
+        dolarStats[r.ANO_MES].consolidado.usd += valUsd;
+        totalAnoDolarStats.consolidado.brl += valBrl;
+        totalAnoDolarStats.consolidado.usd += valUsd;
+      }
+      totalBrl += valBrl;
+      totalUsd += valUsd;
       
       if (col) {
         mData[col] += val;
@@ -872,15 +893,28 @@ function renderAnual(data) {
     <tr style="border-top: 2px solid rgba(255,255,255,0.1);">
       <td style="font-weight:bold;"><i class="fa-solid fa-brazilian-real-sign" style="color:#22c55e;"></i> Valor Dólar</td>
   `;
+  const calcTx = (st) => st.usd ? (st.brl / st.usd) : 0;
+  const fmtTx = (val) => val ? val.toLocaleString('pt-BR', {minimumFractionDigits:4, maximumFractionDigits:4}) : '—';
+
   for (const m of mesesArr) {
      const dStat = dolarStats[m];
-     const dolar = dStat.usd ? (dStat.brl / dStat.usd) : 0;
-     const v = dolar ? dolar.toLocaleString('pt-BR', {minimumFractionDigits:4, maximumFractionDigits:4}) : '—';
-     tbodyHtml += `<td colspan="4" class="text-center" style="font-weight:bold; color:var(--text-muted);">${v}</td>`;
+     tbodyHtml += `
+       <td class="text-center" style="font-weight:bold; color:var(--text-muted);">${fmtTx(calcTx(dStat.pecAba))}</td>
+       <td class="text-center" style="font-weight:bold; color:var(--text-muted);">${fmtTx(calcTx(dStat.pecAgp))}</td>
+       <td class="text-center" style="font-weight:bold; color:var(--text-muted);">${fmtTx(calcTx(dStat.sojaAgp))}</td>
+       <td class="text-center col-consolidado" style="font-weight:bold; color:var(--text-muted);">${fmtTx(calcTx(dStat.consolidado))}</td>
+     `;
   }
-  const dolarTot = totalUsd ? (totalBrl / totalUsd) : 0;
-  const vTot = dolarTot ? dolarTot.toLocaleString('pt-BR', {minimumFractionDigits:4, maximumFractionDigits:4}) : '—';
-  tbodyHtml += `<td colspan="4" class="text-center" style="font-weight:bold; color:var(--text-muted);">${vTot}</td></tr>`;
+  
+  tbodyHtml += `
+       <td class="text-center" style="font-weight:bold; color:var(--text-white);">${fmtTx(calcTx(totalAnoDolarStats.pecAba))}</td>
+       <td class="text-center" style="font-weight:bold; color:var(--text-white);">${fmtTx(calcTx(totalAnoDolarStats.pecAgp))}</td>
+       <td class="text-center" style="font-weight:bold; color:var(--text-white);">${fmtTx(calcTx(totalAnoDolarStats.sojaAgp))}</td>
+       <td class="text-center col-consolidado" style="font-weight:bold; color:var(--text-white);">${fmtTx(calcTx(totalAnoDolarStats.consolidado))}</td>
+    </tr>
+  `;
+
+  tbody.innerHTML = tbodyHtml;
 
   // Status and Action Rows
   const dataHoje = new Date();
