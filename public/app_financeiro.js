@@ -192,6 +192,54 @@ function setupEventListeners() {
       document.getElementById('params-save-status').textContent = 'Erro';
     }
   });
+
+  document.getElementById('btn-copy-prev-params')?.addEventListener('click', () => {
+    const mesAno = document.getElementById('params-mes-ano').value;
+    if (!mesAno) {
+      alert('Selecione o Mês/Ano destino primeiro.');
+      return;
+    }
+    
+    if (!confirm('Deseja copiar TODOS os parâmetros e áreas (de todas as filiais) do mês anterior para este mês? Os dados atuais deste mês (se existirem) serão substituídos.')) {
+      return;
+    }
+    
+    let [y, m] = mesAno.split('-');
+    y = parseInt(y, 10);
+    m = parseInt(m, 10);
+    
+    let prevM = m - 1;
+    let prevY = y;
+    if (prevM <= 0) {
+      prevM = 12;
+      prevY--;
+    }
+    
+    const currKey = `${y}_${String(m).padStart(2, '0')}`;
+    const prevKey = `${prevY}_${String(prevM).padStart(2, '0')}`;
+    
+    const fin = state.params.financeiro;
+    if (!fin) {
+      alert('Ainda não existem parâmetros cadastrados no sistema.');
+      return;
+    }
+    
+    let copied = false;
+    for (const group of Object.keys(fin)) {
+      if (fin[group] && fin[group][prevKey]) {
+        fin[group][currKey] = JSON.parse(JSON.stringify(fin[group][prevKey]));
+        copied = true;
+      }
+    }
+    
+    if (copied) {
+      updateParamsUI();
+      // Salvar as cópias automaticamente
+      document.getElementById('btn-save-params')?.click();
+    } else {
+      alert(`Não foram encontrados parâmetros no mês anterior (${String(prevM).padStart(2, '0')}/${prevY}) para copiar.`);
+    }
+  });
 }
 
 async function loadParams() {

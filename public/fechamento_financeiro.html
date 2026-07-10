@@ -909,7 +909,12 @@
               </div>
               <div class="params-group" style="display:flex; flex-direction:column; gap:6px;">
                 <label style="font-size:11px; color:var(--text-muted);">Mês / Ano</label>
-                <input type="month" id="params-mes-ano" class="form-control" style="width: 150px;">
+                <div style="display:flex; gap:10px;">
+                  <input type="month" id="params-mes-ano" class="form-control" style="width: 150px;">
+                  <button class="btn btn-secondary" id="btn-copy-prev-params" style="font-size:12px;padding:7px 14px;" title="Copiar todos os parâmetros de todas as filiais do mês anterior">
+                    <i class="fa-solid fa-copy"></i> Copiar Mês Anterior
+                  </button>
+                </div>
               </div>
             </div>
             <div class="params-row" style="display:flex; gap:20px; align-items:flex-end;">
