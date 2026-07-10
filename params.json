@@ -58,11 +58,15 @@
     "028503": {
       "2026_07": {
         "pecuaria": 60,
-        "agricultura": 40
+        "agricultura": 40,
+        "areaPecuaria": 8900.2,
+        "areaAgricultura": 4089.5
       },
       "2026_06": {
         "pecuaria": 60,
-        "agricultura": 40
+        "agricultura": 40,
+        "areaPecuaria": 8900.2,
+        "areaAgricultura": 4089.5
       }
     }
   }

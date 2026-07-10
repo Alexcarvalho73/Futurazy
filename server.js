@@ -3110,7 +3110,10 @@ app.delete('/api/pecuaria/fechamento/:id', async (req, res) => {
 // MÓDULO FECHAMENTO FINANCEIRO — CUSTOS INDIRETOS E DESPESAS
 // ============================================================
 
-function buildFinanceiroSQL() {
+function buildFinanceiroSQL(options = {}) {
+  const isArr = options.isArrendamento;
+  const arrFilter = isArr ? "AND ZA.ZA1_CODIGO = 'ARR '" : "AND ZA.ZA1_CODIGO <> 'ARR '";
+
   return `
     SELECT  
       TRIM(SUBSTR(SE5.E5_FILIAL, 3, 2)) AS EMPRESA,
@@ -3204,6 +3207,7 @@ function buildFinanceiroSQL() {
       and SE5.E5_DTDISPO >= REPLACE(:data_de, '-', '')
       AND SE5.E5_DTDISPO <= REPLACE(:data_ate, '-', '')
       AND ZA.ZA1_CLASSI='3'
+      ${arrFilter}
   `;
 }
 
@@ -3215,8 +3219,59 @@ app.get('/api/financeiro/dados', async (req, res) => {
 
   try {
     const binds = { data_de, data_ate };
-    const sql = buildFinanceiroSQL();
+    const sql = buildFinanceiroSQL({ isArrendamento: false });
     const rows = await db.execute(sql, binds);
+
+    // Calcular período de 12 meses para Arrendamento (11 meses atrás do mês de data_ate)
+    const dateAteStr = data_ate.replace(/-/g, ''); // '20260731'
+    const year = parseInt(dateAteStr.substring(0, 4), 10);
+    const month = parseInt(dateAteStr.substring(4, 6), 10);
+    
+    let startMonth = month - 11;
+    let startYear = year;
+    if (startMonth <= 0) {
+      startMonth += 12;
+      startYear -= 1;
+    }
+    const startMonthStr = startMonth.toString().padStart(2, '0');
+    const dataDeArr = `${startYear}${startMonthStr}01`;
+    const dataAteArr = dateAteStr; // até a data original
+
+    const sqlArr = buildFinanceiroSQL({ isArrendamento: true });
+    const bindsArr = { data_de: dataDeArr, data_ate: dataAteArr };
+    const rowsArr = await db.execute(sqlArr, bindsArr);
+
+    // Identificar os meses consultados originais para gerar as linhas sintéticas
+    const d1 = data_de.replace(/-/g, '');
+    const m1_y = parseInt(d1.substring(0, 4), 10);
+    const m1_m = parseInt(d1.substring(4, 6), 10);
+    const m2_y = parseInt(dateAteStr.substring(0, 4), 10);
+    const m2_m = parseInt(dateAteStr.substring(4, 6), 10);
+    
+    const queryMonths = [];
+    let curY = m1_y, curM = m1_m;
+    while (curY < m2_y || (curY === m2_y && curM <= m2_m)) {
+      queryMonths.push(`${curY}${curM.toString().padStart(2, '0')}`);
+      curM++;
+      if (curM > 12) {
+        curM = 1;
+        curY++;
+      }
+    }
+
+    // Gerar linhas sintéticas de arrendamento rateadas em 12
+    rowsArr.forEach(r => {
+      const valPorMes = (r.VALOR_R$ || 0) / 12;
+      queryMonths.forEach(qm => {
+        const newRow = { ...r };
+        newRow.VALOR_R$ = valPorMes;
+        newRow.CC_GRUPO = 'Arrendamentos '; // Espaço incluído para match exato com o decode original, se necessário
+        newRow.ANO_MES = qm;
+        newRow.ANO = qm.substring(0, 4);
+        newRow.MES = qm.substring(4, 6);
+        rows.push(newRow);
+      });
+    });
 
     // Normalizar nulls
     rows.forEach(r => {

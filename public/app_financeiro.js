@@ -155,6 +155,8 @@ function setupEventListeners() {
     const pctAgr = Number(document.getElementById('p-rateio-agricultura').value || 0);
     const pctAba = Number(document.getElementById('p-rateio-geral-aba').value || 0);
     const pctAgp = Number(document.getElementById('p-rateio-geral-agp').value || 0);
+    const areaPec = Number(document.getElementById('p-area-pecuaria').value || 0);
+    const areaAgr = Number(document.getElementById('p-area-agricultura').value || 0);
     
     const [y, m] = mesAno.split('-');
     const key = y + '_' + m;
@@ -165,7 +167,9 @@ function setupEventListeners() {
     
     state.params.financeiro[filial][key] = {
       pecuaria: pctPec,
-      agricultura: pctAgr
+      agricultura: pctAgr,
+      areaPecuaria: areaPec,
+      areaAgricultura: areaAgr
     };
     
     state.params.financeiro.geral[key] = {
@@ -214,10 +218,12 @@ function updateParamsUI() {
   
   const fin = state.params.financeiro || {};
   const fObj = fin[filial] || {};
-  const dObj = fObj[key] || { pecuaria: 50, agricultura: 50 }; // default 50/50 if not set
+  const dObj = fObj[key] || { pecuaria: 50, agricultura: 50, areaPecuaria: 0, areaAgricultura: 0 }; // default 50/50 if not set
   
   document.getElementById('p-rateio-pecuaria').value = dObj.pecuaria;
   document.getElementById('p-rateio-agricultura').value = dObj.agricultura;
+  document.getElementById('p-area-pecuaria').value = dObj.areaPecuaria || '';
+  document.getElementById('p-area-agricultura').value = dObj.areaAgricultura || '';
 
   const geralObj = fin.geral || {};
   const dGeral = geralObj[key] || { aba: 50, agp: 50 };
@@ -230,7 +236,7 @@ function getRateioParams(filial, ano, mes) {
   const key = ano + '_' + String(mes).padStart(2, '0');
   const fin = state.params.financeiro || {};
   const fObj = fin[filial] || {};
-  return fObj[key] || { pecuaria: 50, agricultura: 50 };
+  return fObj[key] || { pecuaria: 50, agricultura: 50, areaPecuaria: 0, areaAgricultura: 0 };
 }
 
 function getRateioGeralParams(ano, mes) {
@@ -267,6 +273,28 @@ async function loadAll() {
         const vlrUsd = vlrBrl / ptax;
         
         const tipoRateio = r.TIPO_RATEIO || '';
+        const isArrendamento = (r.CC_GRUPO || '').trim() === 'Arrendamentos';
+        
+        if (isArrendamento) {
+          // Rateio exclusivo por área informada nos parâmetros da filial
+          const rateio = getRateioParams(r.FILIAL, r.ANO, r.MES);
+          const areaPec = Number(rateio.areaPecuaria || 0);
+          const areaAgr = Number(rateio.areaAgricultura || 0);
+          const areaTotal = areaPec + areaAgr;
+          
+          let pPec = 0.5;
+          let pAgr = 0.5;
+          
+          if (areaTotal > 0) {
+            pPec = areaPec / areaTotal;
+            pAgr = areaAgr / areaTotal;
+          }
+          
+          if (pPec > 0) processed.push({ ...r, NEGOCIO: 'PECUARIA', VLR_BRL: vlrBrl * pPec, VLR_USD: vlrUsd * pPec });
+          if (pAgr > 0) processed.push({ ...r, NEGOCIO: 'AGRICULTURA', VLR_BRL: vlrBrl * pAgr, VLR_USD: vlrUsd * pAgr });
+          
+          continue;
+        }
         
         if (tipoRateio === 'Rateio Geral') {
           // Rateio Geral: Duplo rateio. 
@@ -702,8 +730,8 @@ function renderAnual(data) {
   }
 
   const sections = {
-    'DIRETO': { title: 'Custeio Operacional Direto', rows: {} },
-    'INDIRETO': { title: 'Custeio Operacional Indireto', rows: {} },
+    'DIRETO': { title: 'Despesas Operacionais Diretas', rows: {} },
+    'INDIRETO': { title: 'Despesas Operacionais Indiretas', rows: {} },
     'RATEADO': { title: 'Despesas Administrativas rateadas', rows: {} }
   };
 
