@@ -787,7 +787,7 @@ function renderAnual(data) {
   };
 
   // Build thead
-  let theadHtml = `<tr><th rowspan="2" style="min-width: 200px;">Grupo de Custo</th>`;
+  let theadHtml = `<tr><th rowspan="2" class="sticky-col" style="min-width: 200px;">Grupo de Custo</th>`;
   for (const m of mesesArr) {
     theadHtml += `<th colspan="4">${formatMes(m)}</th>`;
   }
@@ -815,7 +815,7 @@ function renderAnual(data) {
     
     // Section Header row (Subtotal)
     tbodyHtml += `<tr class="section-total-row">`;
-    tbodyHtml += `<td style="background-color: #334155; color: #f8fafc; font-weight: bold;">${sec.title}</td>`;
+    tbodyHtml += `<td class="sticky-col" style="background-color: #334155; color: #f8fafc; font-weight: bold;">${sec.title}</td>`;
     
     // Aggregate totals for the section header
     const secTotals = {};
@@ -857,7 +857,7 @@ function renderAnual(data) {
     // Group rows
     for (const g of grupos) {
       tbodyHtml += `<tr>`;
-      tbodyHtml += `<td style="padding-left: 20px;">${escHtml(g)}</td>`;
+      tbodyHtml += `<td class="sticky-col" style="padding-left: 20px;">${escHtml(g)}</td>`;
       const gRow = sec.rows[g];
       
       const gTot = { pecAba: 0, pecAgp: 0, sojaAgp: 0, consolidado: 0 };
@@ -891,7 +891,7 @@ function renderAnual(data) {
   // Valor Dólar row
   tbodyHtml += `
     <tr style="border-top: 2px solid rgba(255,255,255,0.1);">
-      <td style="font-weight:bold;"><i class="fa-solid fa-brazilian-real-sign" style="color:#22c55e;"></i> Valor Dólar</td>
+      <td class="sticky-col" style="font-weight:bold;"><i class="fa-solid fa-brazilian-real-sign" style="color:#22c55e;"></i> Valor Dólar</td>
   `;
   const calcTx = (st) => st.usd ? (st.brl / st.usd) : 0;
   const fmtTx = (val) => val ? val.toLocaleString('pt-BR', {minimumFractionDigits:4, maximumFractionDigits:4}) : '—';
@@ -922,8 +922,8 @@ function renderAnual(data) {
   
   const statusRowHtml = [];
   const actionRowHtml = [];
-  statusRowHtml.push(`<tr style="background: rgba(0,0,0,0.2);"><td style="font-weight:bold; color:var(--text-muted);">Status</td>`);
-  actionRowHtml.push(`<tr style="background: rgba(0,0,0,0.2);"><td style="font-weight:bold; color:var(--text-muted);">Ação</td>`);
+  statusRowHtml.push(`<tr style="background: rgba(0,0,0,0.2);"><td class="sticky-col" style="font-weight:bold; color:var(--text-muted);">Status</td>`);
+  actionRowHtml.push(`<tr style="background: rgba(0,0,0,0.2);"><td class="sticky-col" style="font-weight:bold; color:var(--text-muted);">Ação</td>`);
   
   for (const m of mesesArr) {
      const fechado = state.mesesFechados && state.mesesFechados.has(`${m.substring(0,4)}_${parseInt(m.substring(4,6), 10)}`);
@@ -953,7 +953,7 @@ function renderAnual(data) {
   statusRowHtml.push(`<td colspan="4"></td></tr>`);
   actionRowHtml.push(`<td colspan="4"></td></tr>`);
   
-  tbodyHtml += `<tr><td colspan="${(mesesArr.length + 1) * 4 + 1}" style="background:rgba(255,255,255,0.05); font-weight:bold; padding: 8px 10px; font-size:11px; letter-spacing:1px; margin-top:10px;">STATUS DE FECHAMENTO</td></tr>`;
+  tbodyHtml += `<tr class="section-row"><td class="sticky-col" style="background:rgba(255,255,255,0.05); font-weight:bold; padding: 8px 10px; font-size:11px; letter-spacing:1px;">STATUS DE FECHAMENTO</td><td colspan="${(mesesArr.length + 1) * 4}" style="background:rgba(255,255,255,0.05);"></td></tr>`;
   tbodyHtml += statusRowHtml.join('');
   tbodyHtml += actionRowHtml.join('');
 

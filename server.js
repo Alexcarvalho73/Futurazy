@@ -3121,11 +3121,15 @@ function buildFinanceiroSQL() {
           WHEN 'R' THEN SE5.E5_VALOR 
       END AS VALOR_R$,
       TRIM(substr(SE5.E5_CCD,1,2)) AS C_CUSTO,
+      case when E5_CCD='04.21    ' then
+           'Logistica Compartilhada'
+      else
       decode(za1_nature,
          '1','Custo Mão-de-Obra',
          '2','Dia-a-Dia',
          '3','Manutenção',
-         '6','Arrendamentos ','Sem Classificação') as cc_grupo,
+         '6','Arrendamentos ','Sem Classificação') 
+      end as cc_grupo,
       case when E5_CLVLDB = '02' then 
            'Rateio Geral'
       else DECODE(substr(E5_CCD,1,2),'01','PECUARIA','02','SOJA','Rateio Interno')  end Tipo_rateio,
