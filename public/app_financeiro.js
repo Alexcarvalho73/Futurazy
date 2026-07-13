@@ -130,10 +130,35 @@ function setupEventListeners() {
     });
   });
   
+  // Expand / Collapse cubo
+  document.getElementById('btn-expand-all')?.addEventListener('click', () => {
+    document.querySelectorAll('#cube-body .row-hidden').forEach(r => r.classList.remove('row-hidden'));
+    document.querySelectorAll('#cube-body .toggle-btn').forEach(b => b.innerHTML = '▼');
+  });
+  document.getElementById('btn-collapse-all')?.addEventListener('click', () => {
+    document.querySelectorAll('#cube-body tr').forEach(r => {
+      if (!r.classList.contains('lvl-0')) r.classList.add('row-hidden');
+    });
+    document.querySelectorAll('#cube-body .toggle-btn').forEach(b => b.innerHTML = '▶');
+  });
+
   // Rateio params toggle
   document.getElementById('params-toggle')?.addEventListener('click', () => {
     const body = document.getElementById('params-body');
     const chev = document.getElementById('params-chevron');
+    if (body.style.display === 'none') {
+      body.style.display = 'block';
+      chev.style.transform = 'rotate(0deg)';
+    } else {
+      body.style.display = 'none';
+      chev.style.transform = 'rotate(-90deg)';
+    }
+  });
+
+  // Anual section toggle
+  document.getElementById('anual-toggle-header')?.addEventListener('click', () => {
+    const body = document.getElementById('anual-body');
+    const chev = document.getElementById('anual-chevron');
     if (body.style.display === 'none') {
       body.style.display = 'block';
       chev.style.transform = 'rotate(0deg)';
@@ -634,12 +659,19 @@ function renderCube(data) {
   }
 
   const renderCols = (node) => {
+    let cambio = 0;
+    if (Math.abs(node.consolidado.usd) > 0.001) {
+      cambio = Math.abs(node.consolidado.brl / node.consolidado.usd);
+    }
+    const txtCambio = cambio ? cambio.toLocaleString('pt-BR', {minimumFractionDigits:4, maximumFractionDigits:4}) : '—';
+
     const usarUsd = state.moeda === 'USD';
     const vPecAba = usarUsd ? node.pecAba.usd : node.pecAba.brl;
     const vPecAgp = usarUsd ? node.pecAgp.usd : node.pecAgp.brl;
     const vSojaAgp = usarUsd ? node.sojaAgp.usd : node.sojaAgp.brl;
     const vConsol = usarUsd ? node.consolidado.usd : node.consolidado.brl;
     return `
+      <td class="text-center" style="color:var(--text-muted); font-size:12px;">${txtCambio}</td>
       <td class="text-right">${vPecAba === 0 ? '—' : fmtMoeda(vPecAba)}</td>
       <td class="text-right">${vPecAgp === 0 ? '—' : fmtMoeda(vPecAgp)}</td>
       <td class="text-right">${vSojaAgp === 0 ? '—' : fmtMoeda(vSojaAgp)}</td>
@@ -732,6 +764,14 @@ function renderCube(data) {
   const elTotPecAgp = document.getElementById('tot-pec-agp');
   const elTotSojaAgp = document.getElementById('tot-soja-agp');
   const elTotConsol = document.getElementById('tot-consolidado');
+  const elTotCambio = document.getElementById('tot-cambio');
+  if (elTotCambio) {
+    let gCambio = 0;
+    if (Math.abs(grandTotal.consolidado.usd) > 0.001) {
+      gCambio = Math.abs(grandTotal.consolidado.brl / grandTotal.consolidado.usd);
+    }
+    elTotCambio.textContent = gCambio ? gCambio.toLocaleString('pt-BR', {minimumFractionDigits:4, maximumFractionDigits:4}) : '—';
+  }
   
   if (elTotPecAba) elTotPecAba.textContent = fmtMoeda(usarUsd ? grandTotal.pecAba.usd : grandTotal.pecAba.brl);
   if (elTotPecAgp) elTotPecAgp.textContent = fmtMoeda(usarUsd ? grandTotal.pecAgp.usd : grandTotal.pecAgp.brl);
@@ -863,7 +903,7 @@ function renderAnual(data) {
   };
 
   // Build thead
-  let theadHtml = `<tr><th rowspan="2" class="sticky-col" style="min-width: 200px;">Grupo de Custo</th>`;
+  let theadHtml = `<tr><th rowspan="2" class="sticky-col" style="min-width: 200px;">Grupo de Despesa</th>`;
   for (const m of mesesArr) {
     theadHtml += `<th colspan="4">${formatMes(m)}</th>`;
   }
@@ -884,16 +924,23 @@ function renderAnual(data) {
   const fmt = state.moeda === 'USD' ? fmtMoedaUsd : fmtMoedaBrl;
   let tbodyHtml = '';
 
-  const secKeys = ['DIRETO', 'INDIRETO', 'RATEADO'];
+    const secKeys = ['DIRETO', 'INDIRETO', 'RATEADO'];
   
-  for (const sk of secKeys) {
-    const sec = sections[sk];
-    
-    // Section Header row (Subtotal)
-    tbodyHtml += `<tr class="section-total-row">`;
-    tbodyHtml += `<td class="sticky-col" style="background-color: #334155; color: #f8fafc; font-weight: bold;">${sec.title}</td>`;
-    
-    // Aggregate totals for the section header
+    // Aggregate grand totals across all sections
+    const grandTotals = {};
+    for (const m of mesesArr) {
+      grandTotals[m] = { pecAba: 0, pecAgp: 0, sojaAgp: 0, consolidado: 0 };
+    }
+    grandTotals['TOTAL'] = { pecAba: 0, pecAgp: 0, sojaAgp: 0, consolidado: 0 };
+
+    for (const sk of secKeys) {
+      const sec = sections[sk];
+      
+      // Section Header row (Subtotal)
+      tbodyHtml += `<tr class="section-total-row">`;
+      tbodyHtml += `<td class="sticky-col" style="background-color: #1e3a8a; color: #f8fafc; font-weight: bold;">${sec.title}</td>`;
+      
+      // Aggregate totals for the section header
     const secTotals = {};
     const grupos = Object.keys(sec.rows).sort((a, b) => a.localeCompare(b));
     
@@ -921,11 +968,16 @@ function renderAnual(data) {
     
     for (const m of [...mesesArr, 'TOTAL']) {
       const t = secTotals[m];
+      grandTotals[m].pecAba += t.pecAba;
+      grandTotals[m].pecAgp += t.pecAgp;
+      grandTotals[m].sojaAgp += t.sojaAgp;
+      grandTotals[m].consolidado += t.consolidado;
+
       tbodyHtml += `
-        <td style="background-color: #334155; color: #f8fafc; font-weight: bold;">${fmt(t.pecAba)}</td>
-        <td style="background-color: #334155; color: #f8fafc; font-weight: bold;">${fmt(t.pecAgp)}</td>
-        <td style="background-color: #334155; color: #f8fafc; font-weight: bold;">${fmt(t.sojaAgp)}</td>
-        <td style="background-color: #334155; color: #f8fafc; font-weight: 900;" class="col-consolidado">${fmt(t.consolidado)}</td>
+        <td style="background-color: #1e3a8a; color: #f8fafc; font-weight: bold;">${fmt(t.pecAba)}</td>
+        <td style="background-color: #1e3a8a; color: #f8fafc; font-weight: bold;">${fmt(t.pecAgp)}</td>
+        <td style="background-color: #1e3a8a; color: #f8fafc; font-weight: bold;">${fmt(t.sojaAgp)}</td>
+        <td style="background-color: #1e3a8a; color: #f8fafc; font-weight: 900;" class="col-consolidado">${fmt(t.consolidado)}</td>
       `;
     }
     tbodyHtml += `</tr>`;
@@ -964,10 +1016,25 @@ function renderAnual(data) {
     tbodyHtml += `<tr><td colspan="${(mesesArr.length + 1) * 4 + 1}" style="height: 20px; border: none; background: transparent;"></td></tr>`;
   }
 
+  // Render Grand Total Row
+  tbodyHtml += `<tr class="section-total-row">`;
+  tbodyHtml += `<td class="sticky-col" style="background-color: #1e3a8a; color: #f8fafc; font-weight: bold;">Total Geral</td>`;
+  for (const m of [...mesesArr, 'TOTAL']) {
+    const t = grandTotals[m];
+    tbodyHtml += `
+      <td style="background-color: #1e3a8a; color: #f8fafc; font-weight: bold;">${fmt(t.pecAba)}</td>
+      <td style="background-color: #1e3a8a; color: #f8fafc; font-weight: bold;">${fmt(t.pecAgp)}</td>
+      <td style="background-color: #1e3a8a; color: #f8fafc; font-weight: bold;">${fmt(t.sojaAgp)}</td>
+      <td style="background-color: #1e3a8a; color: #f8fafc; font-weight: 900;" class="col-consolidado">${fmt(t.consolidado)}</td>
+    `;
+  }
+  tbodyHtml += `</tr>`;
+  tbodyHtml += `<tr><td colspan="${(mesesArr.length + 1) * 4 + 1}" style="height: 20px; border: none; background: transparent;"></td></tr>`;
+
   // Valor Dólar row
   tbodyHtml += `
-    <tr style="border-top: 2px solid rgba(255,255,255,0.1);">
-      <td class="sticky-col" style="font-weight:bold;"><i class="fa-solid fa-brazilian-real-sign" style="color:#22c55e;"></i> Valor Dólar</td>
+    <tr>
+      <td class="sticky-col" style="background-color: #1e3a8a; color: #f8fafc; font-weight: bold;"><i class="fa-solid fa-brazilian-real-sign" style="color:#22c55e;"></i> Valor Dólar</td>
   `;
   const calcTx = (st) => st.usd ? (st.brl / st.usd) : 0;
   const fmtTx = (val) => val ? val.toLocaleString('pt-BR', {minimumFractionDigits:4, maximumFractionDigits:4}) : '—';
@@ -975,18 +1042,18 @@ function renderAnual(data) {
   for (const m of mesesArr) {
      const dStat = dolarStats[m];
      tbodyHtml += `
-       <td class="text-center" style="font-weight:bold; color:var(--text-muted);">${fmtTx(calcTx(dStat.pecAba))}</td>
-       <td class="text-center" style="font-weight:bold; color:var(--text-muted);">${fmtTx(calcTx(dStat.pecAgp))}</td>
-       <td class="text-center" style="font-weight:bold; color:var(--text-muted);">${fmtTx(calcTx(dStat.sojaAgp))}</td>
-       <td class="text-center col-consolidado" style="font-weight:bold; color:var(--text-muted);">${fmtTx(calcTx(dStat.consolidado))}</td>
+       <td class="text-center" style="background-color: #1e3a8a; color: #f8fafc; font-weight: bold;">${fmtTx(calcTx(dStat.pecAba))}</td>
+       <td class="text-center" style="background-color: #1e3a8a; color: #f8fafc; font-weight: bold;">${fmtTx(calcTx(dStat.pecAgp))}</td>
+       <td class="text-center" style="background-color: #1e3a8a; color: #f8fafc; font-weight: bold;">${fmtTx(calcTx(dStat.sojaAgp))}</td>
+       <td class="text-center col-consolidado" style="background-color: #1e3a8a; color: #f8fafc; font-weight: bold;">${fmtTx(calcTx(dStat.consolidado))}</td>
      `;
   }
   
   tbodyHtml += `
-       <td class="text-center" style="font-weight:bold; color:var(--text-white);">${fmtTx(calcTx(totalAnoDolarStats.pecAba))}</td>
-       <td class="text-center" style="font-weight:bold; color:var(--text-white);">${fmtTx(calcTx(totalAnoDolarStats.pecAgp))}</td>
-       <td class="text-center" style="font-weight:bold; color:var(--text-white);">${fmtTx(calcTx(totalAnoDolarStats.sojaAgp))}</td>
-       <td class="text-center col-consolidado" style="font-weight:bold; color:var(--text-white);">${fmtTx(calcTx(totalAnoDolarStats.consolidado))}</td>
+       <td class="text-center" style="background-color: #1e3a8a; color: #f8fafc; font-weight: bold;">${fmtTx(calcTx(totalAnoDolarStats.pecAba))}</td>
+       <td class="text-center" style="background-color: #1e3a8a; color: #f8fafc; font-weight: bold;">${fmtTx(calcTx(totalAnoDolarStats.pecAgp))}</td>
+       <td class="text-center" style="background-color: #1e3a8a; color: #f8fafc; font-weight: bold;">${fmtTx(calcTx(totalAnoDolarStats.sojaAgp))}</td>
+       <td class="text-center col-consolidado" style="background-color: #1e3a8a; color: #f8fafc; font-weight: bold;">${fmtTx(calcTx(totalAnoDolarStats.consolidado))}</td>
     </tr>
   `;
 

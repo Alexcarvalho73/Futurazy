@@ -33,6 +33,7 @@ const filterEmissaoAte = document.getElementById('filter-emissao-ate');
 const filterVencimentoDe = document.getElementById('filter-vencimento-de');
 const filterVencimentoAte = document.getElementById('filter-vencimento-ate');
 const filterXmlConfco = document.getElementById('filter-xmlconfco');
+const filterD1Cc = document.getElementById('filter-d1-cc');
 
 const btnApplyFilters = document.getElementById('btn-apply-filters');
 const btnClearFilters = document.getElementById('btn-clear-filters');
@@ -198,7 +199,8 @@ async function loadHeaders() {
       emissao_ate: filterEmissaoAte.value,
       vencimento_de: filterVencimentoDe.value,
       vencimento_ate: filterVencimentoAte.value,
-      xml_confco: filterXmlConfco.value
+      xml_confco: filterXmlConfco.value,
+      d1_cc: filterD1Cc ? filterD1Cc.value.trim() : ''
     });
 
     const url = `/api/notas?${params.toString()}`;
@@ -422,6 +424,7 @@ btnClearFilters.addEventListener('click', () => {
   filterVencimentoDe.value = '';
   filterVencimentoAte.value = '';
   filterXmlConfco.value = 'todos';
+  if (filterD1Cc) filterD1Cc.value = '';
   
   currentPage = 1;
   loadHeaders();
@@ -470,14 +473,16 @@ filterXmlConfco.addEventListener('change', () => {
 });
 
 // Permitir filtrar ao pressionar Enter nos campos de texto
-const textInputs = [filterFilial, filterFornecedor, filterNumnf];
+const textInputs = [filterFilial, filterFornecedor, filterNumnf, filterD1Cc];
 textInputs.forEach(input => {
-  input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      currentPage = 1;
-      loadHeaders();
-    }
-  });
+  if (input) {
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        currentPage = 1;
+        loadHeaders();
+      }
+    });
+  }
 });
 
 // Carga Inicial ao abrir a página

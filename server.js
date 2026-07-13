@@ -67,6 +67,7 @@ app.get('/api/notas', async (req, res) => {
   const vencimento_ate = req.query.vencimento_ate || '';
   const search = req.query.search || '';
   const xml_confco = req.query.xml_confco || 'todos';
+  const d1_cc = req.query.d1_cc || '';
 
   const maxRow = page * limit;
   const minRow = (page - 1) * limit;
@@ -221,6 +222,33 @@ app.get('/api/notas', async (req, res) => {
     baseWhere += " AND XM.XML_CONFCO <> ' ' AND XM.XML_CONFCO IS NOT NULL";
   } else if (xml_confco === 'nao') {
     baseWhere += " AND (XM.XML_CONFCO = ' ' OR XM.XML_CONFCO IS NULL)";
+  }
+
+  // Filtro de D1_CC (Centro de Custo)
+  if (d1_cc) {
+    baseWhere += ` AND EXISTS (
+      SELECT 1 
+      FROM PROTHEUS11.CONDORXMLITENS XI
+      LEFT JOIN PROTHEUS11.SD1020 D1 ON D1.D_E_L_E_T_ = ' '
+        AND ((D1.D1_FILIAL = TRIM(XM.XML_FIL)    
+              AND D1.D1_DOC = SUBSTR(XI.XIT_KEYSD1,7,9)    
+              AND D1.D1_SERIE = SUBSTR(XI.XIT_KEYSD1,16,3)    
+              AND D1.D1_FORNECE = SUBSTR(XI.XIT_KEYSD1,19,6)    
+              AND D1.D1_LOJA = SUBSTR(XI.XIT_KEYSD1,25,2)    
+              AND D1.D1_ITEM = SUBSTR(XI.XIT_KEYSD1,42,4)
+              AND XI.XIT_KEYSD1 <> ' ' ) 
+             OR (D1.D1_FILIAL = TRIM(XM.XML_FIL)    
+              AND D1.D1_DOC = SUBSTR(XM.XML_KEYF1,7,9)    
+              AND D1.D1_SERIE = SUBSTR(XM.XML_KEYF1,16,3)    
+              AND D1.D1_FORNECE = SUBSTR(XM.XML_KEYF1,19,6)    
+              AND D1.D1_LOJA = SUBSTR(XM.XML_KEYF1,25,2)    
+              AND D1.D1_ITEM = XI.XIT_ITEM 
+              AND XI.XIT_KEYSD1 = ' ' ))     
+      WHERE XI.D_E_L_E_T_ = ' '
+        AND XI.XIT_CHAVE = XM.XML_CHAVE
+        AND TRIM(D1.D1_CC) LIKE :d1_cc
+    )`;
+    baseBinds.d1_cc = `%${d1_cc.trim()}%`;
   }
 
   // Query de Totalizadores para os KPI Cards

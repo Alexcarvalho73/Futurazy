@@ -4,9 +4,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Custos Financeiros e Administrativos — Fechamento Financeiro | FuturazBI</title>
+  <title>Despesas Financeiras e Administrativas — Fechamento Financeiro | FuturazBI</title>
   <meta name="description"
-    content="Painel de Custos Financeiros e Administrativos (Defensivos, Fertilizantes, Sementes) — Fechamento Financeiro FuturazBI">
+    content="Painel de Despesas Financeiras e Administrativas — Fechamento Financeiro FuturazBI">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
@@ -413,13 +413,14 @@
     }
 
     .col-consolidado {
-      background: rgba(56, 189, 248, 0.1) !important;
-      border-right: 1px solid rgba(56, 189, 248, 0.2) !important;
+      background: #1e3a8a !important;
+      color: #f8fafc !important;
+      border-right: 1px solid rgba(255, 255, 255, 0.1) !important;
       font-weight: bold !important;
     }
     th.col-consolidado {
-      background: rgba(56, 189, 248, 0.15) !important;
-      color: #e0f2fe !important;
+      background: #1e3a8a !important;
+      color: #f8fafc !important;
     }
 
     .col-total {
@@ -736,12 +737,12 @@
             <div class="breadcrumb">
               <a href="fechamento.html"><i class="fa-solid fa-file-chart-column"></i> Fechamento</a>
               <i class="fa-solid fa-chevron-right" style="font-size:10px"></i>
-              <span style="color:var(--text-white)">Custos Financeiros e Administrativos</span>
+              <span style="color:var(--text-white)">Despesas Financeiras e Administrativas</span>
             </div>
-            <h1 style="font-size:26px; color:var(--text-white); margin-bottom:4px;">Custos Financeiros e Administrativos
+            <h1 style="font-size:26px; color:var(--text-white); margin-bottom:4px;">Despesas Financeiras e Administrativas
             </h1>
             <p style="color:var(--text-muted); font-size:14px;">
-              Despesas Administrativas Rateadas e Custos Operacionais Indiretos — Filiais 028501 e 028503
+              Despesas Administrativas Rateadas e Despesas Operacionais Indiretas — Filiais 028501 e 028503
             </p>
           </div>
           <div class="page-header-actions">
@@ -790,7 +791,7 @@
               <i class="fa-solid fa-circle-dollar-to-slot"></i>
             </div>
             <div class="kpi-data">
-              <h3>Custo Total (R$)</h3>
+              <h3>Despesa Total (R$)</h3>
               <h2 id="kpi-custo-total">—</h2>
               <span class="kpi-sub" id="kpi-custo-total-sub">Período selecionado</span>
             </div>
@@ -800,7 +801,7 @@
               <i class="fa-solid fa-dollar-sign"></i>
             </div>
             <div class="kpi-data">
-              <h3>Custo Total (USD)</h3>
+              <h3>Despesa Total (USD)</h3>
               <h2 id="kpi-custo-usd">—</h2>
               <span class="kpi-sub" id="kpi-custo-usd-sub">Cotação parametrizada</span>
             </div>
@@ -852,12 +853,13 @@
             <div class="spinner"></div>
             <p>Carregando resumo anual…</p>
           </div>
-          <div class="anual-header">
+          <div class="anual-header" id="anual-toggle-header" style="cursor: pointer;">
             <h2>
+              <i class="fa-solid fa-chevron-down toggle-icon" id="anual-chevron" style="transform: rotate(0deg); transition: transform 0.2s; margin-right: 8px; font-size: 16px;"></i>
               <i class="fa-solid fa-calendar-days" style="color:#f87171"></i>
               Resumo Anual — <span id="label-periodo">Safra 2025/26</span>
             </h2>
-            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;" onclick="event.stopPropagation()">
               <div class="empresa-tabs">
                 <button class="empresa-tab active" data-emp="TOTAL" id="tab-total">Consolidado</button>
                 <button class="empresa-tab" data-emp="028501" id="tab-028501">028501</button>
@@ -865,15 +867,17 @@
               </div>
             </div>
           </div>
-          <div class="anual-table-wrap">
-            <table class="anual-table" id="anual-table">
-              <thead id="anual-thead">
-                <!-- Preenchido por app_financeiro.js -->
-              </thead>
-              <tbody id="anual-tbody">
-                <!-- Preenchido por app_financeiro.js -->
-              </tbody>
-            </table>
+          <div class="anual-body" id="anual-body" style="display: block;">
+            <div class="anual-table-wrap">
+              <table class="anual-table" id="anual-table">
+                <thead id="anual-thead">
+                  <!-- Preenchido por app_financeiro.js -->
+                </thead>
+                <tbody id="anual-tbody">
+                  <!-- Preenchido por app_financeiro.js -->
+                </tbody>
+              </table>
+            </div>
           </div>
         </section>
 
@@ -979,7 +983,7 @@
             <p>Carregando dados do Oracle…</p>
           </div>
           <div class="cube-header">
-            <h2><i class="fa-solid fa-cubes" style="color:#f87171"></i> Custos Financeiros e Administrativos —
+            <h2><i class="fa-solid fa-cubes" style="color:#f87171"></i> Despesas Financeiras e Administrativas —
               Drill-down</h2>
             <div class="cube-actions">
               <button class="btn btn-secondary btn-sm" id="btn-expand-all">
@@ -998,6 +1002,7 @@
                   <th>Recno</th>
                   <th>Data</th>
                   <th>Fornecedor / Beneficiário</th>
+                  <th class="text-right">Câmbio</th>
                   <th class="text-right">Pecuária Aba</th>
                   <th class="text-right">Pecuária AGP</th>
                   <th class="text-right">Soja AGP</th>
@@ -1009,7 +1014,8 @@
               </tbody>
               <tfoot>
                 <tr class="grand-total-row" id="cube-gd-total">
-                  <td colspan="3">Total Geral</td>
+                  <td colspan="4">Total Geral</td>
+                  <td class="text-right" id="tot-cambio">—</td>
                   <td class="text-right" id="tot-pec-aba">R$ 0,00</td>
                   <td class="text-right" id="tot-pec-agp">R$ 0,00</td>
                   <td class="text-right" id="tot-soja-agp">R$ 0,00</td>
@@ -1030,7 +1036,7 @@
       <div class="modal-icon"><i class="fa-solid fa-lock"></i></div>
       <div class="modal-title">Confirmar Fechamento do Mês</div>
       <div class="modal-body">
-        Você está prestes a <strong>fechar e gravar</strong> os custos com insumos do período:
+        Você está prestes a <strong>fechar e gravar</strong> as despesas financeiras do período:
       </div>
       <div class="modal-preview" id="modal-preview">
         <div class="modal-preview-item">
@@ -1042,7 +1048,7 @@
           <span id="modal-empresa">TOTAL</span>
         </div>
         <div class="modal-preview-item">
-          <label>Custo Total (R$)</label>
+          <label>Despesa Total (R$)</label>
           <span id="modal-custo">—</span>
         </div>
         <div class="modal-preview-item">
@@ -1143,7 +1149,7 @@
                 <th>Grupo</th>
                 <th>Subgrupo</th>
                 <th>Tipo Rateio</th>
-                <th class="text-right">Custo Total (R$)</th>
+                <th class="text-right">Despesa Total (R$)</th>
                 <th class="text-right">PTAX (R$/US$)</th>
                 <th>Ações</th>
               </tr>
@@ -1184,8 +1190,8 @@
 
           <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 16px;">
             <div class="filter-group">
-              <label>Grupo de Custo</label>
-              <input type="text" id="edit-fi-grupo" class="form-control" required placeholder="Ex: Custo Operacional">
+              <label>Grupo de Despesa</label>
+              <input type="text" id="edit-fi-grupo" class="form-control" required placeholder="Ex: Despesa Operacional">
             </div>
             <div class="filter-group">
               <label>Subgrupo</label>
@@ -1203,7 +1209,7 @@
 
           <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px;">
             <div class="filter-group">
-              <label>Custo Total (R$)</label>
+              <label>Despesa Total (R$)</label>
               <input type="number" step="0.01" id="edit-fi-custo-brl" class="form-control" required>
             </div>
             <div class="filter-group">
