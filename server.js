@@ -97,6 +97,7 @@ app.get('/api/notas', async (req, res) => {
         XM.XML_TPNF,
         XM.D_E_L_E_T_,
         XM.XML_CONFCO,
+        XM.XML_KEYF1,
         -- Lógica de Filial Calculada
         CASE
           WHEN TRIM(XM.XML_FIL) IS NOT NULL AND TRIM(XM.XML_FIL) <> ' ' THEN TRIM(XM.XML_FIL)
