@@ -227,7 +227,7 @@
           <div class="kpi-data">
             <h3>Meses Fechados</h3>
             <h2 id="val-fechados">—</h2>
-            <span class="kpi-sub">Receitas consolidadas</span>
+            <span class="kpi-sub">Todos os módulos</span>
           </div>
         </div>
         <div class="kpi-card">
@@ -235,7 +235,7 @@
           <div class="kpi-data">
             <h3>Pendentes de Fechar</h3>
             <h2 id="val-pendentes">—</h2>
-            <span class="kpi-sub">Meses a consolidar</span>
+            <span class="kpi-sub">Todos os módulos</span>
           </div>
         </div>
         <div class="kpi-card">
@@ -244,14 +244,6 @@
             <h3>Mês de Referência</h3>
             <h2 id="val-mes-ref">—</h2>
             <span class="kpi-sub">Período em curso</span>
-          </div>
-        </div>
-        <div class="kpi-card">
-          <div class="kpi-icon icon-purple"><i class="fa-solid fa-chart-pie"></i></div>
-          <div class="kpi-data">
-            <h3>Módulos Ativos</h3>
-            <h2>1 / 6</h2>
-            <span class="kpi-sub">Receitas habilitadas</span>
           </div>
         </div>
       </section>
@@ -404,25 +396,103 @@
         </div>
       </section>
 
-      <!-- Painel de Resumo Anual (futuro) -->
+      <!-- Painel de Resumo Anual -->
       <section class="resumo-anual-card">
-        <div class="resumo-anual-header">
+        <div class="resumo-anual-header" style="display:flex; justify-content:space-between; align-items:center;">
           <h2>
             <i class="fa-solid fa-table-cells" style="color:var(--color-primary)"></i>
             Demonstrativo Anual Consolidado
           </h2>
-          <span class="modulo-badge badge-breve">Disponível após todos os módulos</span>
+          <div style="display:flex; gap:10px;">
+            <button class="btn btn-secondary" onclick="abrirProjecao()"><i class="fa-solid fa-pen-to-square"></i> Ajuste de Projeção</button>
+            <button class="btn btn-primary" onclick="loadDRE()"><i class="fa-solid fa-rotate"></i> Atualizar Fechamento</button>
+          </div>
         </div>
-        <div class="em-breve-overlay">
-          <i class="fa-solid fa-hourglass-half"></i>
-          <p>O demonstrativo completo (P&amp;L) estará disponível quando todos os módulos de fechamento forem ativados.</p>
-          <p style="font-size:12px; opacity:.6;">Receitas → Custo Direto → Custo Indireto → Despesas → EBITDA → Resultado</p>
+        
+        <div style="overflow-x:auto; margin-top:20px;">
+          <table class="data-grid dre-grid" id="dre-table">
+            <thead>
+              <tr id="dre-header">
+                <th>Rubrica</th>
+                <th style="background:#16a34a; color:#fff; text-align:right;">PROJETADO</th>
+                <th style="background:#0f172a; color:#fff; text-align:right;">ACUMULADO</th>
+                <th style="background:#0f172a; color:#fff; text-align:center;">% Realizado</th>
+              </tr>
+            </thead>
+            <tbody id="dre-body">
+              <tr><td colspan="4" style="text-align:center; padding:30px;">Clique em "Atualizar Fechamento" para carregar os dados.</td></tr>
+            </tbody>
+          </table>
         </div>
       </section>
 
     </main>
   </div>
 
-  <script src="app_fechamento.js"></script>
+  <!-- Modal de Projeção -->
+  <div class="modal-container hidden" id="modal-projecao">
+    <div class="modal-content" style="width: 700px; max-height:90vh;">
+      <div class="modal-header">
+        <h2>Ajuste de Projeção (<span id="proj-safra-label"></span>)</h2>
+        <button class="btn-close" onclick="fecharProjecao()"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body" style="overflow-y:auto; flex:1;">
+        
+        <div style="background:var(--bg-main); padding:15px; border-radius:8px; border:1px solid var(--border-color); display:flex; gap:10px; align-items:flex-end;">
+          <div class="form-group" style="flex:2; margin:0;">
+            <label>Rubrica</label>
+            <select id="proj-rubrica" class="form-control" style="width:100%; padding:8px;">
+              <optgroup label="Receitas">
+                <option value="1. Vendas a Clientes">1. Vendas a Clientes</option>
+                <option value="2. Vendas Intercompany">2. Vendas Intercompany</option>
+                <option value="3. Deduções sobre as vendas">3. Deduções sobre as vendas</option>
+              </optgroup>
+              <optgroup label="Custeio Operacional Direto">
+                <option value="1. Adubação">1. Adubação</option>
+                <option value="2. Calagem">2. Calagem</option>
+                <option value="3. Defensivos">3. Defensivos</option>
+                <option value="4. Sementes">4. Sementes</option>
+                <option value="5. CAV/CMV">5. CAV/CMV</option>
+              </optgroup>
+              <optgroup label="Despesas Operacionais Indiretas">
+                <option value="1. Custo Mão-de-Obra">1. Custo Mão-de-Obra</option>
+                <option value="2. Dia-a-dia">2. Dia-a-dia</option>
+                <option value="3. Manutenções">3. Manutenções</option>
+                <option value="4. Combustíveis">4. Combustíveis</option>
+                <option value="5. Logística Compartilhada">5. Logística Compartilhada</option>
+                <option value="6. Arrendamentos">6. Arrendamentos</option>
+                <option value="7. CAV/CMV (Pecuária)">7. CAV/CMV (Pecuária)</option>
+              </optgroup>
+              <optgroup label="Despesas Administrativas Rateadas">
+                <option value="1. Administrativo (Rateio)">1. Administrativo (Rateio)</option>
+              </optgroup>
+            </select>
+          </div>
+          <div class="form-group" style="flex:1; margin:0;">
+            <label>Valor Projetado (R$)</label>
+            <input type="number" id="proj-valor" class="form-control" value="0" style="width:100%; padding:8px;" />
+          </div>
+          <button class="btn btn-primary" onclick="salvarProjecao()" style="height:35px; padding:0 15px;"><i class="fa-solid fa-plus"></i> Salvar</button>
+        </div>
+
+        <h3 style="margin-top:20px; font-size:14px; margin-bottom:10px;">Projeções Salvas</h3>
+        <table class="data-grid" id="proj-lista-table" style="width:100%;">
+          <thead>
+            <tr>
+              <th style="text-align:left;">Rubrica</th>
+              <th style="text-align:right;">Valor</th>
+              <th style="text-align:center; width:80px;">Ações</th>
+            </tr>
+          </thead>
+          <tbody id="proj-lista-body">
+            <!-- Render via JS -->
+          </tbody>
+        </table>
+
+      </div>
+    </div>
+  </div>
+
+  <script src="app_fechamento.js?v=8"></script>
 </body>
 </html>

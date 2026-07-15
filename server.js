@@ -3255,6 +3255,60 @@ function buildFinanceiroSQL(options = {}) {
       AND SE5.E5_DTDISPO <= REPLACE(:data_ate, '-', '')
       AND ZA.ZA1_CLASSI='3'
       ${arrFilter}
+
+    UNION ALL
+
+    SELECT 
+      TRIM(SUBSTR(ZF2.ZF2_FILIAL, 3, 2)) AS EMPRESA,
+      ZF2.ZF2_FILIAL AS Filial,
+      TO_DATE(ZF2.ZF2_DTABAS, 'yyyy/mm/dd') AS DATA_PAGAMENTO,
+      ZF2.ZF2_VALTOT AS VALOR_R$,
+      TRIM(substr(ZF2.ZF2_CCUSTO,1,2)) AS C_CUSTO,
+      'Combustíveis' AS cc_grupo,
+      CASE WHEN substr(ZF2.ZF2_CCUSTO,1,2) = '05' THEN 'Rateio Geral' 
+           ELSE DECODE(substr(ZF2.ZF2_CCUSTO,1,2),'01','PECUARIA','02','SOJA','Rateio Interno') 
+      END AS Tipo_rateio,
+      TRIM(ZF2.ZF2_YDESCO) AS CC_SUBGRUPO,
+      'FROTA' AS TP_GER,
+      TRIM(ZF2.ZF2_FROTA) || ' - ' || TRIM(ST9.T9_NOME) AS TIPO_GERENCIAL,
+      ' ' AS CLAS,
+      trim(ctt_custo) as PREFIXO,
+      trim(ctt_desc01) AS NUMERO,
+      ' ' AS PARCELA,
+      ' ' AS TIPO,
+      ' ' AS NATUREZA,
+      ' ' AS CLI_FOR,
+      ' ' AS BENEF,
+      trim(zf2_obs) AS HISTORICO_BAIXA,
+      ' ' AS MOEDA,
+      SM.M2_MOEDA2 AS PTAX,
+      ' ' AS NUMCHEQ,
+      ' ' AS DOCUMEN,
+      ' ' AS TIPODOC,
+      ' ' AS FILORIG,
+      'P' AS RECPAG,
+      ' ' AS RECONC,
+      ' ' AS SEQ,
+      ZF2.R_E_C_N_O_ AS REGSE5,
+      ' ' AS BANCO,
+      ' ' AS AGENCIA,
+      ' ' AS CONTA,
+      ' ' AS AGLOM,
+      ' ' AS SAFRA,
+      SUBSTR(ZF2.ZF2_DTABAS, 1, 4) AS ANO,
+      SUBSTR(ZF2.ZF2_DTABAS, 5, 2) AS MES,
+      SUBSTR(ZF2.ZF2_DTABAS, 1, 6) AS ANO_MES
+    FROM protheus11.ZF2020 ZF2
+    LEFT JOIN protheus11.ST9020 ST9 
+      ON ST9.T9_CODBEM = ZF2.ZF2_FROTA AND ST9.D_E_L_E_T_ <> '*'
+    LEFT JOIN protheus11.SM2020 SM
+      ON SM.M2_DATA = ZF2.ZF2_DTABAS - 1 AND SM.D_E_L_E_T_ <> '*'
+    LEFT JOIN protheus11.ctt020 cc2
+      ON cc2.ctt_filial=zf2_FILIAL
+      and cc2.ctt_custo = ZF2_CCUSTO AND cc2.D_E_L_E_T_ <> '*'      
+    WHERE ZF2.D_E_L_E_T_ <> '*'
+      AND ZF2.ZF2_DTABAS >= REPLACE(:data_de, '-', '')
+      AND ZF2.ZF2_DTABAS <= REPLACE(:data_ate, '-', '')
   `;
 }
 
@@ -3485,6 +3539,117 @@ app.delete('/api/financeiro/ajuste/:id', async (req, res) => {
     res.json({ success: true, mensagem: 'Ajuste removido com sucesso.' });
   } catch (err) {
     console.error('Erro DELETE financeiro ajuste:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ==========================================
+// ROTAS PARA DRE E PROJEÇÃO
+// ==========================================
+
+// GET /api/projecao - Retorna os valores projetados de uma safra
+app.get('/api/projecao', async (req, res) => {
+  const { safra } = req.query;
+  try {
+    let sql = `SELECT PD_RUBRICA, PD_VALOR FROM PROJECAO_DRE`;
+    let binds = {};
+    if (safra) {
+      sql += ` WHERE PD_SAFRA = :safra`;
+      binds.safra = safra;
+    }
+    const results = await db.execute(sql, binds);
+    res.json({ success: true, data: results });
+  } catch (err) {
+    console.error('Erro ao buscar projeção:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/projecao/salvar - Salva a projeção de uma rubrica
+app.post('/api/projecao/salvar', async (req, res) => {
+  const { safra, rubrica, valor } = req.body;
+  if (!safra || !rubrica) {
+    return res.status(400).json({ success: false, error: 'Safra e rubrica são obrigatórios.' });
+  }
+  try {
+    await db.execute('DELETE FROM PROJECAO_DRE WHERE PD_SAFRA = :safra AND PD_RUBRICA = :rubrica', { safra, rubrica }, { autoCommit: false });
+    
+    const sqlInsert = `
+      INSERT INTO PROJECAO_DRE (PD_SAFRA, PD_RUBRICA, PD_VALOR) 
+      VALUES (:safra, :rubrica, :valor)
+    `;
+    await db.execute(sqlInsert, { safra, rubrica, valor: Number(valor || 0) }, { autoCommit: true });
+    
+    res.json({ success: true, mensagem: 'Projeção atualizada com sucesso.' });
+  } catch (err) {
+    console.error('Erro ao salvar projeção:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// DELETE /api/projecao/deletar
+app.delete('/api/projecao/deletar', async (req, res) => {
+  const { safra, rubrica } = req.body;
+  if (!safra || !rubrica) {
+    return res.status(400).json({ success: false, error: 'Safra e rubrica são obrigatórios.' });
+  }
+  try {
+    await db.execute('DELETE FROM PROJECAO_DRE WHERE PD_SAFRA = :safra AND PD_RUBRICA = :rubrica', { safra, rubrica }, { autoCommit: true });
+    res.json({ success: true, mensagem: 'Projeção removida com sucesso.' });
+  } catch (err) {
+    console.error('Erro ao excluir projeção:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /api/dre/consolidado - Retorna os dados agregados das 4 tabelas de fechamento
+app.get('/api/dre/consolidado', async (req, res) => {
+  try {
+    const sqlRec = `
+      SELECT FR_ANO, FR_MES, FR_EMPRESA, 
+             SUM(FR_RECEITA_TOTAL) AS VALOR_CLI,
+             SUM(FR_INTERCOMPANY) AS VALOR_INT,
+             SUM(COALESCE(FR_FUNRURAL,0) + COALESCE(FR_GTA,0) + COALESCE(FR_FETHAB,0) + COALESCE(FR_VLR_FACS,0)) AS VALOR_DED
+      FROM FECHAMENTO_RECEITA
+      GROUP BY FR_ANO, FR_MES, FR_EMPRESA
+    `;
+
+    const sqlIns = `
+      SELECT FI_ANO, FI_MES, FI_EMPRESA, FI_TIPO_INSUMO, SUM(FI_CUSTO_TOTAL) AS VALOR
+      FROM FECHAMENTO_INSUMOS
+      GROUP BY FI_ANO, FI_MES, FI_EMPRESA, FI_TIPO_INSUMO
+    `;
+
+    const sqlPec = `
+      SELECT FP_ANO, FP_MES, FP_EMPRESA, SUM(FP_CAV) AS VALOR
+      FROM FECHAMENTO_PECUARIA
+      GROUP BY FP_ANO, FP_MES, FP_EMPRESA
+    `;
+
+    const sqlFin = `
+      SELECT FF_ANO, FF_MES, FF_EMPRESA, FF_CC_GRUPO, FF_TIPO_RATEIO, SUM(FF_VALOR_BRL) AS VALOR
+      FROM FECHAMENTO_FINANCEIRO
+      GROUP BY FF_ANO, FF_MES, FF_EMPRESA, FF_CC_GRUPO, FF_TIPO_RATEIO
+    `;
+
+    const [rec, ins, pec, fin] = await Promise.all([
+      db.execute(sqlRec),
+      db.execute(sqlIns),
+      db.execute(sqlPec),
+      db.execute(sqlFin)
+    ]);
+    
+    res.json({
+      success: true,
+      data: {
+        receitas: rec,
+        insumos: ins,
+        pecuaria: pec,
+        financeiro: fin
+      }
+    });
+  } catch (err) {
+    console.error('Erro consolidado DRE:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
