@@ -771,6 +771,11 @@ function setupEvents() {
   // Reload/Refresh
   document.getElementById('btn-refresh').addEventListener('click', () => loadResumoAnual());
 
+  // Toggle Resumo Anual
+  document.getElementById('anual-toggle-header')?.addEventListener('click', () => {
+    document.getElementById('anual-section').classList.toggle('anual-collapsed');
+  });
+
   // Modal fechar — confirmar
   document.getElementById('btn-confirmar-fechamento').addEventListener('click', confirmarFechamento);
 
