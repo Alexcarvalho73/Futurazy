@@ -1323,17 +1323,20 @@ app.post('/api/receita/fechar-mes', async (req, res) => {
 
       for (const r of rowsNeg) {
         const tot = Number(r.TOTAL || 0);
-        if (r.TIPOFECHA === 'Intercompany') {
+        
+        if (r.PRODUTO === 'GTA') {
+          gta += Math.abs(tot);
+        } else if (r.TIPOFECHA === 'Intercompany') {
           intercompany += Math.abs(tot);
         } else {
           receita += tot;
         }
+        
         const sac = Number(r.SACAS || 0);
         const cab = Number(r.CABECAS || 0);
         sacas += sac;
         cabecas += cab;
         funrural += Number(r.VL_FUNRURAL || 0);
-        gta += 0; // GTA não vem da view de fechamento dinâmico
         fethab += Number(r.VLR_FETHAB || 0);
         vlrFacs += Number(r.VLR_FACS || 0);
         if (r.NF) nfsSet.add(r.NF);
