@@ -1281,9 +1281,12 @@ app.get('/api/receita/resumo-anual', async (req, res) => {
 // POST /api/receita/fechar-mes — grava fechamento do mês na tabela FECHAMENTO_RECEITA
 app.post('/api/receita/fechar-mes', async (req, res) => {
   try {
-    const { empresa, mes, ano } = req.body;
-    if (!empresa || !mes || !ano) {
-      return res.status(400).json({ success: false, error: 'empresa, mes e ano são obrigatórios' });
+    const { empresa, mes, ano, negocio } = req.body;
+    if (!empresa || !mes || !ano || !negocio) {
+      return res.status(400).json({ success: false, error: 'empresa, mes, ano e negocio são obrigatórios' });
+    }
+    if (empresa === 'TODAS') {
+      return res.status(400).json({ success: false, error: 'Fechamento não permitido para a filial "Todas". Selecione uma filial específica.' });
     }
 
     // Buscar dados do mês a fechar
@@ -1291,77 +1294,87 @@ app.post('/api/receita/fechar-mes', async (req, res) => {
     const sql = buildReceitaSQL();
     const rows = await db.execute(sql, { data_de: dataDe, data_ate: dataAte });
 
-    // Filtrar pela empresa solicitada (ou manter todas se for consolidado)
-    const rowsEmp = empresa === 'TODAS'
-      ? rows
-      : rows.filter(r => r.EMPRESA === empresa);
+    // Filtrar pela empresa solicitada
+    const rowsEmp = rows.filter(r => r.EMPRESA === empresa);
 
-    // Calcular o dólar médio ponderado mensal do lote fechado
-    let totalBrl = 0;
-    let totalUsd = 0;
-    for (const r of rowsEmp) {
-      totalBrl += Number(r.TOTAL || 0);
-      totalUsd += Number(r.TOTAL_USD || 0);
+    let negociosToClose = [];
+    if (negocio === 'todos') {
+      negociosToClose = [...new Set(rowsEmp.map(r => r.TIPO_NEGOCIO).filter(Boolean))];
+      if (negociosToClose.length === 0) negociosToClose = ['Outros'];
+    } else {
+      negociosToClose = [negocio];
     }
-    const dolarMedio = totalUsd > 0 ? (totalBrl / totalUsd) : null;
 
-    // Agregar totais consolidados para a empresa solicitada
-    let receita = 0, intercompany = 0, sacas = 0, cabecas = 0, funrural = 0, gta = 0, fethab = 0, vlrFacs = 0;
-    const nfsSet = new Set();
+    for (const neg of negociosToClose) {
+      const rowsNeg = rowsEmp.filter(r => (r.TIPO_NEGOCIO || 'Outros') === neg);
 
-    for (const r of rowsEmp) {
-      const tot = Number(r.TOTAL || 0);
-      if (r.TIPOFECHA === 'Intercompany') {
-        intercompany += Math.abs(tot);
-      } else {
-        receita += tot;
+      // Calcular o dólar médio ponderado mensal do lote fechado
+      let totalBrl = 0;
+      let totalUsd = 0;
+      for (const r of rowsNeg) {
+        totalBrl += Number(r.TOTAL || 0);
+        totalUsd += Number(r.TOTAL_USD || 0);
       }
-      const sac = Number(r.SACAS || 0);
-      const cab = Number(r.CABECAS || 0);
-      sacas += sac;
-      cabecas += cab;
-      funrural += Number(r.VL_FUNRURAL || 0);
-      gta += 0; // GTA não vem da view de fechamento dinâmico
-      fethab += Number(r.VLR_FETHAB || 0);
-      vlrFacs += Number(r.VLR_FACS || 0);
-      if (r.NF) nfsSet.add(r.NF);
+      const dolarMedio = totalUsd > 0 ? (totalBrl / totalUsd) : null;
+
+      // Agregar totais consolidados para a empresa e negocio solicitados
+      let receita = 0, intercompany = 0, sacas = 0, cabecas = 0, funrural = 0, gta = 0, fethab = 0, vlrFacs = 0;
+      const nfsSet = new Set();
+
+      for (const r of rowsNeg) {
+        const tot = Number(r.TOTAL || 0);
+        if (r.TIPOFECHA === 'Intercompany') {
+          intercompany += Math.abs(tot);
+        } else {
+          receita += tot;
+        }
+        const sac = Number(r.SACAS || 0);
+        const cab = Number(r.CABECAS || 0);
+        sacas += sac;
+        cabecas += cab;
+        funrural += Number(r.VL_FUNRURAL || 0);
+        gta += 0; // GTA não vem da view de fechamento dinâmico
+        fethab += Number(r.VLR_FETHAB || 0);
+        vlrFacs += Number(r.VLR_FACS || 0);
+        if (r.NF) nfsSet.add(r.NF);
+      }
+      const qtdNfs = nfsSet.size;
+
+      // MERGE INTO FECHAMENTO_RECEITA
+      const mergeSql = `
+        MERGE INTO FECHAMENTO_RECEITA fr
+        USING DUAL ON (fr.FR_EMPRESA = :empresa AND fr.FR_ANO = :ano AND fr.FR_MES = :mes AND fr.FR_NEGOCIO = :negocio AND fr.FR_RUBRICA = 'RECEITA')
+        WHEN MATCHED THEN UPDATE SET
+          fr.FR_RECEITA_TOTAL  = :receita,
+          fr.FR_INTERCOMPANY   = :intercompany,
+          fr.FR_SACAS          = :sacas,
+          fr.FR_QTD_NFS        = :qtdNfs,
+          fr.FR_FUNRURAL       = :funrural,
+          fr.FR_GTA            = :gta,
+          fr.FR_FETHAB         = :fethab,
+          fr.FR_VLR_FACS       = :vlrFacs,
+          fr.FR_DOLAR_MEDIO    = :dolarMedio,
+          fr.FR_DT_FECHAMENTO  = SYSDATE
+        WHEN NOT MATCHED THEN INSERT
+          (FR_EMPRESA, FR_ANO, FR_MES, FR_NEGOCIO, FR_RUBRICA, FR_RECEITA_TOTAL, FR_INTERCOMPANY, FR_SACAS, FR_QTD_NFS,
+           FR_FUNRURAL, FR_GTA, FR_FETHAB, FR_VLR_FACS, FR_DOLAR_MEDIO, FR_DT_FECHAMENTO)
+        VALUES
+          (:empresa, :ano, :mes, :negocio, 'RECEITA', :receita, :intercompany, :sacas, :qtdNfs,
+           :funrural, :gta, :fethab, :vlrFacs, :dolarMedio, SYSDATE)
+      `;
+
+      await db.execute(mergeSql, {
+        empresa, ano: parseInt(ano), mes: parseInt(mes), negocio: neg,
+        receita, intercompany, sacas, qtdNfs,
+        funrural, gta, fethab, vlrFacs,
+        dolarMedio
+      }, { autoCommit: true });
     }
-    const qtdNfs = nfsSet.size;
-
-    // MERGE INTO FECHAMENTO_RECEITA
-    const mergeSql = `
-      MERGE INTO FECHAMENTO_RECEITA fr
-      USING DUAL ON (fr.FR_EMPRESA = :empresa AND fr.FR_ANO = :ano AND fr.FR_MES = :mes AND fr.FR_RUBRICA = 'RECEITA')
-      WHEN MATCHED THEN UPDATE SET
-        fr.FR_RECEITA_TOTAL  = :receita,
-        fr.FR_INTERCOMPANY   = :intercompany,
-        fr.FR_SACAS          = :sacas,
-        fr.FR_QTD_NFS        = :qtdNfs,
-        fr.FR_FUNRURAL       = :funrural,
-        fr.FR_GTA            = :gta,
-        fr.FR_FETHAB         = :fethab,
-        fr.FR_VLR_FACS       = :vlrFacs,
-        fr.FR_DOLAR_MEDIO    = :dolarMedio,
-        fr.FR_DT_FECHAMENTO  = SYSDATE
-      WHEN NOT MATCHED THEN INSERT
-        (FR_EMPRESA, FR_ANO, FR_MES, FR_RUBRICA, FR_RECEITA_TOTAL, FR_INTERCOMPANY, FR_SACAS, FR_QTD_NFS,
-         FR_FUNRURAL, FR_GTA, FR_FETHAB, FR_VLR_FACS, FR_DOLAR_MEDIO, FR_DT_FECHAMENTO)
-      VALUES
-        (:empresa, :ano, :mes, 'RECEITA', :receita, :intercompany, :sacas, :qtdNfs,
-         :funrural, :gta, :fethab, :vlrFacs, :dolarMedio, SYSDATE)
-    `;
-
-    await db.execute(mergeSql, {
-      empresa, ano: parseInt(ano), mes: parseInt(mes),
-      receita, intercompany, sacas, qtdNfs,
-      funrural, gta, fethab, vlrFacs,
-      dolarMedio
-    }, { autoCommit: true });
 
     res.json({
       success: true,
       mensagem: `Mês ${mes}/${ano} fechado com sucesso para empresa ${empresa}.`,
-      dados: { empresa, ano, mes, dolarMedio }
+      dados: { empresa, ano, mes }
     });
   } catch (err) {
     console.error('[receita/fechar-mes]', err);

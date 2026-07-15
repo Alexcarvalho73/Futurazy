@@ -966,7 +966,13 @@ function renderAnualTable() {
 // Modal de Fechamento
 // ─────────────────────────────────────────────
 function abrirModalFechar(mes, ano, empresa, receita, sacas, cabecas, nfs, funrural) {
-  state.fecharPending = { mes, ano, empresa };
+  const tipoFiltro = document.getElementById('f-tipo-negocio').value;
+  if (empresa === 'TOTAL') {
+    showToast('❌ O fechamento deve ser feito selecionando uma Filial específica (não utilize "Todas").', 'error');
+    return;
+  }
+
+  state.fecharPending = { mes, ano, empresa, negocio: tipoFiltro };
   document.getElementById('modal-mes-ano').textContent  = `${NOMES_MES[mes-1]}/${ano}`;
   document.getElementById('modal-empresa').textContent  = empresa;
   document.getElementById('modal-receita').textContent  = fmtMoeda(receita);
@@ -992,7 +998,7 @@ function closeModal() {
 
 async function confirmarFechamento() {
   if (!state.fecharPending) return;
-  const { mes, ano, empresa } = state.fecharPending;
+  const { mes, ano, empresa, negocio } = state.fecharPending;
   const btnConfirm = document.getElementById('btn-confirm-fechar');
   btnConfirm.disabled = true;
   btnConfirm.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Gravando…';
@@ -1001,7 +1007,7 @@ async function confirmarFechamento() {
     const resp = await fetch('/api/receita/fechar-mes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ empresa: empresa === 'TOTAL' ? 'TODAS' : empresa, mes, ano })
+      body: JSON.stringify({ empresa: empresa === 'TOTAL' ? 'TODAS' : empresa, mes, ano, negocio })
     });
     const json = await resp.json();
     if (json.success) {
