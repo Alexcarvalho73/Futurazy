@@ -168,6 +168,7 @@ function setupEventListeners() {
       state.kpiPeriodo = btn.dataset.kpiPeriodo;
       const filtered = applyFilters(state.allData);
       updateKpis(filtered);
+      renderCube(filtered);
     });
   });
 
@@ -177,6 +178,11 @@ function setupEventListeners() {
   // Filtros
   document.getElementById('filtros-toggle-header')?.addEventListener('click', () => {
     document.getElementById('filtros-section').classList.toggle('filters-collapsed');
+  });
+
+  // Toggle Resumo Anual
+  document.getElementById('anual-toggle-header')?.addEventListener('click', () => {
+    document.getElementById('anual-section').classList.toggle('anual-collapsed');
   });
 
   document.getElementById('btn-apply-filters')?.addEventListener('click', async () => {
@@ -249,6 +255,9 @@ function setupEventListeners() {
       tab.classList.add('active');
       state.empresaFiltro = tab.dataset.emp;
       renderAnualTable();
+      const filtered = applyFilters(state.allData);
+      renderCube(filtered);
+      updateKpis(filtered);
     });
   });
 
@@ -432,11 +441,30 @@ function applyFilters(data) {
   const fazenda    = (document.getElementById('f-fazenda')?.value || '').toLowerCase().trim();
   const produto    = (document.getElementById('f-produto')?.value || '').toLowerCase().trim();
 
+  const hoje = new Date();
+  let targetMes = hoje.getMonth();
+  let targetAno = hoje.getFullYear();
+  if (state.kpiPeriodo === 'anterior') {
+    const prev = new Date(targetAno, targetMes - 1, 1);
+    targetMes = prev.getMonth();
+    targetAno = prev.getFullYear();
+  }
+
   return data.filter(r => {
     if (empresa && empresa !== 'todas' && r.EMPRESA !== empresa) return false;
     if (tipoInsumo && tipoInsumo !== 'todos' && r.GRUPO !== tipoInsumo) return false;
     if (fazenda && !(r.FAZENDA || '').toLowerCase().includes(fazenda)) return false;
     if (produto && !(r.PRODUTO || '').toLowerCase().includes(produto)) return false;
+    
+    // Filtro Rápido de Empresa (Abas)
+    if (state.empresaFiltro !== 'TOTAL' && r.EMPRESA !== state.empresaFiltro) return false;
+
+    // Filtro de Mês Corrente / Anterior
+    const d = r.DDATA instanceof Date ? r.DDATA : (r.DDATA ? new Date(r.DDATA) : null);
+    if (d) {
+      if (d.getMonth() !== targetMes || d.getFullYear() !== targetAno) return false;
+    }
+
     return true;
   });
 }
@@ -870,6 +898,11 @@ function renderAnualTable() {
 // Modal de Fechamento
 // ─────────────────────────────────────────────
 function openModalFechar(mes, ano, empresa) {
+  if (empresa === 'TOTAL' || empresa === 'TODAS') {
+    showToast('❌ O fechamento deve ser feito selecionando uma Filial específica (não utilize "Todas").', 'error');
+    return;
+  }
+
   const mesData = (state.resumoAnual?.meses || []).find(m => m.ano === ano && m.mes === mes);
   if (!mesData) return;
 

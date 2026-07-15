@@ -1,5 +1,5 @@
 ===Atualização GIT e Reinicio serviço
-git add . ; git commit -m "Ajustes Painel Financeiro" ; git push origin main ;node .\scratch\run_commit_remoto.js
+git add . ; git commit -m "Ajustes Painel Faturamento" ; git push origin main ;node .\scratch\run_commit_remoto.js
 
 ===Levantar Servidor Local
 node server.js

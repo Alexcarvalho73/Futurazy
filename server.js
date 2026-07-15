@@ -2045,6 +2045,9 @@ app.post('/api/insumos/fechar-mes', async (req, res) => {
     if (!empresa || !mes || !ano) {
       return res.status(400).json({ success: false, error: 'empresa, mes e ano são obrigatórios' });
     }
+    if (empresa === 'TODAS' || empresa === 'TOTAL') {
+      return res.status(400).json({ success: false, error: 'O fechamento deve ser feito selecionando uma Filial específica.' });
+    }
 
     const { dataDe, dataAte } = getMonthRangeIns(parseInt(ano), parseInt(mes));
     const params = loadParamsFile();
@@ -2075,15 +2078,14 @@ app.post('/api/insumos/fechar-mes', async (req, res) => {
     }
     const grandPtax = grandPtaxSumPeso > 0 ? (grandPtaxPeso / grandPtaxSumPeso) : 0;
 
-    const empresaGravar = empresa === 'TODAS' ? 'TODAS' : empresa;
+    const empresaGravar = empresa;
 
-    // Gravar um registro por tipo + um TOTAL (com FI_PTAX)
-    const tipos_gravar = [...Object.keys(totalMap).filter(t => (totalMap[t]?.brl || 0) > 0), 'TOTAL'];
+    // Gravar um registro por tipo (sem o TOTAL)
+    const tipos_gravar = Object.keys(totalMap).filter(t => (totalMap[t]?.brl || 0) > 0);
 
     for (const tipo of tipos_gravar) {
-      const brl = tipo === 'TOTAL' ? grandBrl : (totalMap[tipo]?.brl || 0);
-      const ptaxT = tipo === 'TOTAL' ? grandPtax
-        : (totalMap[tipo]?.ptaxSumPeso > 0 ? (totalMap[tipo].ptaxPeso / totalMap[tipo].ptaxSumPeso) : 0);
+      const brl = totalMap[tipo]?.brl || 0;
+      const ptaxT = totalMap[tipo]?.ptaxSumPeso > 0 ? (totalMap[tipo].ptaxPeso / totalMap[tipo].ptaxSumPeso) : 0;
 
       const mergeSql = `
         MERGE INTO FECHAMENTO_INSUMOS fi
