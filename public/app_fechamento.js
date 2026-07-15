@@ -339,6 +339,8 @@ async function salvarProjecao() {
   }
 }
 
+let dreDataCache = null;
+
 async function loadDRE() {
   const safra = new URLSearchParams(window.location.search).get('safra') || '2526';
   const tbody = document.getElementById('dre-body');
@@ -357,7 +359,8 @@ async function loadDRE() {
     const jsonD = await resD.json();
     if(!jsonD.success) return alert('Erro ao carregar DRE');
     
-    renderDRE(jsonD.data);
+    dreDataCache = jsonD.data;
+    renderDRE();
     
   } catch(e) {
     console.error(e);
@@ -365,72 +368,90 @@ async function loadDRE() {
   }
 }
 
-function renderDRE(data) {
-  const thead = document.getElementById('dre-header');
+function renderDRE(data = dreDataCache) {
+  if (!data) return;
+  const thead = document.getElementById('dre-table').querySelector('thead');
   const tbody = document.getElementById('dre-body');
   
-  // 1. Descobrir todos os meses/anos únicos
+  const chkFilial = document.getElementById('toggle-filial') && document.getElementById('toggle-filial').checked;
+  const chkNegocio = document.getElementById('toggle-negocio') && document.getElementById('toggle-negocio').checked;
+
+  const ACUM = {};
+  const ACUM_COL = {}; 
+  
   const mesesSet = new Set();
-  
-  (data.receitas || []).forEach(r => { if(r.FR_ANO && r.FR_MES) mesesSet.add(`${r.FR_ANO}-${String(r.FR_MES).padStart(2,'0')}`); });
-  (data.insumos || []).forEach(r => { if(r.FI_ANO && r.FI_MES) mesesSet.add(`${r.FI_ANO}-${String(r.FI_MES).padStart(2,'0')}`); });
-  (data.pecuaria || []).forEach(r => { if(r.FP_ANO && r.FP_MES) mesesSet.add(`${r.FP_ANO}-${String(r.FP_MES).padStart(2,'0')}`); });
-  (data.financeiro || []).forEach(r => { if(r.FF_ANO && r.FF_MES) mesesSet.add(`${r.FF_ANO}-${String(r.FF_MES).padStart(2,'0')}`); });
-  
-  const mesesArr = Array.from(mesesSet).sort(); // ex: ['2025-07', '2025-08']
+  const filiaisMap = {}; 
+  const negociosMap = {}; 
 
-  // 2. Refazer o cabeçalho
-  let thHtml = `<tr><th style="text-align:left;">Rubrica</th>`;
-  mesesArr.forEach(m => {
-    const partes = m.split('-'); // 2025, 07
-    thHtml += `<th style="text-align:right;">${partes[1]}/${partes[0]}</th>`;
-  });
-  thHtml += `<th style="text-align:right;">PROJETADO</th>`;
-  thHtml += `<th style="text-align:right;">ACUMULADO</th>`;
-  thHtml += `<th style="text-align:center;">% Realizado</th></tr>`;
-  thead.innerHTML = thHtml;
-
-  // 3. Dicionário de Acumulados (Total e por Mês)
-  const ACUM = {}; // ACUM['1. Adubação'] = total
-  const ACUM_MES = {}; // ACUM_MES['1. Adubação']['2025-07'] = valor
-
-  const sumData = (list, keyFn, valFn, anoFn, mesFn) => {
-    list.forEach(r => {
+  const sumData = (list, keyFn, valFn, anoFn, mesFn, filFn, negFn) => {
+    (list || []).forEach(r => {
       const k = keyFn(r);
       const v = valFn(r);
       const ano = anoFn(r);
       const mes = mesFn(r);
+      const filial = filFn(r) || 'ND';
+      
+      let rawNeg = (negFn(r) || 'Outros').toString().trim();
+      let upperNeg = rawNeg.toUpperCase();
+      let negocio = rawNeg;
+      if (upperNeg === 'AGRICULTURA') negocio = 'Agricultura';
+      else if (upperNeg === 'PECUARIA' || upperNeg === 'PECUÁRIA') negocio = 'Pecuária';
       
       ACUM[k] = (ACUM[k] || 0) + v;
+      if (!ACUM_COL[k]) ACUM_COL[k] = {};
+      
+      const fKey = chkFilial ? filial : 'ALL';
+      const nKey = chkNegocio ? negocio : 'ALL';
       
       if (ano && mes) {
         const mesKey = `${ano}-${String(mes).padStart(2,'0')}`;
-        if (!ACUM_MES[k]) ACUM_MES[k] = {};
-        ACUM_MES[k][mesKey] = (ACUM_MES[k][mesKey] || 0) + v;
+        mesesSet.add(mesKey);
+        
+        if (!filiaisMap[mesKey]) filiaisMap[mesKey] = new Set();
+        filiaisMap[mesKey].add(fKey);
+        
+        const fnKey = `${mesKey}|${fKey}`;
+        if (!negociosMap[fnKey]) negociosMap[fnKey] = new Set();
+        negociosMap[fnKey].add(nKey);
+        
+        const colKey = `${mesKey}|${fKey}|${nKey}`;
+        ACUM_COL[k][colKey] = (ACUM_COL[k][colKey] || 0) + v;
+        
+        const totalColKey = `${mesKey}|TOTAL|TOTAL`;
+        ACUM_COL[k][totalColKey] = (ACUM_COL[k][totalColKey] || 0) + v;
       }
+      
+      if (!filiaisMap['Acumulado']) filiaisMap['Acumulado'] = new Set();
+      filiaisMap['Acumulado'].add(fKey);
+      
+      const fnAcumKey = `Acumulado|${fKey}`;
+      if (!negociosMap[fnAcumKey]) negociosMap[fnAcumKey] = new Set();
+      negociosMap[fnAcumKey].add(nKey);
+      
+      const acumColKey = `Acumulado|${fKey}|${nKey}`;
+      ACUM_COL[k][acumColKey] = (ACUM_COL[k][acumColKey] || 0) + v;
+      
+      const acumTotalColKey = `Acumulado|TOTAL|TOTAL`;
+      ACUM_COL[k][acumTotalColKey] = (ACUM_COL[k][acumTotalColKey] || 0) + v;
     });
   };
 
-  // Receitas
-  sumData(data.receitas || [], () => '1. Vendas a Clientes', r => r.VALOR_CLI, r => r.FR_ANO, r => r.FR_MES);
-  sumData(data.receitas || [], () => '2. Vendas Intercompany', r => r.VALOR_INT, r => r.FR_ANO, r => r.FR_MES);
-  sumData(data.receitas || [], () => '3. Deduções sobre as vendas', r => r.VALOR_DED, r => r.FR_ANO, r => r.FR_MES);
+  sumData(data.receitas, () => '1. Vendas a Clientes', r => r.VALOR_CLI, r => r.FR_ANO, r => r.FR_MES, r => r.FR_EMPRESA, r => r.FR_NEGOCIO);
+  sumData(data.receitas, () => '2. Vendas Intercompany', r => r.VALOR_INT, r => r.FR_ANO, r => r.FR_MES, r => r.FR_EMPRESA, r => r.FR_NEGOCIO);
+  sumData(data.receitas, () => '3. Deduções sobre as vendas', r => r.VALOR_DED, r => r.FR_ANO, r => r.FR_MES, r => r.FR_EMPRESA, r => r.FR_NEGOCIO);
   
-  // Insumos
-  sumData(data.insumos || [], r => {
+  sumData(data.insumos, r => {
     const t = (r.FI_TIPO_INSUMO || '').toUpperCase();
     if (t.includes('FERTILIZANTE') || t.includes('ADUBA')) return '1. Adubação';
     if (t.includes('CORRETIVO') || t.includes('CALAGEM')) return '2. Calagem';
     if (t.includes('DEFENSIVO')) return '3. Defensivos';
     if (t.includes('SEMENTE')) return '4. Sementes';
     return '5. CAV/CMV';
-  }, r => r.VALOR, r => r.FI_ANO, r => r.FI_MES);
+  }, r => r.VALOR, r => r.FI_ANO, r => r.FI_MES, r => r.FI_EMPRESA, r => r.FI_NEGOCIO);
   
-  // Pecuária (CAV/CMV)
-  sumData(data.pecuaria || [], () => '5. CAV/CMV', r => r.VALOR, r => r.FP_ANO, r => r.FP_MES);
+  sumData(data.pecuaria, () => '5. CAV/CMV', r => r.VALOR, r => r.FP_ANO, r => r.FP_MES, r => r.FP_EMPRESA, r => r.FP_NEGOCIO);
 
-  // Financeiro
-  sumData(data.financeiro || [], r => {
+  sumData(data.financeiro, r => {
     if (r.FF_TIPO_RATEIO === 'Rateio Geral') return '1. Administrativo (Rateio)';
     const g = (r.FF_CC_GRUPO || '').toUpperCase();
     if (g.includes('MÃO-DE-OBRA') || g.includes('MÃO DE OBRA') || g.includes('MAO DE OBRA')) return '1. Custo Mão-de-Obra';
@@ -440,89 +461,145 @@ function renderDRE(data) {
     if (g.includes('LOGÍSTICA') || g.includes('LOGISTICA')) return '5. Logística Compartilhada';
     if (g.includes('ARRENDAMENTO')) return '6. Arrendamentos';
     return '7. Outros';
-  }, r => r.VALOR, r => r.FF_ANO, r => r.FF_MES);
+  }, r => r.VALOR, r => r.FF_ANO, r => r.FF_MES, r => r.FF_EMPRESA, r => r.FF_NEGOCIO);
 
-  const getA = (k) => ACUM[k] || 0;
   const getP = (k) => dreProjecao[k] || 0;
-  const getM = (k, mesKey) => ACUM_MES[k] ? (ACUM_MES[k][mesKey] || 0) : 0;
+  const getC = (k, colKey) => ACUM_COL[k] ? (ACUM_COL[k][colKey] || 0) : 0;
   
-  // Helpers para as linhas de totais
-  const mTotal = (keys, mesKey) => {
-    return keys.reduce((acc, k) => acc + getM(k, mesKey), 0);
+  const mTotal = (keys, colKey) => keys.reduce((acc, k) => acc + getC(k, colKey), 0);
+  const mDedTotal = (keys, colKey) => keys.reduce((acc, k) => acc - Math.abs(getC(k, colKey)), 0);
+
+  const periodos = [...Array.from(mesesSet).sort(), 'Acumulado'];
+  const finalCols = [];
+  
+  const numRows = (chkFilial && chkNegocio) ? 3 : ((chkFilial || chkNegocio) ? 2 : 1);
+  let tr1 = `<tr><th style="text-align:left; border-right:1px solid rgba(255,255,255,0.1); background:#0f172a; padding:10px 12px;" rowspan="${numRows}">Rubrica</th>`;
+  let tr2 = '<tr>';
+  let tr3 = '<tr>';
+  
+  periodos.forEach(p => {
+    const fSet = Array.from(filiaisMap[p] || []).sort();
+    let colSpanP = 0;
+    
+    fSet.forEach(f => {
+      const nSet = Array.from(negociosMap[`${p}|${f}`] || []).sort();
+      let colSpanF = nSet.length;
+      colSpanP += colSpanF;
+      
+      if (chkFilial) {
+         tr2 += `<th colspan="${colSpanF}" style="text-align:center; color:#e2e8f0; border-left:1px solid rgba(255,255,255,0.1); background:#172033; padding:6px;">${f === 'ALL' ? '' : f}</th>`;
+      }
+      
+      nSet.forEach(n => {
+         if (chkNegocio && chkFilial) {
+            tr3 += `<th style="text-align:right; color:#cbd5e1; border-left:1px solid rgba(255,255,255,0.05); background:#1e293b; padding:6px;">${n === 'ALL' ? '' : n}</th>`;
+         } else if (chkNegocio && !chkFilial) {
+            tr2 += `<th style="text-align:right; color:#cbd5e1; border-left:1px solid rgba(255,255,255,0.05); background:#172033; padding:6px;">${n === 'ALL' ? '' : n}</th>`;
+         }
+         finalCols.push(`${p}|${f}|${n}`);
+      });
+    });
+    
+    if (chkFilial || chkNegocio) {
+       colSpanP += 1;
+       finalCols.push(`${p}|TOTAL|TOTAL`);
+       if (chkFilial && chkNegocio) {
+          tr2 += `<th rowspan="2" style="text-align:center; vertical-align:middle; border-left:1px solid rgba(255,255,255,0.2); background:rgba(255,255,255,0.05); color:#fff; font-weight:bold; padding:6px;">Total</th>`;
+       } else {
+          tr2 += `<th style="text-align:center; border-left:1px solid rgba(255,255,255,0.2); background:rgba(255,255,255,0.05); color:#fff; font-weight:bold; padding:6px;">Total</th>`;
+       }
+    }
+    
+    let pLabel = p;
+    if (p !== 'Acumulado') {
+       const partes = p.split('-');
+       pLabel = `${partes[1]}/${partes[0]}`;
+    }
+    tr1 += `<th colspan="${colSpanP}" style="text-align:center; border-left:1px solid rgba(255,255,255,0.2); background:#0f172a; padding:10px 6px;">${pLabel}</th>`;
+  });
+  
+  tr1 += `<th rowspan="${numRows}" style="text-align:right; border-left:1px solid rgba(255,255,255,0.2); background:#0f172a; padding:10px 12px;">PROJETADO</th>`;
+  tr1 += `<th rowspan="${numRows}" style="text-align:center; border-left:1px solid rgba(255,255,255,0.2); background:#0f172a; padding:10px 12px;">% Realizado</th></tr>`;
+  tr2 += '</tr>';
+  tr3 += '</tr>';
+
+  let theadHtml = tr1;
+  if (chkFilial) theadHtml += tr2;
+  else if (chkNegocio) theadHtml += tr2;
+  if (chkFilial && chkNegocio) theadHtml += tr3;
+  
+  thead.innerHTML = theadHtml;
+
+  const numColspan = finalCols.length + 3;
+
+  const pct = (a, p) => p === 0 ? '-' : formatPctDRE((a/p)*100);
+
+  const buildRow = (label, k, isBold, bgColor) => {
+    let tr = `<tr style="background:${bgColor || '#1e293b'}; font-weight:${isBold?'bold':'normal'}; transition: background 0.2s;">`;
+    tr += `<td style="padding:6px 12px; border-bottom:1px solid rgba(255,255,255,0.05); border-right:1px solid rgba(255,255,255,0.1);">${label}</td>`;
+    
+    const globalAcumKey = 'Acumulado|TOTAL|TOTAL';
+    const globalAcum = getC(k, globalAcumKey);
+    
+    finalCols.forEach(colKey => {
+      const v = getC(k, colKey);
+      const isTotal = colKey.includes('|TOTAL|TOTAL');
+      const bg = isTotal ? 'background:rgba(255,255,255,0.03);' : '';
+      const weight = isTotal ? 'font-weight:bold;' : '';
+      tr += `<td style="padding:6px 12px; border-bottom:1px solid rgba(255,255,255,0.05); border-left:1px solid rgba(255,255,255,0.1); text-align:right; ${bg} ${weight}">${formatMoedaDRE(v)}</td>`;
+    });
+    
+    const p = getP(k);
+    tr += `<td style="padding:6px 12px; border-bottom:1px solid rgba(255,255,255,0.05); border-left:1px solid rgba(255,255,255,0.1); text-align:right;">${formatMoedaDRE(p)}</td>`;
+    tr += `<td style="padding:6px 12px; border-bottom:1px solid rgba(255,255,255,0.05); border-left:1px solid rgba(255,255,255,0.1); text-align:center;">${pct(globalAcum, p)}</td>`;
+    tr += `</tr>`;
+    return tr;
   };
-  const mDedTotal = (keys, mesKey) => {
-    return keys.reduce((acc, k) => acc - Math.abs(getM(k, mesKey)), 0);
+
+  const buildTot = (label, keysOrFn, calcProjFn, isDark, bgColor) => {
+    let tr = `<tr style="background:${bgColor || '#10b981'}; color:${isDark?'#fff':'#1e293b'}; font-weight:bold;">`;
+    tr += `<td style="padding:8px 12px; border-bottom:2px solid rgba(0,0,0,0.1); border-right:1px solid rgba(255,255,255,0.1); display:flex; justify-content:space-between;">
+             <span>${label}</span>
+           </td>`;
+    
+    const globalAcumKey = 'Acumulado|TOTAL|TOTAL';
+    let globalAcum = 0;
+    if (typeof keysOrFn === 'function') {
+      globalAcum = keysOrFn(globalAcumKey);
+    } else {
+      globalAcum = mTotal(keysOrFn, globalAcumKey);
+    }
+    
+    finalCols.forEach(colKey => {
+      let v = 0;
+      if (typeof keysOrFn === 'function') {
+        v = keysOrFn(colKey);
+      } else {
+        v = mTotal(keysOrFn, colKey);
+      }
+      const isTotal = colKey.includes('|TOTAL|TOTAL');
+      const bg = isTotal ? 'background:rgba(255,255,255,0.15);' : '';
+      tr += `<td style="padding:8px 12px; border-bottom:2px solid rgba(0,0,0,0.1); border-left:1px solid rgba(255,255,255,0.2); text-align:right; ${bg}">${formatMoedaDRE(v)}</td>`;
+    });
+
+    const p = calcProjFn();
+    tr += `<td style="padding:8px 12px; border-bottom:2px solid rgba(0,0,0,0.1); border-left:1px solid rgba(255,255,255,0.2); text-align:right;">${formatMoedaDRE(p)}</td>`;
+    tr += `<td style="padding:8px 12px; border-bottom:2px solid rgba(0,0,0,0.1); border-left:1px solid rgba(255,255,255,0.2); text-align:center;">${pct(globalAcum, p)}</td>`;
+    tr += `</tr>`;
+    return tr;
   };
 
   const recKeys = ['1. Vendas a Clientes', '2. Vendas Intercompany'];
   const dedKeys = ['3. Deduções sobre as vendas'];
-  
-  const recLiq = getA('1. Vendas a Clientes') + getA('2. Vendas Intercompany') - Math.abs(getA('3. Deduções sobre as vendas'));
-  const recLiqP = getP('1. Vendas a Clientes') + getP('2. Vendas Intercompany') - Math.abs(getP('3. Deduções sobre as vendas'));
-
   const cDirKeys = ['1. Adubação', '2. Calagem', '3. Defensivos', '4. Sementes', '5. CAV/CMV'];
-  const custoDir = cDirKeys.reduce((acc, k) => acc + getA(k), 0);
-  const custoDirP = cDirKeys.reduce((acc, k) => acc + getP(k), 0);
-
-  const resBruto = recLiq - custoDir;
-  const resBrutoP = recLiqP - custoDirP;
-
   const cIndKeys = ['1. Custo Mão-de-Obra', '2. Dia-a-dia', '3. Manutenções', '4. Combustíveis', '5. Logística Compartilhada', '6. Arrendamentos', '7. Outros'];
-  const custoInd = cIndKeys.reduce((acc, k) => acc + getA(k), 0);
-  const custoIndP = cIndKeys.reduce((acc, k) => acc + getP(k), 0);
 
-  const despAdm = getA('1. Administrativo (Rateio)');
-  const despAdmP = getP('1. Administrativo (Rateio)');
+  const getGlobalProj = (k) => getP(k);
+  const mTotalProj = (keys) => keys.reduce((acc, k) => acc + getGlobalProj(k), 0);
 
-  const totInd = custoInd + despAdm;
-  const totIndP = custoIndP + despAdmP;
-
-  const ebitda = resBruto - totInd;
-  const ebitdaP = resBrutoP - totIndP;
-
-  const pct = (a, p) => p === 0 ? '-' : formatPctDRE((a/p)*100);
-
-  // Quantidade de colunas extras no colspan
-  const numColspan = mesesArr.length + 4; 
-
-  const buildRow = (label, k, isBold, bgColor) => {
-    let tr = `<tr style="background:${bgColor || 'transparent'}; font-weight:${isBold?'bold':'normal'};">`;
-    tr += `<td style="padding:6px 12px; border-bottom:1px solid rgba(255,255,255,0.05);">${label}</td>`;
-    
-    mesesArr.forEach(m => {
-      tr += `<td style="padding:6px 12px; border-bottom:1px solid rgba(255,255,255,0.05); text-align:right;">${formatMoedaDRE(getM(k, m))}</td>`;
-    });
-    
-    tr += `<td style="padding:6px 12px; border-bottom:1px solid rgba(255,255,255,0.05); text-align:right;">${formatMoedaDRE(getP(k))}</td>`;
-    tr += `<td style="padding:6px 12px; border-bottom:1px solid rgba(255,255,255,0.05); text-align:right;">${formatMoedaDRE(getA(k))}</td>`;
-    tr += `<td style="padding:6px 12px; border-bottom:1px solid rgba(255,255,255,0.05); text-align:center;">${pct(getA(k), getP(k))}</td>`;
-    tr += `</tr>`;
-    return tr;
-  };
-
-  const buildTot = (label, a, p, marginA, marginP, bgColor, isDark, calcMesFn) => {
-    let tr = `<tr style="background:${bgColor || '#10b981'}; color:${isDark?'#fff':'#1e293b'}; font-weight:bold;">`;
-    tr += `<td style="padding:8px 12px; border-bottom:2px solid rgba(0,0,0,0.1); display:flex; justify-content:space-between;">
-             <span>${label}</span>
-             ${marginA !== null ? `<span style="opacity:0.8; font-size:12px;">Mg. Projetada: ${marginP}% | Mg. Realizada: ${marginA}%</span>` : ''}
-           </td>`;
-    
-    mesesArr.forEach(m => {
-      tr += `<td style="padding:8px 12px; border-bottom:2px solid rgba(0,0,0,0.1); text-align:right;">${formatMoedaDRE(calcMesFn(m))}</td>`;
-    });
-
-    tr += `<td style="padding:8px 12px; border-bottom:2px solid rgba(0,0,0,0.1); text-align:right;">${formatMoedaDRE(p)}</td>`;
-    tr += `<td style="padding:8px 12px; border-bottom:2px solid rgba(0,0,0,0.1); text-align:right;">${formatMoedaDRE(a)}</td>`;
-    tr += `<td style="padding:8px 12px; border-bottom:2px solid rgba(0,0,0,0.1); text-align:center;">${pct(a, p)}</td>`;
-    tr += `</tr>`;
-    return tr;
-  };
-
-  const mLiqA = recLiq === 0 ? 0 : ((resBruto / recLiq)*100).toFixed(0);
-  const mLiqP = recLiqP === 0 ? 0 : ((resBrutoP / recLiqP)*100).toFixed(0);
-  
-  const mEbA = recLiq === 0 ? 0 : ((ebitda / recLiq)*100).toFixed(0);
-  const mEbP = recLiqP === 0 ? 0 : ((ebitdaP / recLiqP)*100).toFixed(0);
+  const calcReceitaLiqP = () => mTotalProj(recKeys) - Math.abs(mTotalProj(dedKeys));
+  const calcResBrutoP = () => calcReceitaLiqP() - mTotalProj(cDirKeys);
+  const calcEbitdaP = () => calcResBrutoP() - (mTotalProj(cIndKeys) + getGlobalProj('1. Administrativo (Rateio)'));
 
   let html = '';
   // Receitas
@@ -530,7 +607,7 @@ function renderDRE(data) {
   html += buildRow('1. Vendas a Clientes', '1. Vendas a Clientes');
   html += buildRow('2. Vendas Intercompany', '2. Vendas Intercompany');
   html += buildRow('3. Deduções sobre as vendas', '3. Deduções sobre as vendas');
-  html += buildTot('(=) RECEITA LÍQUIDA', recLiq, recLiqP, null, null, '#22c55e', true, (m) => mTotal(recKeys, m) + mDedTotal(dedKeys, m));
+  html += buildTot('(=) RECEITA LÍQUIDA', colKey => mTotal(recKeys, colKey) + mDedTotal(dedKeys, colKey), calcReceitaLiqP, true, '#22c55e');
 
   // Custo Direto
   html += `<tr><td colspan="${numColspan}" style="background:#bbf7d0; color:#166534; font-weight:bold; padding:4px 12px;">Custeio Operacional Direto</td></tr>`;
@@ -539,8 +616,8 @@ function renderDRE(data) {
   html += buildRow('3. Defensivos', '3. Defensivos');
   html += buildRow('4. Sementes', '4. Sementes');
   html += buildRow('5. CAV/CMV', '5. CAV/CMV');
-  html += buildTot('(-) Custeio Direto', custoDir, custoDirP, null, null, '#22c55e', true, (m) => mTotal(cDirKeys, m));
-  html += buildTot('(=) RESULTADO BRUTO', resBruto, resBrutoP, mLiqA, mLiqP, '#cbd5e1', false, (m) => (mTotal(recKeys, m) + mDedTotal(dedKeys, m)) - mTotal(cDirKeys, m));
+  html += buildTot('(-) Custeio Direto', cDirKeys, () => mTotalProj(cDirKeys), true, '#22c55e');
+  html += buildTot('(=) RESULTADO BRUTO', colKey => (mTotal(recKeys, colKey) + mDedTotal(dedKeys, colKey)) - mTotal(cDirKeys, colKey), calcResBrutoP, false, '#cbd5e1');
 
   // Custo Indireto
   html += `<tr><td colspan="${numColspan}" style="background:#bbf7d0; color:#166534; font-weight:bold; padding:4px 12px;">Despesas Operacionais Indiretas</td></tr>`;
@@ -555,15 +632,15 @@ function renderDRE(data) {
   // Despesas Administrativas Rateadas
   html += `<tr><td colspan="${numColspan}" style="background:#bbf7d0; color:#166534; font-weight:bold; padding:4px 12px;">Despesas Administrativas Rateadas</td></tr>`;
   html += buildRow('1. Administrativo (Rateio)', '1. Administrativo (Rateio)');
-  html += buildTot('TOTAL DAS DESPESAS INDIRETAS E DE RATEIO', totInd, totIndP, null, null, 'rgba(255,255,255,0.1)', true, (m) => mTotal(cIndKeys, m) + getM('1. Administrativo (Rateio)', m));
+  html += buildTot('TOTAL DAS DESPESAS INDIRETAS E DE RATEIO', colKey => mTotal(cIndKeys, colKey) + getC('1. Administrativo (Rateio)', colKey), () => mTotalProj(cIndKeys) + getGlobalProj('1. Administrativo (Rateio)'), true, 'rgba(255,255,255,0.1)');
 
   // EBITDA
-  html += buildTot('(=) EBITDA (R$)', ebitda, ebitdaP, mEbA, mEbP, '#10b981', true, (m) => {
-    const rL = (mTotal(recKeys, m) + mDedTotal(dedKeys, m));
-    const rB = rL - mTotal(cDirKeys, m);
-    const totI = mTotal(cIndKeys, m) + getM('1. Administrativo (Rateio)', m);
+  html += buildTot('(=) EBITDA (R$)', colKey => {
+    const rL = mTotal(recKeys, colKey) + mDedTotal(dedKeys, colKey);
+    const rB = rL - mTotal(cDirKeys, colKey);
+    const totI = mTotal(cIndKeys, colKey) + getC('1. Administrativo (Rateio)', colKey);
     return rB - totI;
-  });
+  }, calcEbitdaP, true, '#10b981');
 
   tbody.innerHTML = html;
 }

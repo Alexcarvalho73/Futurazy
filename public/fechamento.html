@@ -403,7 +403,13 @@
             <i class="fa-solid fa-table-cells" style="color:var(--color-primary)"></i>
             Demonstrativo Anual Consolidado
           </h2>
-          <div style="display:flex; gap:10px;">
+          <div style="display:flex; gap:15px; align-items:center;">
+            <label style="display:flex; align-items:center; gap:5px; cursor:pointer; font-size:14px;">
+              <input type="checkbox" id="toggle-filial" onchange="renderDRE()"> Separa Filial
+            </label>
+            <label style="display:flex; align-items:center; gap:5px; cursor:pointer; font-size:14px;">
+              <input type="checkbox" id="toggle-negocio" onchange="renderDRE()"> Separa Negócio
+            </label>
             <button class="btn btn-secondary" onclick="abrirProjecao()"><i class="fa-solid fa-pen-to-square"></i> Ajuste de Projeção</button>
             <button class="btn btn-primary" onclick="loadDRE()"><i class="fa-solid fa-rotate"></i> Atualizar Fechamento</button>
           </div>
@@ -493,6 +499,6 @@
     </div>
   </div>
 
-  <script src="app_fechamento.js?v=8"></script>
+  <script src="app_fechamento.js?v=14"></script>
 </body>
 </html>
