@@ -1235,3 +1235,19 @@ h1, h2, h3, h4, h5, h6 {
   color: var(--border-color);
 }
 
+/* Colapso Resumo Anual */
+.anual-header .toggle-icon {
+  transition: transform var(--transition-fast);
+}
+.anual-collapsed .anual-header {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+.anual-collapsed .anual-header .toggle-icon {
+  transform: rotate(-90deg);
+}
+.anual-collapsed .anual-table-wrap,
+.anual-collapsed .loading-overlay {
+  display: none !important;
+}

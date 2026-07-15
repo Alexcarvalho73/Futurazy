@@ -111,6 +111,7 @@ function setupEventListeners() {
       state.kpiPeriodo = btn.dataset.kpiPeriodo;
       const filtered = applyFilters(state.allData);
       updateKpis(filtered);
+      renderCube(filtered);
     });
   });
 
@@ -120,6 +121,11 @@ function setupEventListeners() {
   // Filtros
   document.getElementById('filtros-toggle-header')?.addEventListener('click', () => {
     document.getElementById('filtros-section').classList.toggle('filters-collapsed');
+  });
+
+  // Toggle Resumo Anual
+  document.getElementById('anual-toggle-header')?.addEventListener('click', () => {
+    document.getElementById('anual-section').classList.toggle('anual-collapsed');
   });
   document.getElementById('btn-apply-filters')?.addEventListener('click', async () => {
     const filtered = applyFilters(state.allData);
@@ -191,6 +197,9 @@ function setupEventListeners() {
       tab.classList.add('active');
       state.empresaFiltro = tab.dataset.emp;
       renderAnualTable();
+      const filtered = applyFilters(state.allData);
+      renderCube(filtered);
+      updateKpis(filtered);
     });
   });
 
@@ -291,11 +300,30 @@ function applyFilters(data) {
   const cfop    = document.getElementById('f-cfop').value.trim().toUpperCase();
   const produto = document.getElementById('f-produto').value.trim().toUpperCase();
 
+  const hoje = new Date();
+  let targetMes = hoje.getMonth();
+  let targetAno = hoje.getFullYear();
+  if (state.kpiPeriodo === 'anterior') {
+    const prev = new Date(targetAno, targetMes - 1, 1);
+    targetMes = prev.getMonth();
+    targetAno = prev.getFullYear();
+  }
+
   return data.filter(r => {
     if (tipo    !== 'todos'  && r.TIPO_NEGOCIO !== tipo)                 return false;
     if (empresa !== 'todas'  && r.EMPRESA !== empresa)                   return false;
     if (cfop    && !(r.CFOP    || '').toUpperCase().includes(cfop))      return false;
     if (produto && !(r.PRODUTO || '').toUpperCase().includes(produto))   return false;
+    
+    // Filtro Rápido de Empresa (Abas)
+    if (state.empresaFiltro !== 'TOTAL' && r.EMPRESA !== state.empresaFiltro) return false;
+
+    // Filtro de Mês Corrente / Anterior
+    if (r.EMISSAO) {
+      const d = new Date(r.EMISSAO);
+      if (d.getMonth() !== targetMes || d.getFullYear() !== targetAno) return false;
+    }
+
     return true;
   });
 }
@@ -586,6 +614,7 @@ function updateTotals(sums) {
 
   document.getElementById('tot-quant').textContent    = fmtN(sums.quant);
   document.getElementById('tot-total').textContent    = fmtMoeda(sums.total);
+  document.getElementById('tot-intercompany').textContent = fmtMoeda(sums.intercompany);
   document.getElementById('tot-dolar').textContent    = dolarText;
   document.getElementById('tot-sacas').textContent    = qCell;
   document.getElementById('tot-facs').textContent     = fmtMoeda(sums.facs);
