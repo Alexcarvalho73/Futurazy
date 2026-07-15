@@ -1323,7 +1323,7 @@ app.post('/api/receita/fechar-mes', async (req, res) => {
 
       for (const r of rowsNeg) {
         const tot = Number(r.TOTAL || 0);
-        
+
         if (r.PRODUTO === 'GTA') {
           gta += Math.abs(tot);
         } else if (r.TIPOFECHA === 'Intercompany') {
@@ -1331,7 +1331,7 @@ app.post('/api/receita/fechar-mes', async (req, res) => {
         } else {
           receita += tot;
         }
-        
+
         const sac = Number(r.SACAS || 0);
         const cab = Number(r.CABECAS || 0);
         sacas += sac;
@@ -1625,7 +1625,7 @@ function buildInsumosSQL(opts = {}) {
 
   return `
     SELECT DISTINCT
-      TRIM(e.cd_empresa)            AS EMPRESA_COD,
+      TRIM(z0.zo0_codfil)           AS EMPRESA_COD,
       ua.regiao                     AS REGIAO,
       u1.de_upnivel1                AS FAZENDA,
       u3.cd_upnivel3                AS TALHAO,
@@ -3273,7 +3273,7 @@ app.get('/api/financeiro/dados', async (req, res) => {
     const dateAteStr = data_ate.replace(/-/g, ''); // '20260731'
     const year = parseInt(dateAteStr.substring(0, 4), 10);
     const month = parseInt(dateAteStr.substring(4, 6), 10);
-    
+
     let startMonth = month - 11;
     let startYear = year;
     if (startMonth <= 0) {
@@ -3294,7 +3294,7 @@ app.get('/api/financeiro/dados', async (req, res) => {
     const m1_m = parseInt(d1.substring(4, 6), 10);
     const m2_y = parseInt(dateAteStr.substring(0, 4), 10);
     const m2_m = parseInt(dateAteStr.substring(4, 6), 10);
-    
+
     const queryMonths = [];
     let curY = m1_y, curM = m1_m;
     while (curY < m2_y || (curY === m2_y && curM <= m2_m)) {

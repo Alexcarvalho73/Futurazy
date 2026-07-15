@@ -1,29 +1,22 @@
 const db = require('../db.js');
 
-async function executeAlter() {
+async function test() {
   try {
     await db.initialize();
     
-    const alterQuery = `
-      ALTER TABLE FECHAMENTO_RECEITA 
-      DROP (
-        FR_AGRO_RECEITA, 
-        FR_AGRO_SACAS, 
-        FR_PEC_RECEITA, 
-        FR_PEC_SACAS, 
-        FR_OUTROS_RECEITA, 
-        FR_OUTROS_SACAS
-      )
+    const sql = `
+      SELECT DISTINCT
+        z0.zo0_codfil
+      FROM protheus11.zo0020 z0
+      WHERE z0.zo0_anoagr = '20251'
     `;
-    console.log("Executando:", alterQuery);
-    await db.execute(alterQuery, {}, { autoCommit: true });
-    console.log("Colunas removidas com sucesso.");
+    const res = await db.execute(sql, {});
+    console.log("Valores de zo0_codfil:", res);
     
-  } catch (e) {
-    console.error("Erro no drop:", e);
-  } finally {
     await db.close();
+  } catch (err) {
+    console.error(err);
   }
 }
 
-executeAlter();
+test();
