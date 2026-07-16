@@ -25,7 +25,7 @@
         <h2>Futurazy<span>BI</span></h2>
       </div>
       <nav class="nav-menu">
-        <a href="index.html" class="active"><i class="fa-solid fa-house"></i> Dashboard</a>
+        <a href="index.html" class="active"><i class="fa-solid fa-house"></i> Análise Trato</a>
         <a href="notas.html"><i class="fa-solid fa-file-invoice-dollar"></i> Central XML</a>
         <a href="fechamento.html"><i class="fa-solid fa-file-chart-column"></i> Fechamento</a>
         <a href="#" class="nav-disabled"><i class="fa-solid fa-database"></i> Conexões</a>
@@ -100,12 +100,23 @@
           <button class="btn btn-secondary btn-sm" id="btn-clear-filters">Limpar Filtros</button>
         </div>
         <div class="filters-grid">
+          <!-- Filtro de Filial -->
+          <div class="filter-group">
+            <label for="filter-filial"><i class="fa-solid fa-building"></i> Filial</label>
+            <select id="filter-filial" class="form-control">
+              <option value="">Todas as Filiais</option>
+            </select>
+          </div>
           <!-- Filtro de Data -->
           <div class="filter-group">
             <label for="filter-date"><i class="fa-regular fa-calendar"></i> Data do Trato</label>
             <select id="filter-date" class="form-control">
               <option value="">Todas as Datas</option>
             </select>
+            <div id="day-range-container" style="display: none; margin-top: 8px; gap: 8px; align-items: center;">
+              <input type="number" id="filter-day-start" placeholder="Dia Inicial" class="form-control" style="width: 50%;" min="1" max="31">
+              <input type="number" id="filter-day-end" placeholder="Dia Final" class="form-control" style="width: 50%;" min="1" max="31">
+            </div>
           </div>
           <!-- Filtro de Entidade (Noment) -->
           <div class="filter-group">

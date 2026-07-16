@@ -4,6 +4,8 @@
 
 const NOMES_MES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 
+let tipoCalendario = 'safra';
+
 function getSafraYear(hoje = new Date()) {
   const mes = hoje.getMonth() + 1;
   return mes >= 9 ? hoje.getFullYear() + 1 : hoje.getFullYear();
@@ -20,14 +22,38 @@ function getMesesSafra(anoSafra) {
   ];
 }
 
+function getMesesAtuais() {
+  const hoje = new Date();
+  if (tipoCalendario === 'safra') {
+    return getMesesSafra(getSafraYear(hoje));
+  } else {
+    return Array.from({ length: 12 }, (_, i) => ({ ano: hoje.getFullYear(), mes: i + 1 }));
+  }
+}
+
+function getPeriodoProjecao() {
+  const hoje = new Date();
+  if (tipoCalendario === 'safra') {
+    return String(getSafraYear(hoje));
+  } else {
+    return String(hoje.getFullYear());
+  }
+}
+
 async function init() {
   const hoje     = new Date();
   const anoSafra = getSafraYear(hoje);
-  const meses    = getMesesSafra(anoSafra);
+  const meses    = getMesesAtuais();
 
   // Badge safra
-  document.getElementById('txt-safra').textContent =
-    `${anoSafra - 1}/${String(anoSafra).slice(2)}`;
+  const txtSafra = document.getElementById('txt-safra');
+  if (txtSafra) {
+    if (tipoCalendario === 'safra') {
+      txtSafra.textContent = `${anoSafra - 1}/${String(anoSafra).slice(2)}`;
+    } else {
+      txtSafra.textContent = `${hoje.getFullYear()}`;
+    }
+  }
 
   // Mês de referência
   document.getElementById('val-mes-ref').textContent =
@@ -225,7 +251,7 @@ function formatPctDRE(val) {
 }
 
 async function loadProjecaoLista() {
-  const safra = new URLSearchParams(window.location.search).get('safra') || '2526';
+  const safra = getPeriodoProjecao();
   try {
     const res = await fetch('/api/projecao?safra=' + safra);
     const json = await res.json();
@@ -270,7 +296,7 @@ function editarProjecao(rubrica) {
 
 async function excluirProjecao(rubrica) {
   if (!confirm(`Tem certeza que deseja excluir a projeção para ${rubrica}?`)) return;
-  const safra = new URLSearchParams(window.location.search).get('safra') || '2526';
+  const safra = getPeriodoProjecao();
   try {
     const res = await fetch('/api/projecao/deletar', {
       method: 'DELETE',
@@ -294,7 +320,7 @@ async function abrirProjecao() {
   const labelSafra = document.getElementById('proj-safra-label');
   if(labelSafra) {
     const txtSafra = document.getElementById('txt-safra');
-    labelSafra.textContent = txtSafra ? txtSafra.textContent : (new URLSearchParams(window.location.search).get('safra') || '2526');
+    labelSafra.textContent = txtSafra ? txtSafra.textContent : getPeriodoProjecao();
   }
   
   document.getElementById('modal-projecao').classList.remove('hidden');
@@ -316,7 +342,7 @@ document.getElementById('proj-rubrica')?.addEventListener('change', (e) => {
 });
 
 async function salvarProjecao() {
-  const safra = new URLSearchParams(window.location.search).get('safra') || '2526';
+  const safra = getPeriodoProjecao();
   const rubrica = document.getElementById('proj-rubrica').value;
   const valor = document.getElementById('proj-valor').value;
   try {
@@ -342,7 +368,7 @@ async function salvarProjecao() {
 let dreDataCache = null;
 
 async function loadDRE() {
-  const safra = new URLSearchParams(window.location.search).get('safra') || '2526';
+  const safra = getPeriodoProjecao();
   const tbody = document.getElementById('dre-body');
   if(!tbody) return;
   tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:30px;">Carregando DRE...</td></tr>';
@@ -382,13 +408,18 @@ function renderDRE(data = dreDataCache) {
   const mesesSet = new Set();
   const filiaisMap = {}; 
   const negociosMap = {}; 
+  const mesesAtuais = getMesesAtuais();
 
   const sumData = (list, keyFn, valFn, anoFn, mesFn, filFn, negFn) => {
     (list || []).forEach(r => {
-      const k = keyFn(r);
-      const v = valFn(r);
       const ano = anoFn(r);
       const mes = mesFn(r);
+      
+      const isInPeriod = mesesAtuais.some(m => m.ano === ano && m.mes === mes);
+      if (!isInPeriod) return;
+
+      const k = keyFn(r);
+      const v = valFn(r);
       const filial = filFn(r) || 'ND';
       
       let rawNeg = (negFn(r) || 'Outros').toString().trim();
@@ -487,14 +518,17 @@ function renderDRE(data = dreDataCache) {
       colSpanP += colSpanF;
       
       if (chkFilial) {
-         tr2 += `<th colspan="${colSpanF}" style="text-align:center; color:#e2e8f0; border-left:1px solid rgba(255,255,255,0.1); background:#172033; padding:6px;">${f === 'ALL' ? '' : f}</th>`;
+         const bgF = p === 'Acumulado' ? 'rgba(56,189,248,0.15)' : '#172033';
+         tr2 += `<th colspan="${colSpanF}" style="text-align:center; color:#e2e8f0; border-left:1px solid rgba(255,255,255,0.1); background:${bgF}; padding:6px;">${f === 'ALL' ? '' : f}</th>`;
       }
       
       nSet.forEach(n => {
          if (chkNegocio && chkFilial) {
-            tr3 += `<th style="text-align:right; color:#cbd5e1; border-left:1px solid rgba(255,255,255,0.05); background:#1e293b; padding:6px;">${n === 'ALL' ? '' : n}</th>`;
+            const bgN1 = p === 'Acumulado' ? 'rgba(56,189,248,0.1)' : '#1e293b';
+            tr3 += `<th style="text-align:right; color:#cbd5e1; border-left:1px solid rgba(255,255,255,0.05); background:${bgN1}; padding:6px;">${n === 'ALL' ? '' : n}</th>`;
          } else if (chkNegocio && !chkFilial) {
-            tr2 += `<th style="text-align:right; color:#cbd5e1; border-left:1px solid rgba(255,255,255,0.05); background:#172033; padding:6px;">${n === 'ALL' ? '' : n}</th>`;
+            const bgN2 = p === 'Acumulado' ? 'rgba(56,189,248,0.15)' : '#172033';
+            tr2 += `<th style="text-align:right; color:#cbd5e1; border-left:1px solid rgba(255,255,255,0.05); background:${bgN2}; padding:6px;">${n === 'ALL' ? '' : n}</th>`;
          }
          finalCols.push(`${p}|${f}|${n}`);
       });
@@ -504,22 +538,29 @@ function renderDRE(data = dreDataCache) {
        colSpanP += 1;
        finalCols.push(`${p}|TOTAL|TOTAL`);
        if (chkFilial && chkNegocio) {
-          tr2 += `<th rowspan="2" style="text-align:center; vertical-align:middle; border-left:1px solid rgba(255,255,255,0.2); background:rgba(255,255,255,0.05); color:#fff; font-weight:bold; padding:6px;">Total</th>`;
+          const bgT1 = p === 'Acumulado' ? 'rgba(56,189,248,0.2)' : 'rgba(255,255,255,0.05)';
+          tr2 += `<th rowspan="2" style="text-align:center; vertical-align:middle; border-left:1px solid rgba(255,255,255,0.2); background:${bgT1}; color:#fff; font-weight:bold; padding:6px;">Total</th>`;
        } else {
-          tr2 += `<th style="text-align:center; border-left:1px solid rgba(255,255,255,0.2); background:rgba(255,255,255,0.05); color:#fff; font-weight:bold; padding:6px;">Total</th>`;
+          const bgT2 = p === 'Acumulado' ? 'rgba(56,189,248,0.2)' : 'rgba(255,255,255,0.05)';
+          tr2 += `<th style="text-align:center; border-left:1px solid rgba(255,255,255,0.2); background:${bgT2}; color:#fff; font-weight:bold; padding:6px;">Total</th>`;
        }
     }
     
     let pLabel = p;
-    if (p !== 'Acumulado') {
+    let colorStyle = '';
+    let bgStyle = 'background:#0f172a;';
+    if (p === 'Acumulado') {
+       colorStyle = 'color:#38bdf8;'; // Restaura cor da fonte original
+       bgStyle = 'background:rgba(56,189,248,0.15);'; // Preenchimento mais azul
+    } else {
        const partes = p.split('-');
        pLabel = `${partes[1]}/${partes[0]}`;
     }
-    tr1 += `<th colspan="${colSpanP}" style="text-align:center; border-left:1px solid rgba(255,255,255,0.2); background:#0f172a; padding:10px 6px;">${pLabel}</th>`;
+    tr1 += `<th colspan="${colSpanP}" style="text-align:center; border-left:1px solid rgba(255,255,255,0.2); ${bgStyle} ${colorStyle} padding:10px 6px;">${pLabel}</th>`;
   });
   
-  tr1 += `<th rowspan="${numRows}" style="text-align:right; border-left:1px solid rgba(255,255,255,0.2); background:#0f172a; padding:10px 12px;">PROJETADO</th>`;
-  tr1 += `<th rowspan="${numRows}" style="text-align:center; border-left:1px solid rgba(255,255,255,0.2); background:#0f172a; padding:10px 12px;">% Realizado</th></tr>`;
+  tr1 += `<th rowspan="${numRows}" style="text-align:right; border-left:1px solid rgba(255,255,255,0.2); background:#0f172a; color:#fb923c; padding:10px 12px;">PROJETADO</th>`;
+  tr1 += `<th rowspan="${numRows}" style="text-align:center; border-left:1px solid rgba(255,255,255,0.2); background:#0f172a; color:#4ade80; padding:10px 12px;">% Realizado</th></tr>`;
   tr2 += '</tr>';
   tr3 += '</tr>';
 
@@ -544,7 +585,10 @@ function renderDRE(data = dreDataCache) {
     finalCols.forEach(colKey => {
       const v = getC(k, colKey);
       const isTotal = colKey.includes('|TOTAL|TOTAL');
-      const bg = isTotal ? 'background:rgba(255,255,255,0.03);' : '';
+      const isAcumulado = colKey.startsWith('Acumulado|');
+      let bg = '';
+      if (isAcumulado) bg = isTotal ? 'background:rgba(56,189,248,0.2);' : 'background:rgba(56,189,248,0.12);';
+      else bg = isTotal ? 'background:rgba(255,255,255,0.03);' : '';
       const weight = isTotal ? 'font-weight:bold;' : '';
       tr += `<td style="padding:6px 12px; border-bottom:1px solid rgba(255,255,255,0.05); border-left:1px solid rgba(255,255,255,0.1); text-align:right; ${bg} ${weight}">${formatMoedaDRE(v)}</td>`;
     });
@@ -556,7 +600,7 @@ function renderDRE(data = dreDataCache) {
     return tr;
   };
 
-  const buildTot = (label, keysOrFn, calcProjFn, isDark, bgColor) => {
+  const buildTot = (label, keysOrFn, calcProjFn, isDark, bgColor, formatter = formatMoedaDRE) => {
     let tr = `<tr style="background:${bgColor || '#10b981'}; color:${isDark?'#fff':'#1e293b'}; font-weight:bold;">`;
     tr += `<td style="padding:8px 12px; border-bottom:2px solid rgba(0,0,0,0.1); border-right:1px solid rgba(255,255,255,0.1); display:flex; justify-content:space-between;">
              <span>${label}</span>
@@ -578,12 +622,15 @@ function renderDRE(data = dreDataCache) {
         v = mTotal(keysOrFn, colKey);
       }
       const isTotal = colKey.includes('|TOTAL|TOTAL');
-      const bg = isTotal ? 'background:rgba(255,255,255,0.15);' : '';
-      tr += `<td style="padding:8px 12px; border-bottom:2px solid rgba(0,0,0,0.1); border-left:1px solid rgba(255,255,255,0.2); text-align:right; ${bg}">${formatMoedaDRE(v)}</td>`;
+      const isAcumulado = colKey.startsWith('Acumulado|');
+      let bg = '';
+      if (isAcumulado) bg = isTotal ? 'background:rgba(56,189,248,0.3);' : 'background:rgba(56,189,248,0.2);';
+      else bg = isTotal ? 'background:rgba(255,255,255,0.15);' : '';
+      tr += `<td style="padding:8px 12px; border-bottom:2px solid rgba(0,0,0,0.1); border-left:1px solid rgba(255,255,255,0.2); text-align:right; ${bg}">${formatter(v)}</td>`;
     });
 
     const p = calcProjFn();
-    tr += `<td style="padding:8px 12px; border-bottom:2px solid rgba(0,0,0,0.1); border-left:1px solid rgba(255,255,255,0.2); text-align:right;">${formatMoedaDRE(p)}</td>`;
+    tr += `<td style="padding:8px 12px; border-bottom:2px solid rgba(0,0,0,0.1); border-left:1px solid rgba(255,255,255,0.2); text-align:right;">${formatter(p)}</td>`;
     tr += `<td style="padding:8px 12px; border-bottom:2px solid rgba(0,0,0,0.1); border-left:1px solid rgba(255,255,255,0.2); text-align:center;">${pct(globalAcum, p)}</td>`;
     tr += `</tr>`;
     return tr;
@@ -642,7 +689,42 @@ function renderDRE(data = dreDataCache) {
     return rB - totI;
   }, calcEbitdaP, true, '#10b981');
 
+  // EBITDA %
+  html += buildTot('EBITDA %', colKey => {
+    const rL = mTotal(recKeys, colKey) + mDedTotal(dedKeys, colKey);
+    if (rL === 0) return 0;
+    const rB = rL - mTotal(cDirKeys, colKey);
+    const totI = mTotal(cIndKeys, colKey) + getC('1. Administrativo (Rateio)', colKey);
+    const ebitda = rB - totI;
+    return (ebitda / rL) * 100;
+  }, () => {
+    const rL = calcReceitaLiqP();
+    if (rL === 0) return 0;
+    return (calcEbitdaP() / rL) * 100;
+  }, true, '#10b981', formatPctDRE);
+
   tbody.innerHTML = html;
 }
 
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener('DOMContentLoaded', () => {
+  init();
+  
+  const badgeSafra = document.getElementById('badge-safra');
+  if (badgeSafra) {
+    badgeSafra.style.cursor = 'pointer';
+    badgeSafra.addEventListener('click', () => {
+      tipoCalendario = tipoCalendario === 'safra' ? 'calendario' : 'safra';
+      
+      const icon = badgeSafra.querySelector('i');
+      if (icon) {
+        if (tipoCalendario === 'safra') icon.className = 'fa-solid fa-seedling';
+        else icon.className = 'fa-regular fa-calendar';
+      }
+      
+      init();
+      if (dreDataCache) {
+        loadDRE();
+      }
+    });
+  }
+});

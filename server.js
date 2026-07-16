@@ -29,6 +29,7 @@ app.use(express.json());
 app.get('/api/tratos', async (req, res) => {
   const sql = `
     SELECT 
+      TRIM(NJH_FILIAL) as NJH_FILIAL,
       TRIM(NJH_DESPRO) as NJH_DESPRO,
       TRIM(NJH_NOMENT) as NJH_NOMENT,
       NJH_DATA,
@@ -37,8 +38,7 @@ app.get('/api/tratos', async (req, res) => {
       NJH_HORPS2,
       NJH_PSSUBT
     FROM protheus11.njh020
-    WHERE NJH_FILIAL = '028501'
-      AND NJH_STATUS = '3'
+    WHERE NJH_STATUS = '3'
       AND d_e_l_e_t_ = ' '
     ORDER BY NJH_DATA DESC, NJH_HORPS1 DESC
   `;

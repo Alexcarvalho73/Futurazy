@@ -16,7 +16,11 @@ const valPlacasUnicas = document.getElementById('val-placas-unicas');
 const valMediaPeso = document.getElementById('val-media-peso');
 
 // Filtros
+const filterFilial = document.getElementById('filter-filial');
 const filterDate = document.getElementById('filter-date');
+const dayRangeContainer = document.getElementById('day-range-container');
+const filterDayStart = document.getElementById('filter-day-start');
+const filterDayEnd = document.getElementById('filter-day-end');
 const filterNoment = document.getElementById('filter-noment');
 const filterProduct = document.getElementById('filter-product');
 
@@ -93,17 +97,29 @@ async function loadData() {
 // ==========================================================================
 
 function populateFilterOptions() {
+  const filiais = new Set();
   const months = new Set();
   const noments = new Set();
   const products = new Set();
 
   allData.forEach(row => {
+    if (row.NJH_FILIAL) filiais.add(row.NJH_FILIAL);
     if (row.NJH_DATA && row.NJH_DATA.length === 8) {
       const month = row.NJH_DATA.substring(4, 6) + '/' + row.NJH_DATA.substring(0, 4);
       months.add(month);
     }
     if (row.NJH_NOMENT) noments.add(row.NJH_NOMENT);
     if (row.NJH_DESPRO) products.add(row.NJH_DESPRO);
+  });
+
+  // 0. Popular Filiais
+  const sortedFiliais = Array.from(filiais).sort((a, b) => a.localeCompare(b));
+  filterFilial.innerHTML = '<option value="">Todas as Filiais</option>';
+  sortedFiliais.forEach(f => {
+    const opt = document.createElement('option');
+    opt.value = f;
+    opt.textContent = f;
+    filterFilial.appendChild(opt);
   });
 
   // 1. Popular Meses
@@ -143,15 +159,25 @@ function populateFilterOptions() {
 }
 
 function applyFilters() {
+  const selectedFilial = filterFilial.value;
   const selectedMonth = filterDate.value;
   const selectedNoment = filterNoment.value;
   const selectedProduct = filterProduct.value;
+  const dayStart = parseInt(filterDayStart.value, 10);
+  const dayEnd = parseInt(filterDayEnd.value, 10);
 
   filteredData = allData.filter(row => {
-    // Filtro Mês/Ano
+    // Filtro Filial
+    if (selectedFilial && row.NJH_FILIAL !== selectedFilial) return false;
+
+    // Filtro Mês/Ano e Dias
     if (selectedMonth) {
       const rowMonth = row.NJH_DATA.substring(4, 6) + '/' + row.NJH_DATA.substring(0, 4);
       if (rowMonth !== selectedMonth) return false;
+      
+      const rowDay = parseInt(row.NJH_DATA.substring(6, 8), 10);
+      if (!isNaN(dayStart) && rowDay < dayStart) return false;
+      if (!isNaN(dayEnd) && rowDay > dayEnd) return false;
     }
     // Filtro Entidade
     if (selectedNoment && row.NJH_NOMENT !== selectedNoment) return false;
@@ -165,7 +191,11 @@ function applyFilters() {
 }
 
 function clearFilters() {
+  filterFilial.value = '';
   filterDate.value = '';
+  filterDayStart.value = '';
+  filterDayEnd.value = '';
+  dayRangeContainer.style.display = 'none';
   filterNoment.value = '';
   filterProduct.value = '';
   filteredData = [...allData];
@@ -448,7 +478,19 @@ function collapseAll() {
 // REGISTRO DE EVENTOS
 // ==========================================================================
 
-filterDate.addEventListener('change', applyFilters);
+filterFilial.addEventListener('change', applyFilters);
+filterDate.addEventListener('change', () => {
+  if (filterDate.value) {
+    dayRangeContainer.style.display = 'flex';
+  } else {
+    dayRangeContainer.style.display = 'none';
+    filterDayStart.value = '';
+    filterDayEnd.value = '';
+  }
+  applyFilters();
+});
+filterDayStart.addEventListener('input', applyFilters);
+filterDayEnd.addEventListener('input', applyFilters);
 filterNoment.addEventListener('change', applyFilters);
 filterProduct.addEventListener('change', applyFilters);
 
