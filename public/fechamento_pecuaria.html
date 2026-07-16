@@ -188,17 +188,8 @@
         <i class="fa-solid fa-chart-line logo-icon"></i>
         <h2>Futurazy<span>BI</span></h2>
       </div>
-      <nav class="nav-menu">
-        <a href="index.html"><i class="fa-solid fa-house"></i> Dashboard</a>
-        <a href="notas.html"><i class="fa-solid fa-file-invoice-dollar"></i> Central XML</a>
-        <a href="fechamento.html" class="active"><i class="fa-solid fa-file-chart-column"></i> Fechamento</a>
-        <a href="#" class="nav-disabled"><i class="fa-solid fa-database"></i> Conexões</a>
-        <a href="#" class="nav-disabled"><i class="fa-solid fa-gears"></i> Configurações</a>
-      </nav>
-      <div class="connection-status">
-        <div class="status-indicator online"></div>
-        <span>Oracle DB: Conectado</span>
-      </div>
+      <nav class="nav-menu" id="nav-menu"><!-- preenchido pelo auth-check.js --></nav>
+      <div id="sidebar-user"></div>
     </aside>
 
     <!-- Conteúdo Principal -->
@@ -752,6 +743,7 @@
   <!-- Toast -->
   <div id="toast-pec" style="position:fixed;bottom:24px;right:24px;z-index:9999;display:none;background:var(--bg-card);border:1px solid var(--border-color);border-radius:10px;padding:14px 18px;font-size:13px;color:var(--text-white);box-shadow:0 8px 32px rgba(0,0,0,.4);max-width:360px;transition:opacity .3s;"></div>
 
+  <script src="auth-check.js"></script>
   <script src="app_pecuaria.js"></script>
 </body>
 </html>

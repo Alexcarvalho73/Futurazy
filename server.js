@@ -1,7 +1,12 @@
+require('dotenv').config();
 const express = require('express');
+const https = require('https');
 const path = require('path');
 const fs = require('fs');
+const session = require('express-session');
 const db = require('./db');
+const { autenticar, registrarLog, TODOS_PAINEIS } = require('./auth');
+const { requireAuth, requireAdmin } = require('./middleware/authMiddleware');
 
 // ─── Parâmetros persistidos em arquivo (params.json) ───────────────────────
 const PARAMS_FILE = path.join(__dirname, 'params.json');
@@ -20,10 +25,46 @@ function saveParamsFile(data) {
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const HTTPS_PORT = 3443;
 
-// Configurar o Express para servir arquivos estáticos na pasta 'public'
-app.use(express.static(path.join(__dirname, 'public')));
+// ─── Configuração de Sessão ────────────────────────────────────────────────
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'futurazy_fallback_secret_mude_em_producao',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    httpOnly: true,
+    secure: true,       // Requer HTTPS
+    maxAge: 8 * 60 * 60 * 1000  // 8 horas
+  }
+}));
+
+// ─── Servir arquivos estáticos - login.html é público, demais protegidos ───
 app.use(express.json());
+
+// Permitir acesso livre apenas ao login.html e recursos estáticos (css, js, fonts)
+app.use((req, res, next) => {
+  const publicPaths = ['/login.html', '/style.css'];
+  const isPublicStatic = req.path.match(/\.(css|js|png|jpg|svg|ico|woff|woff2|ttf)$/);
+  const isLoginPage = publicPaths.includes(req.path);
+  const isApiPath = req.path.startsWith('/api/');
+  const isRoot = req.path === '/';
+
+  if (isLoginPage || isPublicStatic || isApiPath) {
+    return next();
+  }
+
+  // Para páginas HTML protegidas, verificar sessão
+  if (req.path.endsWith('.html') || isRoot) {
+    if (!req.session || !req.session.usuario) {
+      return res.redirect('/login.html');
+    }
+  }
+  next();
+});
+
+// Servir arquivos estáticos
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Rota de API para buscar os dados de tratos consumidos
 app.get('/api/tratos', async (req, res) => {
@@ -3654,12 +3695,259 @@ app.get('/api/dre/consolidado', async (req, res) => {
   }
 });
 
+// ==========================================================================
+// ROTAS DE AUTENTICAÇÃO
+// ==========================================================================
+
+// POST /api/auth/login
+app.post('/api/auth/login', async (req, res) => {
+  const { usuario, senha } = req.body;
+  if (!usuario || !senha) {
+    return res.status(400).json({ success: false, error: 'Usuário e senha são obrigatórios.' });
+  }
+  try {
+    const resultado = await autenticar(usuario, senha);
+    if (!resultado.ok) {
+      await registrarLog(usuario, null, 'LOGIN_FALHOU', null, req.ip);
+      return res.status(401).json({ success: false, error: resultado.erro || 'Usuário ou senha incorretos.' });
+    }
+
+    // Salvar dados na sessão
+    req.session.usuario = resultado.usuario;
+    req.session.nome = resultado.nome;
+    req.session.grupos = resultado.grupos;
+    req.session.paineis = resultado.paineis;
+    req.session.isAdmin = resultado.isAdmin;
+
+    await registrarLog(usuario, resultado.nome, 'LOGIN_OK', null, req.ip);
+
+    res.json({
+      success: true,
+      usuario: resultado.usuario,
+      nome: resultado.nome,
+      paineis: resultado.paineis,
+      isAdmin: resultado.isAdmin
+    });
+  } catch (err) {
+    console.error('[auth] Erro no login:', err);
+    res.status(500).json({ success: false, error: 'Erro interno ao autenticar.' });
+  }
+});
+
+// POST /api/auth/logout
+app.post('/api/auth/logout', (req, res) => {
+  const usuario = req.session?.usuario;
+  const nome = req.session?.nome;
+  req.session.destroy(async () => {
+    if (usuario) await registrarLog(usuario, nome, 'LOGOUT', null, req.ip);
+    res.json({ success: true });
+  });
+});
+
+// GET /api/auth/me - Retorna dados do usuário logado
+app.get('/api/auth/me', (req, res) => {
+  if (!req.session || !req.session.usuario) {
+    return res.status(401).json({ success: false, error: 'Não autenticado.' });
+  }
+  res.json({
+    success: true,
+    usuario: req.session.usuario,
+    nome: req.session.nome,
+    paineis: req.session.paineis,
+    isAdmin: req.session.isAdmin
+  });
+});
+
+// GET /api/admin/paineis - Lista todos os painéis disponíveis
+app.get('/api/admin/paineis', requireAuth, requireAdmin, (req, res) => {
+  res.json({ success: true, data: TODOS_PAINEIS });
+});
+
+// GET /api/admin/grupos
+app.get('/api/admin/grupos', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const rows = await db.execute(
+      `SELECT g.GR_ID, g.GR_NOME, g.GR_DESCRICAO, g.GR_ATIVO,
+              (SELECT LISTAGG(p.PM_PAINEL, ',') WITHIN GROUP (ORDER BY p.PM_PAINEL)
+               FROM DF_PERMISSOES p WHERE p.PM_GRUPO_ID = g.GR_ID) AS PAINEIS
+       FROM DF_GRUPOS g ORDER BY g.GR_NOME ASC`
+    );
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/admin/grupos - Criar grupo
+app.post('/api/admin/grupos', requireAuth, requireAdmin, async (req, res) => {
+  const { nome, descricao } = req.body;
+  if (!nome) return res.status(400).json({ success: false, error: 'Nome do grupo é obrigatório.' });
+  try {
+    await db.execute(
+      `INSERT INTO DF_GRUPOS (GR_NOME, GR_DESCRICAO) VALUES (:nome, :descricao)`,
+      { nome, descricao: descricao || null },
+      { autoCommit: true }
+    );
+    // Buscar o ID criado
+    const rows = await db.execute(
+      `SELECT GR_ID FROM DF_GRUPOS WHERE GR_NOME = :nome ORDER BY GR_ID DESC`,
+      { nome }
+    );
+    const grId = rows.length > 0 ? rows[0].GR_ID : null;
+    res.json({ success: true, mensagem: 'Grupo criado com sucesso.', data: { GR_ID: grId } });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// PUT /api/admin/grupos/:id - Atualizar grupo
+app.put('/api/admin/grupos/:id', requireAuth, requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { nome, descricao, ativo } = req.body;
+  try {
+    await db.execute(
+      `UPDATE DF_GRUPOS SET GR_NOME=:nome, GR_DESCRICAO=:descricao, GR_ATIVO=:ativo WHERE GR_ID=:id`,
+      { nome, descricao: descricao || null, ativo: ativo || 'S', id: Number(id) },
+      { autoCommit: true }
+    );
+    res.json({ success: true, mensagem: 'Grupo atualizado.' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// DELETE /api/admin/grupos/:id - Excluir grupo (e suas permissões via cascade)
+app.delete('/api/admin/grupos/:id', requireAuth, requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  try {
+    await db.execute(`DELETE FROM DF_GRUPOS WHERE GR_ID = :id`, { id: Number(id) }, { autoCommit: true });
+    res.json({ success: true, mensagem: 'Grupo removido.' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/admin/permissoes - Salvar permissões de um grupo (substitui tudo)
+app.post('/api/admin/permissoes', requireAuth, requireAdmin, async (req, res) => {
+  const { grupo_id, paineis } = req.body;
+  if (!grupo_id || !Array.isArray(paineis)) {
+    return res.status(400).json({ success: false, error: 'grupo_id e paineis são obrigatórios.' });
+  }
+  try {
+    // Remover permissões existentes do grupo
+    await db.execute(`DELETE FROM DF_PERMISSOES WHERE PM_GRUPO_ID = :id`, { id: Number(grupo_id) }, { autoCommit: true });
+    // Inserir as novas permissões
+    for (const painel of paineis) {
+      await db.execute(
+        `INSERT INTO DF_PERMISSOES (PM_GRUPO_ID, PM_PAINEL) VALUES (:id, :painel)`,
+        { id: Number(grupo_id), painel },
+        { autoCommit: true }
+      );
+    }
+    res.json({ success: true, mensagem: 'Permissões salvas com sucesso.' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ==========================================================================
+// ROTAS DE USUÁRIOS POR GRUPO
+// ==========================================================================
+
+// GET /api/admin/grupos/:id/usuarios - Listar usuários de um grupo
+app.get('/api/admin/grupos/:id/usuarios', requireAuth, requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const rows = await db.execute(
+      `SELECT GU_ID, GU_USUARIO 
+       FROM DF_GRUPO_USUARIOS 
+       WHERE GU_GRUPO_ID = :grupoId 
+       ORDER BY GU_USUARIO ASC`,
+      { grupoId: Number(id) }
+    );
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/admin/grupos/:id/usuarios - Adicionar usuário ao grupo
+app.post('/api/admin/grupos/:id/usuarios', requireAuth, requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { usuario } = req.body;
+  if (!usuario) return res.status(400).json({ success: false, error: 'Usuário é obrigatório.' });
+
+  try {
+    await db.execute(
+      `INSERT INTO DF_GRUPO_USUARIOS (GU_GRUPO_ID, GU_USUARIO) VALUES (:grupoId, :usuario)`,
+      { grupoId: Number(id), usuario: usuario.trim() },
+      { autoCommit: true }
+    );
+    res.json({ success: true, mensagem: 'Usuário adicionado com sucesso.' });
+  } catch (err) {
+    if (err.message.includes('unique') || err.message.includes('UQ_GU_GRUPO_USER') || err.message.includes('ORA-00001')) {
+      return res.status(400).json({ success: false, error: 'Este usuário já está neste grupo.' });
+    }
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// DELETE /api/admin/usuarios/:guId - Remover usuário do grupo
+app.delete('/api/admin/usuarios/:guId', requireAuth, requireAdmin, async (req, res) => {
+  const { guId } = req.params;
+  try {
+    await db.execute(
+      `DELETE FROM DF_GRUPO_USUARIOS WHERE GU_ID = :guId`,
+      { guId: Number(guId) },
+      { autoCommit: true }
+    );
+    res.json({ success: true, mensagem: 'Usuário removido com sucesso.' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /api/admin/logs - Log de acessos
+app.get('/api/admin/logs', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const rows = await db.execute(
+      `SELECT LA_ID, LA_USUARIO, LA_NOME, LA_ACAO, LA_PAINEL, LA_IP,
+              TO_CHAR(LA_DATA, 'DD/MM/YYYY HH24:MI:SS') AS LA_DATA_FMT
+       FROM DF_LOG_ACESSO ORDER BY LA_ID DESC FETCH FIRST 200 ROWS ONLY`
+    );
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ==========================================================================
+// INICIALIZAÇÃO DO SERVIDOR (HTTPS)
+// ==========================================================================
+
 async function startServer() {
   try {
     await db.initialize();
-    app.listen(PORT, () => {
-      console.log(`Servidor rodando em http://localhost:${PORT}`);
-    });
+
+    // Carregar certificado SSL
+    const certPath = path.join(__dirname, 'certs', 'server.crt');
+    const keyPath = path.join(__dirname, 'certs', 'server.key');
+
+    if (fs.existsSync(certPath) && fs.existsSync(keyPath)) {
+      const httpsOptions = {
+        cert: fs.readFileSync(certPath),
+        key: fs.readFileSync(keyPath)
+      };
+      https.createServer(httpsOptions, app).listen(HTTPS_PORT, () => {
+        console.log(`✅ Servidor HTTPS rodando em https://localhost:${HTTPS_PORT}`);
+        console.log(`   → Acesse: https://localhost:${HTTPS_PORT}/login.html`);
+      });
+    } else {
+      console.warn('⚠️  Certificado SSL não encontrado. Rodando em HTTP (execute: node scripts/gerar_cert.js)');
+      app.listen(PORT, () => {
+        console.log(`Servidor HTTP rodando em http://localhost:${PORT}`);
+      });
+    }
   } catch (err) {
     console.error('Falha ao iniciar o servidor:', err);
     process.exit(1);

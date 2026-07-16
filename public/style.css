@@ -115,7 +115,7 @@ h1, h2, h3, h4, h5, h6 {
   flex-grow: 1;
 }
 
-.nav-menu a {
+.nav-menu a, .nav-menu .nav-dropdown-toggle {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -125,17 +125,58 @@ h1, h2, h3, h4, h5, h6 {
   border-radius: var(--radius-sm);
   font-weight: 500;
   transition: var(--transition-fast);
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+  font-size: 14px;
 }
 
-.nav-menu a:hover {
+.nav-menu a:hover, .nav-menu .nav-dropdown-toggle:hover {
   background-color: rgba(255, 255, 255, 0.03);
   color: var(--text-main);
 }
 
-.nav-menu a.active {
+.nav-menu a.active, .nav-menu .nav-dropdown-toggle.active {
   background-color: rgba(59, 130, 246, 0.1);
   color: var(--color-primary);
   font-weight: 600;
+}
+
+/* Submenu container styles */
+.nav-dropdown {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 20px;
+  overflow: hidden;
+  max-height: 0;
+  transition: max-height 0.3s ease-out;
+}
+
+.nav-dropdown.open {
+  max-height: 300px; /* valor alto o suficiente para caber os subitens */
+}
+
+.nav-dropdown a {
+  padding: 8px 16px;
+  font-size: 13px;
+}
+
+.nav-dropdown-toggle {
+  justify-content: space-between;
+}
+
+.nav-dropdown-toggle .arrow {
+  transition: transform 0.2s ease;
+  font-size: 11px;
+}
+
+.nav-dropdown-toggle.active-parent .arrow,
+.nav-dropdown.open ~ .nav-dropdown-toggle .arrow {
+  /* será girado pelo JS quando aberto */
 }
 
 .nav-disabled {

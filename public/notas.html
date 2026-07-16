@@ -24,17 +24,8 @@
         <i class="fa-solid fa-chart-line logo-icon"></i>
         <h2>Futurazy<span>BI</span></h2>
       </div>
-      <nav class="nav-menu">
-        <a href="index.html"><i class="fa-solid fa-house"></i> Dashboard</a>
-        <a href="notas.html" class="active"><i class="fa-solid fa-file-invoice-dollar"></i> Central XML</a>
-        <a href="fechamento.html"><i class="fa-solid fa-file-chart-column"></i> Fechamento</a>
-        <a href="#" class="nav-disabled"><i class="fa-solid fa-database"></i> Conexões</a>
-        <a href="#" class="nav-disabled"><i class="fa-solid fa-gears"></i> Configurações</a>
-      </nav>
-      <div class="connection-status">
-        <div class="status-indicator online"></div>
-        <span>Oracle DB: Conectado</span>
-      </div>
+      <nav class="nav-menu" id="nav-menu"><!-- preenchido pelo auth-check.js --></nav>
+      <div id="sidebar-user"></div>
     </aside>
 
     <!-- Main Content Area -->
@@ -301,6 +292,7 @@
     </div>
   </div>
 
+  <script src="auth-check.js"></script>
   <script src="app_notas.js?v=3"></script>
 </body>
 </html>
