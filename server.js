@@ -25,7 +25,7 @@ function saveParamsFile(data) {
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const HTTPS_PORT = 3443;
+const HTTPS_PORT = 443;
 
 // ─── Configuração de Sessão ────────────────────────────────────────────────
 app.use(session({

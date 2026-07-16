@@ -24,9 +24,12 @@ Write-Host "Restaurando arquivos modificados..."
 Start-Process -FilePath "git.exe" -ArgumentList "stash", "pop" -PassThru -Wait -NoNewWindow
 
 if ($proc.ExitCode -eq 0) {
+    Write-Host "Instalando novas dependencias (npm install)..."
+    Start-Process -FilePath "npm.cmd" -ArgumentList "install", "--production" -PassThru -Wait -NoNewWindow
+
     Write-Host "Parando o processo Node antigo..."
     Stop-Process -Name node -Force -ErrorAction SilentlyContinue
-    Start-Sleep -Seconds 1
+    Start-Sleep -Seconds 2
     
     # Reiniciar o servidor usando a tarefa agendada
     Write-Host "Reiniciando servidor usando a tarefa agendada..."
