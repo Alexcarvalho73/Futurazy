@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fluxo de Caixa | FuturazyBI</title>
+  <meta name="description" content="Painel de Fluxo de Caixa — FuturazyBI">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <style>
+    /* ── Page Header ─────────────────────────────── */
+    .page-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .page-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .breadcrumb {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+    .breadcrumb a { color: var(--color-primary); text-decoration: none; }
+    .breadcrumb a:hover { text-decoration: underline; }
+
+    /* ── Botões de toggle ────────────────────────── */
+    .btn-toggle-cal { background: rgba(139,92,246,.15); color: #a78bfa; border: 1px solid rgba(139,92,246,.3); }
+    .btn-toggle-cal:hover { background: rgba(139,92,246,.25); }
+    .btn-toggle-cal.cal-contabil { background: rgba(6,182,212,.15); color: #22d3ee; border: 1px solid rgba(6,182,212,.3); }
+
+    /* ── Seção principal do cubo ─────────────────── */
+    .cube-section {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 24px;
+      width: 100%;
+      overflow: hidden; /* Força o scroll a ficar apenas na tabela e não quebrar a página */
+      box-sizing: border-box;
+    }
+    .cube-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .cube-header h2 {
+      font-size: 17px;
+      color: var(--text-white);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .cube-actions { display: flex; gap: 8px; }
+
+    .cube-table-wrap {
+      overflow-x: auto;
+      overflow-y: visible;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      width: 100%;
+    }
+
+    /* ── Tabela Pivot ────────────────────────────── */
+    .cube-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      min-width: 900px;
+    }
+
+    /* Cabeçalho sticky (2 linhas) */
+    .cube-table thead th {
+      background: var(--bg-sidebar);
+      color: var(--text-white);
+      font-weight: 600;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border-color);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      white-space: nowrap;
+      text-align: right;
+    }
+    .cube-table thead th:first-child {
+      text-align: left;
+      min-width: 220px;
+      position: sticky;
+      left: 0;
+      z-index: 20;
+    }
+    .cube-table thead tr:first-child th {
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      background: #0e1424;
+    }
+    .cube-table thead tr:last-child th {
+      font-size: 11px;
+      font-weight: 500;
+      color: #7a85a0;
+      padding-top: 6px;
+      padding-bottom: 6px;
+      border-bottom: 2px solid var(--border-color);
+    }
+    .th-mes-grupo {
+      text-align: center !important;
+      border-left: 1px solid rgba(255,255,255,0.06);
+      color: #cbd5e1 !important;
+      font-size: 12px !important;
+      font-weight: 700 !important;
+      cursor: default;
+    }
+    .th-col-header {
+      text-align: right;
+      border-left: none;
+    }
+    .th-col-header.th-total {
+      color: #e2e8f0 !important;
+      font-weight: 700 !important;
+    }
+    .th-col-header.th-ah {
+      color: #64748b !important;
+    }
+    .th-mes-separator {
+      border-left: 1px solid rgba(255,255,255,0.08) !important;
+    }
+    .th-acumulado { background: rgba(79,156,249,0.06) !important; }
+
+    /* ── Colunas expandíveis ─────────────────────── */
+    .col-detail { transition: opacity .2s; }
+    .col-detail.hidden { display: none; }
+    .btn-expand-cols {
+      font-size: 10px;
+      padding: 2px 6px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: #7a85a0;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-left: 4px;
+      transition: all .15s;
+    }
+    .btn-expand-cols:hover { background: rgba(255,255,255,0.1); color: #e2e8f0; }
+
+    /* ── Células da tabela ───────────────────────── */
+    .cube-table td {
+      padding: 6px 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      white-space: nowrap;
+      color: var(--text-muted);
+      text-align: right;
+    }
+    .cube-table td:first-child {
+      text-align: left;
+      position: sticky;
+      left: 0;
+      background: var(--bg-card); /* Cor sólida obrigatória para não vazar texto no scroll */
+      z-index: 5;
+    }
+    .cube-table tr:hover td { background: rgba(255,255,255,.02); }
+    .cube-table tr:hover td:first-child { background: #1a2235; } /* Sólido no hover */
+
+    .td-separator { border-left: 1px solid rgba(255,255,255,0.06) !important; }
+
+    /* Nível 0 — Conta P&L */
+    .lvl-0 td:first-child {
+      font-weight: 700;
+      color: var(--text-white);
+      font-size: 12px;
+      background: #141c2f; /* Fundo sólido p/ sticky */
+    }
+    .lvl-0 td { color: #e2e8f0; background: rgba(255,255,255,.025); }
+    .lvl-0 td:first-child { background: #141c2f; }
+
+    /* Nível 1 — Tipo Gerencial */
+    .lvl-1 td:first-child {
+      padding-left: 30px !important;
+      color: #94a3b8;
+    }
+    .lvl-1 { background: transparent; }
+
+    /* Linhas de variação / totais */
+    .row-variacao td {
+      font-weight: 700;
+      color: #4f9cf9;
+      background: rgba(79,156,249,0.06);
+      border-top: 1px solid rgba(79,156,249,0.15);
+      border-bottom: 1px solid rgba(79,156,249,0.15);
+    }
+    .row-variacao td:first-child { 
+      color: #4f9cf9; 
+      background: #0f192b; /* Fundo azul escuro sólido */
+    }
+
+    .row-variacao-total td {
+      font-weight: 700;
+      color: #a78bfa;
+      background: rgba(139,92,246,0.08);
+      border-top: 2px solid rgba(139,92,246,0.2);
+    }
+
+    .row-saldo td {
+      font-weight: 600;
+      color: #22d3ee;
+      background: rgba(6,182,212,0.06);
+    }
+    .row-saldo-final td { border-bottom: 2px solid rgba(6,182,212,0.2); }
+
+    /* Toggle expand/collapse linha */
+    .toggle-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 16px;
+      height: 16px;
+      border-radius: 3px;
+      background: rgba(255,255,255,.06);
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      margin-right: 6px;
+      font-size: 8px;
+      cursor: pointer;
+      transition: all .15s;
+      flex-shrink: 0;
+    }
+    tr:hover .toggle-btn { background: rgba(79,156,249,.15); color: #4f9cf9; border-color: rgba(79,156,249,.3); }
+
+    /* Células ocultas */
+    .row-hidden { display: none !important; }
+
+    /* Valores com sinal */
+    .val-pos { color: #4ade80; }
+    .val-neg { color: #f87171; }
+    .val-zero { color: #475569; }
+
+    /* AH% badges */
+    .ah-pos { color: #4ade80; font-size: 11px; }
+    .ah-neg { color: #f87171; font-size: 11px; }
+    .ah-zero { color: #475569; font-size: 11px; }
+
+    /* Coluna totais acumulados */
+    .td-acumulado { background: rgba(79,156,249,0.04) !important; }
+
+    /* Spinner / estado vazio */
+    .loading-row td, .empty-row td {
+      text-align: center !important;
+      padding: 40px !important;
+      color: var(--text-muted) !important;
+    }
+
+    /* Filtros select */
+    .filter-select {
+      background: var(--bg-input, rgba(15,20,35,0.8));
+      border: 1px solid var(--border-color);
+      color: var(--text-white);
+      border-radius: 8px;
+      padding: 6px 12px;
+      font-size: 13px;
+      font-family: inherit;
+      cursor: pointer;
+    }
+    .filter-select:focus { outline: none; border-color: var(--color-primary); }
+
+    /* ── Modal Drill-down ────────────────────────── */
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(4px);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.2s ease;
+    }
+    .modal-overlay.active {
+      opacity: 1;
+      visibility: visible;
+    }
+    .modal-content {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      width: 90%;
+      max-width: 1200px;
+      max-height: 85vh;
+      display: flex;
+      flex-direction: column;
+      transform: scale(0.95);
+      transition: all 0.2s ease;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+    }
+    .modal-overlay.active .modal-content {
+      transform: scale(1);
+    }
+    .modal-header {
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .modal-header h3 {
+      margin: 0;
+      font-size: 16px;
+      color: var(--text-white);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .btn-close {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 18px;
+      transition: color 0.2s;
+    }
+    .btn-close:hover { color: var(--text-white); }
+    .modal-body {
+      padding: 0;
+      overflow: auto;
+      flex: 1;
+    }
+    .drilldown-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .drilldown-table th {
+      background: #141c2f;
+      color: var(--text-white);
+      padding: 10px 14px;
+      text-align: left;
+      font-weight: 600;
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      border-bottom: 1px solid var(--border-color);
+    }
+    .drilldown-table td {
+      padding: 8px 14px;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      color: #cbd5e1;
+    }
+    .drilldown-table tbody tr:nth-child(even) { background: rgba(255,255,255,0.015); }
+    .drilldown-table tbody tr:hover td { background: rgba(255,255,255,0.04); }
+    .drilldown-table td.text-right, .drilldown-table th.text-right { text-align: right; }
+    
+    /* Cursor para as células clicáveis no fluxo de caixa */
+    .clickable-cell {
+      cursor: pointer;
+      position: relative;
+    }
+    .clickable-cell:hover::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border: 1px dashed rgba(79,156,249,0.5);
+      pointer-events: none;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="dashboard-container">
+    <!-- ── Sidebar ── -->
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <i class="fa-solid fa-chart-line logo-icon"></i>
+        <h2>Futurazy<span>BI</span></h2>
+      </div>
+      <nav class="nav-menu" id="nav-menu"></nav>
+      <div class="sidebar-user" id="sidebar-user"></div>
+    </aside>
+
+    <!-- ── Conteúdo ── -->
+    <div class="content-wrapper">
+      <main class="main-content">
+
+        <!-- Header da página -->
+        <div class="page-header">
+          <div>
+            <div class="breadcrumb">
+              <a href="index.html"><i class="fa-solid fa-house"></i> Início</a>
+              <span>›</span>
+              <span>Fluxo de Caixa</span>
+            </div>
+            <h1 class="page-title" style="font-family:'Outfit',sans-serif;font-size:22px;font-weight:800;color:#e8eaf0;margin:0;">
+              <i class="fa-solid fa-money-bill-wave" style="color:#4f9cf9;margin-right:8px;"></i>
+              Fluxo de Caixa
+            </h1>
+          </div>
+
+          <div class="page-header-actions">
+            <!-- Toggle Calendário -->
+            <button class="btn btn-toggle-cal" id="btn-toggle-cal">
+              <i class="fa-solid fa-calendar-days"></i>
+              <span id="label-cal">Safra Agrícola</span>
+            </button>
+
+            <!-- Input Dólar -->
+            <div style="display:flex;align-items:center;background:var(--bg-card);border:1px solid var(--border-color);border-radius:8px;padding:4px 8px;gap:6px;position:relative;">
+              <span style="font-size:12px;color:var(--text-muted);font-weight:600;">Dólar:</span>
+              <input type="text" id="input-dolar" value="0,0000" style="width:60px;background:transparent;border:none;color:var(--text-primary);font-weight:700;font-size:13px;outline:none;text-align:right;">
+              <button id="btn-reset-dolar" style="display:none;background:transparent;border:none;color:var(--color-primary);cursor:pointer;padding:0 4px;" title="Restaurar dólar do dia">
+                <i class="fa-solid fa-rotate-right"></i>
+              </button>
+            </div>
+
+            <!-- Toggle Moeda -->
+            <div style="display:flex;gap:4px;background:rgba(255,255,255,0.04);border:1px solid var(--border-color);border-radius:8px;padding:3px;">
+              <button class="moeda-btn active" data-moeda="BRL" id="btn-brl"
+                style="padding:4px 12px;border-radius:6px;border:none;cursor:pointer;font-size:12px;font-weight:600;background:var(--color-primary);color:white;transition:all .15s;">
+                R$
+              </button>
+              <button class="moeda-btn" data-moeda="USD" id="btn-usd"
+                style="padding:4px 12px;border-radius:6px;border:none;cursor:pointer;font-size:12px;font-weight:600;background:transparent;color:#7a85a0;transition:all .15s;">
+                US$
+              </button>
+            </div>
+
+            <!-- Filtro Grupo -->
+            <select class="filter-select" id="f-grupo">
+              <option value="TODAS">Todos os grupos</option>
+              <option value="Futurazy" selected>Futurazy</option>
+              <option value="Orides">Orides</option>
+            </select>
+
+            <!-- Filtro Filial -->
+            <select class="filter-select" id="f-filial">
+              <option value="TODAS">Todas as filiais</option>
+            </select>
+
+            <!-- Atualizar -->
+            <button class="btn" id="btn-refresh">
+              <i class="fa-solid fa-rotate-right"></i> Atualizar
+            </button>
+          </div>
+        </div><!-- /page-header -->
+
+        <!-- Loading / erro -->
+        <div id="fc-status" style="display:none;padding:12px 0;color:#7a85a0;font-size:13px;text-align:center;">
+          <i class="fa-solid fa-circle-notch fa-spin"></i> Carregando dados...
+        </div>
+
+        <!-- Painel Principal -->
+        <div class="cube-section">
+          <div class="cube-header">
+            <h2><i class="fa-solid fa-table" style="color:#4f9cf9;"></i> Demonstrativo de Fluxo de Caixa</h2>
+            <div class="cube-actions">
+              <button class="btn" id="btn-expand-all" title="Expandir tudo">
+                <i class="fa-solid fa-expand"></i> Expandir
+              </button>
+              <button class="btn" id="btn-collapse-all" title="Recolher tudo">
+                <i class="fa-solid fa-compress"></i> Recolher
+              </button>
+            </div>
+          </div>
+
+          <div class="cube-table-wrap">
+            <table class="cube-table" id="fc-table">
+              <thead id="fc-thead">
+                <tr>
+                  <th colspan="1" style="text-align:left;">Mês/Ano</th>
+                </tr>
+                <tr>
+                  <th style="text-align:left;">Rubrica</th>
+                </tr>
+              </thead>
+              <tbody id="fc-tbody">
+                <tr class="loading-row"><td colspan="99"><i class="fa-solid fa-circle-notch fa-spin"></i> Aguardando dados...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div><!-- /cube-section -->
+
+      </main>
+    </div>
+  </div><!-- /dashboard-container -->
+
+  <!-- Modal Drill-down -->
+  <div class="modal-overlay" id="drilldown-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="drilldown-title"><i class="fa-solid fa-list" style="color:#4f9cf9;"></i> Detalhamento de Lançamentos</h3>
+        <button class="btn-close" id="btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <div id="drilldown-status" style="display:none;padding:30px;text-align:center;color:#7a85a0;">
+          <i class="fa-solid fa-circle-notch fa-spin"></i> Carregando detalhes...
+        </div>
+        <table class="drilldown-table" id="drilldown-table" style="display:none;">
+          <thead>
+            <tr>
+              <th>Filial</th>
+              <th>Documento</th>
+              <th>Tipo</th>
+              <th>Safra</th>
+              <th>Status</th>
+              <th>Emissão</th>
+              <th>Vencimento</th>
+              <th>Cliente / Fornecedor</th>
+              <th>Histórico</th>
+              <th>Moeda</th>
+              <th class="text-right">Valor R$</th>
+              <th class="text-right">Valor US$</th>
+            </tr>
+          </thead>
+          <tbody id="drilldown-tbody">
+            <!-- Renderizado dinamicamente via JS -->
+          </tbody>
+          <tfoot id="drilldown-tfoot">
+            <!-- Renderizado dinamicamente via JS -->
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script src="auth-check.js"></script>
+  <script src="app_fluxo_caixa.js"></script>
+</body>
+</html>

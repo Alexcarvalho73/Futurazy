@@ -233,7 +233,7 @@
         <span id="error-text">Usuário ou senha incorretos.</span>
       </div>
 
-      <form id="login-form" autocomplete="off">
+      <form id="login-form">
         <div class="form-group">
           <label for="usuario">Usuário</label>
           <div class="input-wrap">
@@ -322,7 +322,24 @@
             destino = painelMap[paineis[0]];
           }
 
-          window.location.href = '/' + destino;
+          // TRUQUE PARA O NAVEGADOR OFERECER SALVAR A SENHA
+          // Submetemos o formulário de verdade num iframe invisível para o browser
+          // detectar a submissão, e logo em seguida fazemos o redirecionamento.
+          const iframe = document.createElement('iframe');
+          iframe.name = 'stealth_iframe';
+          iframe.style.display = 'none';
+          document.body.appendChild(iframe);
+
+          const form = document.getElementById('login-form');
+          form.target = 'stealth_iframe';
+          form.action = '/login.html'; // action inofensivo
+          form.method = 'POST';
+          form.submit();
+
+          // Aguarda um pequeno instante para o browser capturar o evento e redireciona
+          setTimeout(() => {
+            window.location.href = '/' + destino;
+          }, 100);
         } else {
           errorText.textContent = data.error || 'Usuário ou senha incorretos.';
           errorDiv.classList.add('show');

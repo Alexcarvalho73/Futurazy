@@ -16,6 +16,7 @@ const TODOS_PAINEIS = [
   'fechamento_receita',
   'fechamento_insumos',
   'fechamento_pecuaria',
+  'fluxo_caixa',
   'admin_permissoes'
 ];
 

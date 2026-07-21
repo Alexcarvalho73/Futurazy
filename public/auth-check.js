@@ -13,6 +13,7 @@
 const PAINEL_CODE_BY_PAGE = {
   'trato.html':                'analise_trato',
   'notas.html':                'central_xml',
+  'fluxo_caixa.html':          'fluxo_caixa',
   'fechamento.html':           'fechamento_dre',
   'fechamento_financeiro.html':'fechamento_financeiro',
   'fechamento_receita.html':   'fechamento_receita',
@@ -25,6 +26,7 @@ const PAINEL_CODE_BY_PAGE = {
 const NAV_ITEMS = [
   { painel: 'analise_trato',        href: 'trato.html',                icon: 'fa-house',          label: 'Análise Trato' },
   { painel: 'central_xml',          href: 'notas.html',                icon: 'fa-file-invoice-dollar', label: 'Central XML' },
+  { painel: 'fluxo_caixa',          href: 'fluxo_caixa.html',          icon: 'fa-money-bill-wave', label: 'Fluxo de Caixa' },
   { 
     painel: 'fechamento_dre',       
     href: 'fechamento.html',           

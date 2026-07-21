@@ -3922,6 +3922,458 @@ app.get('/api/admin/logs', requireAuth, requireAdmin, async (req, res) => {
 });
 
 // ==========================================================================
+// FLUXO DE CAIXA
+// ==========================================================================
+
+/**
+ * GET /api/fluxo-caixa
+ * Retorna dados do fluxo de caixa para o período selecionado.
+ * Params: anoMesInicio (YYYYMM), anoMesFim (YYYYMM), grupo, filial, moeda
+ */
+app.get('/api/fluxo-caixa', requireAuth, async (req, res) => {
+  try {
+    const { anoMesInicio, anoMesFim, grupo, filial } = req.query;
+
+    if (!anoMesInicio || !anoMesFim) {
+      return res.status(400).json({ success: false, error: 'anoMesInicio e anoMesFim são obrigatórios' });
+    }
+
+    // Construir filtros de filial/grupo
+    let filialFilter = '';
+    const binds = { anoMesInicio, anoMesFim };
+
+    if (filial && filial !== 'TODAS') {
+      filialFilter = ' AND TRIM(fv.FILIAL) = :filial';
+      binds.filial = filial;
+    } else if (grupo && grupo !== 'TODAS') {
+      if (grupo === 'Futurazy') {
+        filialFilter = " AND TRIM(fv.FILIAL) IN ('028501','028503')";
+      } else {
+        filialFilter = " AND TRIM(fv.FILIAL) NOT IN ('028501','028503')";
+      }
+    }
+
+    // --- Parte 1: View principal AV_FLUXODECAIXAFTZ ---
+    // Colunas reais da view: STATUS, FILIAL, EMISSAO, VENCIMENTO, PREFIXO, NUMERO, PARCELA,
+    //   TIPO, D_C, MO, PTAX, VALOR_R$, VLR_USD, SALDO_R$, SALDO_USD, TPGER, SAFRA,
+    //   CLIENTE_FORNECEDOR, PROJECAO, HISTORICO_BAIXA
+    const sqlView = `
+      SELECT
+        TO_CHAR(fv.VENCIMENTO, 'YYYYMM')  AS ANO_MES,
+        TRIM(fv.FILIAL)                   AS FILIAL,
+        TRIM(fv.TPGER)                    AS TP_GER,
+        pl.FP_DESC                        AS DESC_TP_GER,
+        fv.STATUS,
+        TRIM(fv.PREFIXO)                  AS PREFIXO,
+        "VALOR_R$"                        AS VALOR_BRL,
+        fv.VLR_USD                        AS VALOR_USD,
+        fv.PTAX,
+        fv.MO,
+        TRIM(fv.SAFRA)                    AS SAFRA,
+        fv.VENCIMENTO                     AS DATA_VENCIMENTO,
+        pl.FP_CONTA_PL,
+        pl.FP_NIVEL
+      FROM PROTHEUS11.AV_FLUXODECAIXAFTZ fv
+      LEFT JOIN DF_FLUXO_PL pl ON TRIM(pl.FP_TP_GER) = TRIM(fv.TPGER)
+      WHERE TO_CHAR(fv.VENCIMENTO, 'YYYYMM') BETWEEN :anoMesInicio AND :anoMesFim
+        AND NVL(TRIM(fv.TPGER), 'X') <> 'NFC'
+        ${filialFilter}
+    `;
+
+    // --- Parte 2: SE5020 — Rendimentos Líquidos (E5_MOEDA='M1') ---
+    let filialSE5Filter = '';
+    if (filial && filial !== 'TODAS') {
+      filialSE5Filter = ` AND TRIM(substr(SE5.E5_FILIAL,1,6)) = :filial`;
+    } else if (grupo && grupo !== 'TODAS') {
+      if (grupo === 'Futurazy') {
+        filialSE5Filter = ` AND TRIM(substr(SE5.E5_FILIAL,1,6)) IN ('028501','028503')`;
+      } else {
+        filialSE5Filter = ` AND TRIM(substr(SE5.E5_FILIAL,1,6)) NOT IN ('028501','028503')`;
+      }
+    }
+
+    const sqlSE5 = `
+      SELECT
+        substr(SE5.E5_DTDISPO,1,6)                        AS ANO_MES,
+        TRIM(substr(SE5.E5_FILIAL,1,6))                   AS FILIAL,
+        'FINAN'                                            AS TP_GER,
+        'RENDIMENTOS LIQ. APLICACAO'                       AS DESC_TP_GER,
+        CASE SE5.E5_RECPAG
+          WHEN 'P' THEN 'PAGO'
+          ELSE 'RECEBIDO'
+        END                                                AS STATUS,
+        TRIM(SE5.E5_PREFIXO)                              AS PREFIXO,
+        CASE SE5.E5_RECPAG
+          WHEN 'P' THEN SE5.E5_VALOR * -1
+          ELSE SE5.E5_VALOR
+        END                                                AS VALOR_BRL,
+        SE5.E5_VLMOED2                                     AS VALOR_USD,
+        NULL                                               AS PTAX,
+        1                                                  AS MO,
+        TRIM(SE5.E5_YPLPCO)                                AS SAFRA,
+        NULL                                              AS DATA_VENCIMENTO,
+        'APLICACOES FINANCEIRAS E OUTROS'                  AS FP_CONTA_PL,
+        '4.1'                                             AS FP_NIVEL
+      FROM PROTHEUS11.SE5020 SE5
+      WHERE SE5.E5_MOEDA    = 'M1'
+        AND SE5.E5_SITUACA <> 'C'
+        AND SE5.D_E_L_E_T_  = ' '
+        AND LENGTH(TRIM(SE5.E5_DTDISPO)) = 8
+        AND substr(SE5.E5_DTDISPO,1,6) BETWEEN :anoMesInicio AND :anoMesFim
+        ${filialSE5Filter}
+    `;
+
+    const [rowsView, rowsSE5] = await Promise.all([
+      db.execute(sqlView, binds),
+      db.execute(sqlSE5, binds)
+    ]);
+
+    // Buscar cotação atual do dólar para usar quando não houver PTAX
+    let ptaxHoje = null;
+    try {
+      const hoje = new Date();
+      const hojeStr = `${hoje.getFullYear()}${String(hoje.getMonth()+1).padStart(2,'0')}${String(hoje.getDate()).padStart(2,'0')}`;
+      const ptaxRows = await db.execute(
+        `SELECT M2_MOEDA2 FROM PROTHEUS11.SM2020
+         WHERE M2_DATA <= :dt
+           AND M2_DATA <> '        '
+           AND D_E_L_E_T_ <> '*'
+         ORDER BY M2_DATA DESC FETCH FIRST 1 ROWS ONLY`,
+        { dt: hojeStr }
+      );
+      if (ptaxRows.length > 0) ptaxHoje = ptaxRows[0].M2_MOEDA2;
+    } catch(e) {
+      console.warn('[fluxo-caixa] Aviso: não foi possível buscar PTAX atual:', e.message);
+    }
+
+    const STATUS_REALIZADO = ['PAGO','RECEBIDO'];
+
+    // Normalizar e combinar os dois conjuntos
+    const allRows = [...rowsView, ...rowsSE5].map(r => {
+      const ptax = r.PTAX || ptaxHoje || 1;
+      const status = (r.STATUS || '').trim().toUpperCase();
+      const prefixo = (r.PREFIXO || '').trim().toUpperCase();
+      const isRealizado = STATUS_REALIZADO.includes(status);
+      const isProjecao  = prefixo === 'PROJ';
+
+      let contaPL = (r.FP_CONTA_PL || '').trim().toUpperCase();
+      contaPL = contaPL.replace(/¿/g, 'Ç')
+                       .replace(/AÇOES/g, 'AÇÕES')
+                       .replace(/APLICACOES/g, 'APLICAÇÕES')
+                       .replace(/AMORTIZAÇOES/g, 'AMORTIZAÇÕES')
+                       .replace(/AMORTIZACOES/g, 'AMORTIZAÇÕES')
+                       .replace(/CAPTAÇOES/g, 'CAPTAÇÕES')
+                       .replace(/CAPTACOES/g, 'CAPTAÇÕES');
+
+      return {
+        ANO_MES:         r.ANO_MES,
+        FILIAL:          r.FILIAL,
+        TP_GER:          r.TP_GER,
+        DESC_TP_GER:     r.DESC_TP_GER,
+        STATUS:          status,
+        PREFIXO:         prefixo,
+        VALOR_BRL:       r.VALOR_BRL || 0,
+        VALOR_USD:       r.VALOR_USD || 0,
+        PTAX:            ptax,
+        MO:              r.MO || 1,
+        SAFRA:           r.SAFRA,
+        DATA_VENCIMENTO: r.DATA_VENCIMENTO,
+        FP_CONTA_PL:     contaPL,
+        FP_NIVEL:        r.FP_NIVEL,
+        // Campo GRUPO
+        GRUPO: ['028501','028503'].includes((r.FILIAL || '').trim()) ? 'Futurazy' : 'Outras',
+        // Campo BAIXA
+        BAIXA: isRealizado ? 'REALIZADO' : 'A_REALIZAR',
+        // Coluna de classificação
+        COLUNA: isRealizado ? 'REALIZADO' : (isProjecao ? 'PROJECAO' : 'PROVISAO')
+      };
+    });
+
+    res.json({ success: true, count: allRows.length, ptaxHoje, data: allRows });
+  } catch (err) {
+    console.error('[fluxo-caixa] Erro:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+
+/**
+ * GET /api/fluxo-caixa/saldo-inicial
+ * Retorna o saldo de caixa antes do início do período (SE8020).
+ * Params: anoMesInicio (YYYYMM)
+ */
+app.get('/api/fluxo-caixa/saldo-inicial', requireAuth, async (req, res) => {
+  try {
+    const { anoMesInicio, grupo, filial } = req.query;
+    if (!anoMesInicio) {
+      return res.status(400).json({ success: false, error: 'anoMesInicio é obrigatório' });
+    }
+
+    // Calcula o primeiro dia anterior ao dia 1 da grid (último dia do mês anterior)
+    const ano = parseInt(anoMesInicio.substring(0, 4), 10);
+    const mes = parseInt(anoMesInicio.substring(4, 6), 10);
+    const dataAnterior = new Date(ano, mes - 1, 0); 
+    const yyyy = dataAnterior.getFullYear();
+    const mm = String(dataAnterior.getMonth() + 1).padStart(2, '0');
+    const dd = String(dataAnterior.getDate()).padStart(2, '0');
+    const dataConsulta = `${yyyy}${mm}${dd}`;
+
+    let filtroFilial = "";
+    const binds = { dataConsulta };
+
+    if (filial && filial !== 'TODAS') {
+      filtroFilial = "AND A.E8_MSFIL = :filial";
+      binds.filial = filial;
+    } else if (grupo && grupo !== 'TODAS') {
+      if (grupo === 'Futurazy') {
+        filtroFilial = "AND SUBSTR(A.E8_FILIAL, 1, 4) = '0285'";
+      } else if (grupo === 'Orides') {
+        filtroFilial = "AND SUBSTR(A.E8_FILIAL, 1, 4) = '0269'";
+      }
+    }
+
+    const sql = `
+      SELECT NVL(SUM(A.E8_SALATUA), 0) AS SALDO
+        FROM PROTHEUS11.SE8020 A
+       WHERE A.E8_DTSALAT = (SELECT MAX(B.E8_DTSALAT)
+                               FROM PROTHEUS11.SE8020 B
+                              WHERE B.E8_FILIAL   = A.E8_FILIAL
+                                AND B.E8_BANCO    = A.E8_BANCO
+                                AND B.E8_AGENCIA  = A.E8_AGENCIA
+                                AND B.E8_CONTA    = A.E8_CONTA
+                                AND B.E8_DTSALAT <= :dataConsulta
+                                AND B.D_E_L_E_T_  = ' ')
+         ${filtroFilial}
+         AND A.D_E_L_E_T_ = ' '
+    `;
+
+    const rows = await db.execute(sql, binds);
+    const saldo = rows.length > 0 ? (rows[0].SALDO || 0) : 0;
+
+    res.json({ success: true, saldo });
+  } catch (err) {
+    console.error('[fluxo-caixa/saldo-inicial] Erro:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/fluxo-caixa/drilldown
+ * Retorna os lançamentos individuais de uma célula do fluxo de caixa
+ */
+app.get('/api/fluxo-caixa/drilldown', requireAuth, async (req, res) => {
+  try {
+    const { anoMes, tpGer, contaPL, coluna, grupo, filial } = req.query;
+
+    if (!anoMes) {
+      return res.status(400).json({ success: false, error: 'anoMes é obrigatório' });
+    }
+
+    let filialFilter = '';
+    const binds = { anoMes };
+
+    if (filial && filial !== 'TODAS') {
+      filialFilter = ' AND TRIM(fv.FILIAL) = :filial';
+      binds.filial = filial;
+    } else if (grupo && grupo !== 'TODAS') {
+      if (grupo === 'Futurazy') {
+        filialFilter = " AND TRIM(fv.FILIAL) IN ('028501','028503')";
+      } else {
+        filialFilter = " AND TRIM(fv.FILIAL) NOT IN ('028501','028503')";
+      }
+    }
+
+    let filterColuna = "";
+    if (coluna === 'REALIZADO') {
+      filterColuna = " AND TRIM(UPPER(fv.STATUS)) IN ('PAGO','RECEBIDO')";
+    } else if (coluna === 'PROJECAO') {
+      filterColuna = " AND TRIM(UPPER(fv.PREFIXO)) = 'PROJ'";
+    } else if (coluna === 'PROVISAO') {
+      filterColuna = " AND TRIM(UPPER(fv.STATUS)) NOT IN ('PAGO','RECEBIDO') AND NVL(TRIM(UPPER(fv.PREFIXO)), 'X') <> 'PROJ'";
+    }
+
+    let filterRubrica = "";
+    if (tpGer) {
+      filterRubrica = " AND TRIM(fv.TPGER) = :tpGer";
+      binds.tpGer = tpGer;
+    } else if (contaPL) {
+      filterRubrica = " AND TRIM(pl.FP_CONTA_PL) = :contaPL";
+      binds.contaPL = contaPL;
+    }
+
+    const sqlView = `
+      SELECT
+        TRIM(fv.FILIAL)                   AS FILIAL,
+        TRIM(fv.PREFIXO)                  AS PREFIXO,
+        TRIM(fv.NUMERO)                   AS NUMERO,
+        TRIM(fv.PARCELA)                  AS PARCELA,
+        TRIM(fv.TIPO)                     AS TIPO,
+        fv.EMISSAO                        AS DATA_EMISSAO,
+        fv.VENCIMENTO                     AS DATA_VENCIMENTO,
+        TRIM(fv.CLIENTE_FORNECEDOR)       AS CLIENTE_FORNECEDOR,
+        TRIM(fv.HISTORICO_BAIXA)          AS HISTORICO_BAIXA,
+        TRIM(fv.SAFRA)                    AS SAFRA,
+        "VALOR_R$"                        AS VALOR_BRL,
+        fv.VLR_USD                        AS VALOR_USD,
+        fv.PTAX                           AS PTAX,
+        fv.MO                             AS MO,
+        fv.STATUS
+      FROM PROTHEUS11.AV_FLUXODECAIXAFTZ fv
+      LEFT JOIN DF_FLUXO_PL pl ON TRIM(pl.FP_TP_GER) = TRIM(fv.TPGER)
+      WHERE TO_CHAR(fv.VENCIMENTO, 'YYYYMM') = :anoMes
+        AND NVL(TRIM(fv.TPGER), 'X') <> 'NFC'
+        ${filialFilter}
+        ${filterColuna}
+        ${filterRubrica}
+      ORDER BY fv.VENCIMENTO ASC
+    `;
+
+    const rowsView = await db.execute(sqlView, binds);
+
+    // SE5 logic
+    let rowsSE5 = [];
+    if (!tpGer || tpGer === 'FINAN') {
+      let bindsSE5 = { anoMes };
+      let filialSE5Filter = '';
+      if (filial && filial !== 'TODAS') {
+        filialSE5Filter = ` AND TRIM(substr(SE5.E5_FILIAL,1,6)) = :filial`;
+        bindsSE5.filial = filial;
+      } else if (grupo && grupo !== 'TODAS') {
+        if (grupo === 'Futurazy') {
+          filialSE5Filter = ` AND TRIM(substr(SE5.E5_FILIAL,1,6)) IN ('028501','028503')`;
+        } else {
+          filialSE5Filter = ` AND TRIM(substr(SE5.E5_FILIAL,1,6)) NOT IN ('028501','028503')`;
+        }
+      }
+
+      let filterColunaSE5 = "";
+      if (coluna === 'REALIZADO') {
+        filterColunaSE5 = " AND 1=1"; // SE5 is always Realizado here as it is from contas a receber/pagar baixadas
+      } else if (coluna === 'PROJECAO' || coluna === 'PROVISAO') {
+        filterColunaSE5 = " AND 1=0"; // Never projection or provision in this SE5 query
+      }
+
+      const sqlSE5 = `
+        SELECT
+          TRIM(substr(SE5.E5_FILIAL,1,6))                   AS FILIAL,
+          TRIM(SE5.E5_PREFIXO)                              AS PREFIXO,
+          TRIM(SE5.E5_NUMERO)                               AS NUMERO,
+          TRIM(SE5.E5_PARCELA)                              AS PARCELA,
+          TRIM(SE5.E5_TIPO)                                 AS TIPO,
+          SE5.E5_DATA                                       AS DATA_EMISSAO,
+          SE5.E5_DTDISPO                                    AS DATA_VENCIMENTO,
+          'RENDIMENTOS LIQ. APLICACAO'                       AS CLIENTE_FORNECEDOR,
+          TRIM(SE5.E5_HISTOR)                                AS HISTORICO_BAIXA,
+          CASE SE5.E5_RECPAG
+            WHEN 'P' THEN SE5.E5_VALOR * -1
+            ELSE SE5.E5_VALOR
+          END                                                AS VALOR_BRL,
+          SE5.E5_VLMOED2                                     AS VALOR_USD,
+          NULL                                               AS PTAX,
+          1                                                  AS MO,
+          TRIM(SE5.E5_YPLPCO)                                AS SAFRA,
+          CASE SE5.E5_RECPAG
+            WHEN 'P' THEN 'PAGO'
+            ELSE 'RECEBIDO'
+          END                                                AS STATUS
+        FROM PROTHEUS11.SE5020 SE5
+        WHERE SE5.D_E_L_E_T_ = ' '
+          AND SE5.E5_MOEDA = 'M1'
+          AND substr(SE5.E5_DTDISPO,1,6) = :anoMes
+          ${filialSE5Filter}
+          ${filterColunaSE5}
+      `;
+      rowsSE5 = await db.execute(sqlSE5, bindsSE5);
+    }
+
+    const rows = [...rowsView, ...rowsSE5];
+
+    // Ajusta o sinal igual no backend principal
+    const data = rows.map(r => {
+      const status = (r.STATUS || '').trim().toUpperCase();
+      let valor = r.VALOR_BRL || 0;
+      
+      return {
+        FILIAL: r.FILIAL,
+        DOCUMENTO: `${r.PREFIXO || ''}-${r.NUMERO || ''}/${r.PARCELA || ''}`.replace(/^-|\/$/g, ''),
+        TIPO: r.TIPO,
+        SAFRA: r.SAFRA,
+        CLIENTE_FORNECEDOR: r.CLIENTE_FORNECEDOR || '—',
+        DATA_EMISSAO: r.DATA_EMISSAO,
+        DATA_VENCIMENTO: r.DATA_VENCIMENTO,
+        HISTORICO: r.HISTORICO_BAIXA || '—',
+        VALOR_BRL: valor,
+        VALOR_USD: r.VALOR_USD || 0,
+        PTAX: r.PTAX || 0,
+        MO: r.MO || 1,
+        STATUS: status
+      };
+    });
+
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error('[fluxo-caixa/drilldown] Erro:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+
+/**
+ * GET /api/fluxo-caixa/pl
+ * Lista o mapeamento ProfitLoss (tabela DF_FLUXO_PL).
+ */
+app.get('/api/fluxo-caixa/pl', requireAuth, async (req, res) => {
+  try {
+    const rows = await db.execute(
+      `SELECT FP_ID, FP_TP_GER, FP_DESC, FP_CONTA_PL, FP_NIVEL, FP_ATIVO
+       FROM DF_FLUXO_PL ORDER BY FP_NIVEL, FP_TP_GER`
+    );
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/fluxo-caixa/pl
+ * Upsert de entrada na tabela DF_FLUXO_PL (apenas admin).
+ */
+app.post('/api/fluxo-caixa/pl', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { tpGer, descr, contaPL, nivel, ativo } = req.body;
+    if (!tpGer || !contaPL || !nivel) {
+      return res.status(400).json({ success: false, error: 'tpGer, contaPL e nivel são obrigatórios' });
+    }
+
+    // Verificar se já existe
+    const existing = await db.execute(
+      `SELECT FP_ID FROM DF_FLUXO_PL WHERE TRIM(FP_TP_GER) = TRIM(:tpGer)`,
+      { tpGer }
+    );
+
+    if (existing.length > 0) {
+      await db.execute(
+        `UPDATE DF_FLUXO_PL SET FP_DESC=:descr, FP_CONTA_PL=:contaPL, FP_NIVEL=:nivel, FP_ATIVO=:ativo
+         WHERE TRIM(FP_TP_GER) = TRIM(:tpGer)`,
+        { descr: descr || '', contaPL, nivel, ativo: ativo || 'S', tpGer },
+        { autoCommit: true }
+      );
+      res.json({ success: true, action: 'updated' });
+    } else {
+      await db.execute(
+        `INSERT INTO DF_FLUXO_PL (FP_TP_GER, FP_DESC, FP_CONTA_PL, FP_NIVEL, FP_ATIVO)
+         VALUES (:tpGer, :descr, :contaPL, :nivel, :ativo)`,
+        { tpGer, descr: descr || '', contaPL, nivel, ativo: ativo || 'S' },
+        { autoCommit: true }
+      );
+      res.json({ success: true, action: 'inserted' });
+    }
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ==========================================================================
 // INICIALIZAÇÃO DO SERVIDOR (HTTPS)
 // ==========================================================================
 
