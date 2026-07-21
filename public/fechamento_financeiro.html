@@ -101,6 +101,10 @@
       border-radius: var(--radius-md);
       padding: 24px;
       position: relative;
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
     }
 
     .cube-header {
@@ -127,9 +131,11 @@
 
     .cube-table-wrap {
       overflow-x: auto;
-      overflow-y: visible;
+      overflow-y: auto;
       border: 1px solid var(--border-color);
       border-radius: var(--radius-sm);
+      flex: 1;
+      min-height: 0;
     }
 
     .cube-table {

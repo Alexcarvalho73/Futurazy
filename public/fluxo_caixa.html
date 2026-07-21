@@ -49,8 +49,11 @@
       border-radius: var(--radius-md);
       padding: 24px;
       width: 100%;
-      overflow: hidden; /* Força o scroll a ficar apenas na tabela e não quebrar a página */
       box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
     }
     .cube-header {
       display: flex;
@@ -71,10 +74,12 @@
 
     .cube-table-wrap {
       overflow-x: auto;
-      overflow-y: visible;
+      overflow-y: auto;
       border: 1px solid var(--border-color);
       border-radius: var(--radius-sm);
       width: 100%;
+      flex: 1;
+      min-height: 0;
     }
 
     /* ── Tabela Pivot ────────────────────────────── */

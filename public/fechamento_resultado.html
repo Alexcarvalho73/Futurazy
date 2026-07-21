@@ -91,7 +91,7 @@
        Cubo Pivot — Drill-down Insumos
     ──────────────────────────────────── */
     .main-content>* {
-      flex-shrink: 0;
+      /* flex-shrink removido para usar o scroll interno do flex-box na tabela */
     }
 
     .cube-section {
@@ -100,6 +100,10 @@
       border-radius: var(--radius-md);
       padding: 24px;
       position: relative;
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
     }
 
     .cube-header {
@@ -126,9 +130,11 @@
 
     .cube-table-wrap {
       overflow-x: auto;
-      overflow-y: visible;
+      overflow-y: auto;
       border: 1px solid var(--border-color);
       border-radius: var(--radius-sm);
+      flex: 1;
+      min-height: 0;
     }
 
     .cube-table {
