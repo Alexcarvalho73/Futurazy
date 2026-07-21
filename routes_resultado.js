@@ -164,6 +164,75 @@ module.exports = function(app, db) {
 
 
   // ==========================================
+  // GET /api/fechamento/resultado/fechados
+  // ==========================================
+  app.get('/api/fechamento/resultado/fechados', async (req, res) => {
+    try {
+      const sql = `SELECT DISTINCT FR_ANO, FR_MES FROM FECHAMENTO_RESULTADO ORDER BY FR_ANO DESC, FR_MES DESC`;
+      const rows = await db.execute(sql);
+      res.json({ success: true, count: rows.length, data: rows });
+    } catch (e) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // ==========================================
+  // POST /api/fechamento/resultado/fechar-mes
+  // ==========================================
+  app.post('/api/fechamento/resultado/fechar-mes', async (req, res) => {
+    const { ano, mes, dados } = req.body;
+    if (!ano || !mes || !Array.isArray(dados)) {
+      return res.status(400).json({ success: false, error: 'Faltam dados para fechamento.' });
+    }
+
+    try {
+      await db.execute('DELETE FROM FECHAMENTO_RESULTADO WHERE FR_ANO = :ano AND FR_MES = :mes', { ano, mes }, { autoCommit: false });
+
+      for (const d of dados) {
+        const sql = `
+          INSERT INTO FECHAMENTO_RESULTADO (
+            FR_ANO, FR_MES, FR_FILIAL, FR_GRUPO, FR_SUBGRUPO, FR_ITEM, FR_VALOR_BRL, FR_VALOR_USD, FR_PTAX
+          ) VALUES (
+            :ano, :mes, :filial, :grupo, :subgrupo, :item, :vlrBrl, :vlrUsd, :ptax
+          )
+        `;
+        const binds = {
+          ano,
+          mes,
+          filial: d.empresa || 'TOTAL',
+          grupo: d.grupo || 'ND',
+          subgrupo: d.subgrupo || 'ND',
+          item: d.item || 'ND',
+          vlrBrl: d.vlrBrl || 0,
+          vlrUsd: d.vlrUsd || 0,
+          ptax: d.ptax || 1
+        };
+        await db.execute(sql, binds, { autoCommit: false });
+      }
+
+      await db.execute('COMMIT', [], { autoCommit: true });
+      res.json({ success: true, mensagem: `Mês ${mes}/${ano} fechado com sucesso!` });
+    } catch (err) {
+      await db.execute('ROLLBACK', [], { autoCommit: true });
+      console.error('Erro fechar-mes Resultado:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // ==========================================
+  // DELETE /api/fechamento/resultado/fechados/:ano/:mes
+  // ==========================================
+  app.delete('/api/fechamento/resultado/fechados/:ano/:mes', async (req, res) => {
+    const { ano, mes } = req.params;
+    try {
+      await db.execute('DELETE FROM FECHAMENTO_RESULTADO WHERE FR_ANO = :ano AND FR_MES = :mes', { ano, mes }, { autoCommit: true });
+      res.json({ success: true, mensagem: `Mês ${mes}/${ano} reaberto com sucesso.` });
+    } catch (e) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // ==========================================
   // GET /api/fechamento/ajustes/resultado
   // ==========================================
   app.get('/api/fechamento/ajustes/resultado', async (req, res) => {
@@ -318,8 +387,8 @@ module.exports = function(app, db) {
       const sqlAjustes = `
         SELECT FR_ANO AS ANO, FR_MES AS MES, FR_FILIAL AS EMPRESA, FR_GRUPO AS GRUPO, FR_SUBGRUPO AS SUBGRUPO, FR_ITEM AS ITEM, FR_VALOR_BRL AS VALOR_BRL, FR_VALOR_USD AS VALOR_USD
         FROM FECHAMENTO_RESULTADO
-        WHERE FR_ANO || FR_MES >= SUBSTR(REPLACE(:data_de, '-', ''), 1, 6)
-          AND FR_ANO || FR_MES <= SUBSTR(REPLACE(:data_ate, '-', ''), 1, 6)
+        WHERE FR_ANO || LPAD(TO_CHAR(FR_MES), 2, '0') >= SUBSTR(REPLACE(:data_de, '-', ''), 1, 6)
+          AND FR_ANO || LPAD(TO_CHAR(FR_MES), 2, '0') <= SUBSTR(REPLACE(:data_ate, '-', ''), 1, 6)
       `;
 
       const [resSE5, resFaturam, resAjustes] = await Promise.all([
@@ -329,7 +398,7 @@ module.exports = function(app, db) {
       ]);
 
       let data = [];
-      const addData = (row, grupo, subgrupo, item) => {
+      const addData = (row, grupo, subgrupo, item, isManual = false) => {
         data.push({
           ANO: row.ANO,
           MES: row.MES,
@@ -338,7 +407,8 @@ module.exports = function(app, db) {
           SUBGRUPO: subgrupo,
           ITEM: item,
           VALOR_BRL: row.VALOR_BRL,
-          VALOR_USD: row.VALOR_USD || 0
+          VALOR_USD: row.VALOR_USD || 0,
+          IS_MANUAL: isManual
         });
       };
 
@@ -363,7 +433,7 @@ module.exports = function(app, db) {
       }
 
       for (const r of resAjustes) {
-        addData(r, r.GRUPO, r.SUBGRUPO, r.ITEM);
+        addData(r, r.GRUPO, r.SUBGRUPO, r.ITEM, true);
       }
 
       res.json({ success: true, data });

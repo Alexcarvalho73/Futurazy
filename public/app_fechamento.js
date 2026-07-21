@@ -228,6 +228,46 @@ async function init() {
   if (barFin)  barFin.style.width = pctFinanceiro + '%';
   if (pctFin)  pctFin.textContent = `${qtdFechadosFinanceiro}/12 meses (${pctFinanceiro}%)`;
 
+  // ==========================================
+  // Renderizar Resultado Final
+  // ==========================================
+  let fechadosResultado = [];
+  try {
+    const resp = await fetch('/api/fechamento/resultado/fechados');
+    const json = await resp.json();
+    if (json.success) fechadosResultado = json.data;
+  } catch (e) {
+    console.warn('Não foi possível carregar fechados Resultado:', e.message);
+  }
+
+  const fechadosSetResultado = new Set(fechadosResultado.map(f => `${f.FR_ANO}_${f.FR_MES}`));
+  
+  let qtdFechadosResultado = 0, qtdPendentesResultado = 0;
+  const pillsHtmlResultado = meses.map(m => {
+    const isFuturo  = new Date(m.ano, m.mes - 1, 1) > hoje2;
+    const isAtual   = m.ano === mesAtual.ano && m.mes === mesAtual.mes;
+    const fechado   = fechadosSetResultado.has(`${m.ano}_${m.mes}`);
+    const label     = NOMES_MES[m.mes - 1];
+
+    let cls = 'pill-futuro';
+    if (fechado)        { cls = 'pill-fechado';  qtdFechadosResultado++; }
+    else if (isAtual)   { cls = 'pill-atual'; }
+    else if (!isFuturo) { cls = 'pill-pendente'; qtdPendentesResultado++; }
+    
+    return `<div class="mes-pill ${cls}" title="${label}/${m.ano}">${label.substring(0,3)}</div>`;
+  }).join('');
+
+  totalFechados += qtdFechadosResultado;
+  totalPendentes += qtdPendentesResultado;
+
+  const pillsRes = document.getElementById('pills-resultado');
+  const barRes   = document.getElementById('bar-resultado');
+  const pctRes   = document.getElementById('pct-resultado');
+  if (pillsRes) pillsRes.innerHTML = pillsHtmlResultado;
+  const pctResultado = Math.round((qtdFechadosResultado / 12) * 100);
+  if (barRes)  barRes.style.width = pctResultado + '%';
+  if (pctRes)  pctRes.textContent = `${qtdFechadosResultado}/12 meses (${pctResultado}%)`;
+
   // Atualizar KPIs Globais
   if (document.getElementById('val-fechados')) {
     document.getElementById('val-fechados').textContent = totalFechados;

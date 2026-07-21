@@ -411,7 +411,9 @@ function buildHierarchy(data) {
     const emissao = r.EMISSAO ? new Date(r.EMISSAO) : null;
     const mesKey  = emissao ? `${NOMES_MES[emissao.getMonth()]}/${emissao.getFullYear()}` : '—';
     const mesSort = emissao ? emissao.getFullYear() * 100 + emissao.getMonth() + 1 : 0;
-    const produto = (r.PRODUTO || '—').trim();
+    const nomeCliente = (r.NOME_CLIENTE || '').trim();
+    const produtoBase = (r.PRODUTO || '—').trim();
+    const produto = nomeCliente ? `${produtoBase} - ${nomeCliente}` : produtoBase;
 
     if (!tree[tipo])                              tree[tipo]                              = {};
     if (!tree[tipo][empresa])                     tree[tipo][empresa]                     = {};

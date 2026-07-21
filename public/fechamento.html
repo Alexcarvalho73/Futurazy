@@ -356,30 +356,30 @@
             </div>
           </a>
 
-          <!-- EBITDA — Em breve -->
-          <div class="modulo-card disabled" style="--card-accent: #06b6d4;">
-            <div class="modulo-top">
-              <div class="modulo-icon" style="background:rgba(6,182,212,.12); color:#06b6d4;">
-                <i class="fa-solid fa-chart-line"></i>
-              </div>
-              <span class="modulo-badge badge-breve">Em Breve</span>
-            </div>
-            <div>
-              <div class="modulo-titulo">EBITDA</div>
-              <div class="modulo-subtitulo">Resultado antes de juros, impostos, depreciação e amortização</div>
-            </div>
-          </div>
-
           <!-- RESULTADO FINAL -->
-          <a href="fechamento_resultado.html" class="modulo-card" style="--card-accent: #ef4444; text-decoration: none; color: inherit;">
+          <a href="fechamento_resultado.html" class="modulo-card" id="card-resultado"
+             style="--card-accent: #ef4444;">
             <div class="modulo-top">
               <div class="modulo-icon" style="background:rgba(239,68,68,.12); color:#ef4444;">
                 <i class="fa-solid fa-flag-checkered"></i>
               </div>
+              <span class="modulo-badge badge-ativo">Ativo</span>
             </div>
             <div>
               <div class="modulo-titulo">Resultado Final</div>
               <div class="modulo-subtitulo">Resultado operacional líquido e não operacional consolidado</div>
+            </div>
+            <div class="modulo-progresso">
+              <div class="progresso-label">
+                <span>Progresso da Safra</span>
+                <span id="pct-resultado">Carregando…</span>
+              </div>
+              <div class="progresso-bar">
+                <div class="progresso-fill" id="bar-resultado" style="width:0%; background:linear-gradient(90deg,#ef4444,rgba(255,255,255,.3));"></div>
+              </div>
+              <div class="meses-pills" id="pills-resultado">
+                <!-- Renderizado pelo JS -->
+              </div>
             </div>
           </a>
 
@@ -490,6 +490,6 @@
   </div>
 
   <script src="auth-check.js"></script>
-  <script src="app_fechamento.js?v=14"></script>
+  <script src="app_fechamento.js?v=15"></script>
 </body>
 </html>
