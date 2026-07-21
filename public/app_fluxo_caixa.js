@@ -16,6 +16,7 @@ const state = {
   filial:         'TODAS',
   allData:        [],
   saldoInicial:   0,
+  moedaOrigem:    'Todas',
   colsExpanded:   true,      // exibir R/V/P individuais ou só Total
   expandedPLs:    new Set()  // Conta P&Ls expandidos
 };
@@ -477,7 +478,13 @@ window.togglePL = function(plKey) {
 // ────────────────────────────────────────────────────────────
 function renderAll() {
   const meses = getMeses();
-  const pivot = buildPivot(state.allData, meses);
+
+  let dataToRender = state.allData || [];
+  if (state.moedaOrigem && state.moedaOrigem !== 'Todas') {
+    dataToRender = dataToRender.filter(r => String(r.MO).trim() === state.moedaOrigem);
+  }
+
+  const pivot = buildPivot(dataToRender, meses);
 
   const thead = document.getElementById('fc-thead');
   const tbody = document.getElementById('fc-tbody');
@@ -615,6 +622,12 @@ document.addEventListener('DOMContentLoaded', () => {
     loadAll();
   });
 
+  // Filtro Moeda Origem
+  document.getElementById('select-moeda-origem')?.addEventListener('change', e => {
+    state.moedaOrigem = e.target.value;
+    renderAll();
+  });
+
   // Input Dólar
   const iptDolar = document.getElementById('input-dolar');
   if (iptDolar) {
@@ -725,7 +738,10 @@ async function abrirDrillDown(anoMes, tpGer, contaPL, coluna) {
     const res = await fetch(`/api/fluxo-caixa/drilldown?${params}`).then(r => r.json());
     if (!res.success) throw new Error(res.error || 'Erro ao carregar detalhes');
 
-    const data = res.data || [];
+    let data = res.data || [];
+    if (state.moedaOrigem && state.moedaOrigem !== 'Todas') {
+      data = data.filter(r => String(r.MO).trim() === state.moedaOrigem);
+    }
     
     if (data.length === 0) {
       tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:20px;">Nenhum lançamento encontrado.</td></tr>';
