@@ -1,0 +1,1177 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fechamento DRE - Resultado Final</title>
+  <meta name="description" content="Painel de Despesas Financeiras e Administrativas — Fechamento Financeiro FuturazBI">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    /* ────────────────────────────────────
+       Cabeçalho da página
+    ──────────────────────────────────── */
+    .page-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .page-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .btn-toggle-cal {
+      background: rgba(139, 92, 246, .15);
+      color: #a78bfa;
+      border: 1px solid rgba(139, 92, 246, .3);
+    }
+
+    .btn-toggle-cal:hover {
+      background: rgba(139, 92, 246, .25);
+    }
+
+    .btn-toggle-cal.cal-contabil {
+      background: rgba(6, 182, 212, .15);
+      color: #22d3ee;
+      border: 1px solid rgba(6, 182, 212, .3);
+    }
+
+    .breadcrumb {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .breadcrumb a {
+      color: var(--color-primary);
+      text-decoration: none;
+    }
+
+    .breadcrumb a:hover {
+      text-decoration: underline;
+    }
+
+    /* ────────────────────────────────────
+       KPI Cards — 5 colunas (insumos)
+    ──────────────────────────────────── */
+    .kpi-grid-5 {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 16px;
+    }
+
+    @media (max-width: 1400px) {
+      .kpi-grid-5 {
+        grid-template-columns: repeat(3, 1fr);
+      }
+    }
+
+    @media (max-width: 900px) {
+      .kpi-grid-5 {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    /* ────────────────────────────────────
+       Cubo Pivot — Drill-down Insumos
+    ──────────────────────────────────── */
+    .main-content>* {
+      flex-shrink: 0;
+    }
+
+    .cube-section {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 24px;
+      position: relative;
+    }
+
+    .cube-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .cube-header h2 {
+      font-size: 17px;
+      color: var(--text-white);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .cube-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .cube-table-wrap {
+      overflow-x: auto;
+      overflow-y: visible;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+    }
+
+    .cube-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    .cube-table th {
+      background: var(--bg-sidebar);
+      color: var(--text-white);
+      font-weight: 600;
+      padding: 10px 12px;
+      border-bottom: 2px solid var(--border-color);
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      white-space: nowrap;
+    }
+
+    .cube-table td {
+      padding: 7px 12px;
+      border-bottom: 1px solid var(--border-color);
+      white-space: nowrap;
+      color: var(--text-muted);
+    }
+
+    .cube-table tr:hover td {
+      background: rgba(255, 255, 255, .02);
+    }
+
+    .cube-table .text-right {
+      text-align: right;
+    }
+
+    /* Níveis de indentação */
+    .lvl-0 td:first-child {
+      font-weight: 700;
+      color: var(--text-white);
+      font-size: 13px;
+    }
+
+    .lvl-0 {
+      background: rgba(255, 255, 255, .015);
+    }
+
+    .lvl-1 td:first-child {
+      padding-left: 28px !important;
+      color: #cbd5e1;
+      font-weight: 600;
+    }
+
+    .lvl-2 td:first-child {
+      padding-left: 52px !important;
+      color: #94a3b8;
+    }
+
+    .lvl-3 td:first-child {
+      padding-left: 76px !important;
+      color: #64748b;
+      font-style: italic;
+    }
+
+    .toggle-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      height: 18px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, .06);
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      margin-right: 6px;
+      font-size: 9px;
+      cursor: pointer;
+      transition: all .15s;
+      flex-shrink: 0;
+    }
+
+    tr:hover .toggle-btn {
+      background: rgba(239, 68, 68, .12);
+      color: #f87171;
+      border-color: rgba(239, 68, 68, .4);
+    }
+
+    .row-hidden {
+      display: none;
+    }
+
+    .subtotal-row td {
+      font-weight: 600;
+      color: #94a3b8;
+      background: rgba(255, 255, 255, .02);
+    }
+
+    .grand-total-row td {
+      font-weight: 700;
+      color: #f87171;
+      background: var(--bg-sidebar);
+      border-top: 2px solid var(--border-color);
+    }
+
+    /* Badges de tipo */
+    .badge-def {
+      background: rgba(139, 92, 246, .15);
+      color: #a78bfa;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    .badge-fert {
+      background: rgba(16, 185, 129, .15);
+      color: #10b981;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    .badge-sem {
+      background: rgba(245, 158, 11, .15);
+      color: #f59e0b;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    .badge-out {
+      background: rgba(100, 116, 139, .15);
+      color: #94a3b8;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    /* Moeda Toggle */
+    .moeda-toggle-group {
+      display: flex;
+      gap: 0;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid var(--border-color);
+    }
+
+    .moeda-btn {
+      padding: 8px 14px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      border: none;
+      background: rgba(255, 255, 255, .04);
+      color: var(--text-muted);
+      transition: all .2s;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      letter-spacing: .04em;
+    }
+
+    .moeda-btn:hover {
+      background: rgba(255, 255, 255, .08);
+      color: var(--text-white);
+    }
+
+    .moeda-btn.active[data-moeda="BRL"] {
+      background: rgba(16, 185, 129, .15);
+      color: #10b981;
+    }
+
+    .moeda-btn.active[data-moeda="USD"] {
+      background: rgba(245, 158, 11, .15);
+      color: #f59e0b;
+    }
+
+    .moeda-btn.active[data-kpi-periodo="atual"] {
+      background: rgba(59, 130, 246, .15);
+      color: var(--color-primary);
+    }
+
+    .moeda-btn.active[data-kpi-periodo="anterior"] {
+      background: rgba(245, 158, 11, .15);
+      color: #f59e0b;
+    }
+
+    .moeda-btn+.moeda-btn {
+      border-left: 1px solid var(--border-color);
+    }
+
+    /* ────────────────────────────────────
+       Tabela Anual — Meses Horizontais
+    ──────────────────────────────────── */
+    .anual-section {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 24px;
+    }
+
+    .anual-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .anual-header h2 {
+      font-size: 17px;
+      color: var(--text-white);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .anual-table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+    }
+
+    .anual-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12.5px;
+    }
+
+    .anual-table th,
+    .anual-table td {
+      padding: 8px 14px;
+      border-bottom: 1px solid var(--border-color);
+      white-space: nowrap;
+    }
+
+    .anual-table th {
+      background: var(--bg-sidebar);
+      color: var(--text-white);
+      font-weight: 600;
+      border-right: 1px solid var(--border-color);
+      text-align: center;
+    }
+
+    .anual-table .sticky-col {
+      text-align: left;
+      background: var(--bg-sidebar);
+      position: sticky;
+      left: 0;
+      z-index: 4;
+      color: var(--text-white);
+      font-weight: 600;
+      border-right: 2px solid var(--border-color);
+      min-width: 200px;
+    }
+
+    .anual-table td {
+      text-align: right;
+      color: var(--text-muted);
+      border-right: 1px solid rgba(255, 255, 255, .04);
+    }
+
+    .anual-table tr:hover td {
+      background: rgba(255, 255, 255, .02);
+    }
+
+    .anual-table tr:hover td.sticky-col {
+      background: var(--bg-sidebar);
+    }
+
+    /* Coluna do mês atual / anterior */
+    .col-atual {
+      background: rgba(239, 68, 68, .06) !important;
+    }
+
+    .col-anterior {
+      background: rgba(245, 158, 11, .04) !important;
+    }
+
+    .col-consolidado {
+      background: #1e3a8a !important;
+      color: #f8fafc !important;
+      border-right: 1px solid rgba(255, 255, 255, 0.1) !important;
+      font-weight: bold !important;
+    }
+
+    th.col-consolidado {
+      background: #1e3a8a !important;
+      color: #f8fafc !important;
+    }
+
+    .col-total {
+      background: rgba(239, 68, 68, .08) !important;
+      color: #f87171 !important;
+      font-weight: 700 !important;
+      border-left: 2px solid rgba(239, 68, 68, .3) !important;
+    }
+
+    .status-row td {
+      text-align: center !important;
+    }
+
+    .status-icon {
+      font-size: 15px;
+    }
+
+    .action-row td {
+      text-align: center !important;
+      padding: 6px 8px !important;
+    }
+
+    .section-row td {
+      background: rgba(255, 255, 255, .02) !important;
+      color: var(--text-muted) !important;
+      font-size: 10px !important;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      padding: 4px 14px !important;
+    }
+
+    .section-row td.sticky-col {
+      background: var(--bg-sidebar) !important;
+    }
+
+    /* Empresa toggle */
+    .empresa-tabs {
+      display: flex;
+      gap: 6px;
+    }
+
+    .empresa-tab {
+      padding: 5px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      background: transparent;
+      transition: all .2s;
+    }
+
+    .empresa-tab.active {
+      background: rgba(239, 68, 68, .15);
+      color: #f87171;
+      border-color: rgba(239, 68, 68, .4);
+    }
+
+    /* ────────────────────────────────────
+       Modal de Fechamento
+    ──────────────────────────────────── */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, .7);
+      backdrop-filter: blur(4px);
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .25s;
+    }
+
+    .modal-overlay.open {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    .modal-box {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 36px;
+      max-width: 480px;
+      width: 90%;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      transform: scale(.94);
+      transition: transform .25s;
+    }
+
+    .modal-overlay.open .modal-box {
+      transform: scale(1);
+    }
+
+    .modal-icon {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: rgba(239, 68, 68, .15);
+      color: #f87171;
+      font-size: 26px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto;
+    }
+
+    .modal-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text-white);
+      text-align: center;
+    }
+
+    .modal-body {
+      font-size: 14px;
+      color: var(--text-muted);
+      text-align: center;
+      line-height: 1.6;
+    }
+
+    .modal-preview {
+      background: rgba(255, 255, 255, .04);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 14px 18px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      font-size: 13px;
+    }
+
+    .modal-preview-item label {
+      display: block;
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 2px;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+
+    .modal-preview-item span {
+      font-weight: 600;
+      color: var(--text-white);
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+    }
+
+    .btn-danger {
+      background: rgba(239, 68, 68, .15);
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, .3);
+    }
+
+    .btn-danger:hover {
+      background: rgba(239, 68, 68, .25);
+    }
+
+    .btn-success {
+      background: rgba(16, 185, 129, .15);
+      color: #10b981;
+      border: 1px solid rgba(16, 185, 129, .3);
+    }
+
+    .btn-success:hover {
+      background: rgba(16, 185, 129, .25);
+    }
+
+    /* Loading state */
+    .loading-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(11, 15, 25, .85);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      z-index: 10;
+      border-radius: var(--radius-md);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .2s;
+    }
+
+    .loading-overlay.active {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    .spinner {
+      width: 36px;
+      height: 36px;
+      border: 3px solid rgba(255, 255, 255, .1);
+      border-left-color: #f87171;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    /* ────────────────────────────────────
+       Painel de Parâmetros de Safra
+    ──────────────────────────────────── */
+    .params-panel {
+      background: rgba(239, 68, 68, .04);
+      border: 1px solid rgba(239, 68, 68, .15);
+      border-radius: var(--radius-md);
+      padding: 18px 24px;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+
+    .params-panel-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #f87171;
+      white-space: nowrap;
+    }
+
+    .params-fields {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+      flex: 1;
+    }
+
+    .param-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .param-item label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--text-muted);
+    }
+
+    .param-item input {
+      background: rgba(255, 255, 255, .06);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      color: var(--text-white);
+      padding: 6px 10px;
+      font-size: 13px;
+      font-family: 'Inter', sans-serif;
+      width: 120px;
+      outline: none;
+      transition: border-color .2s;
+    }
+
+    .param-item input:focus {
+      border-color: rgba(239, 68, 68, .5);
+    }
+
+    .param-save-ok {
+      font-size: 11px;
+      color: #10b981;
+      display: none;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="dashboard-container">
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="brand">
+        <i class="fa-solid fa-chart-line logo-icon"></i>
+        <h2>Futurazy<span>BI</span></h2>
+      </div>
+      <nav class="nav-menu" id="nav-menu"><!-- preenchido pelo auth-check.js --></nav>
+      <div id="sidebar-user"></div>
+    </aside>
+
+    <!-- Conteúdo Principal -->
+    <div class="content-wrapper">
+      <main class="main-content">
+
+        <!-- Cabeçalho -->
+        <header class="page-header">
+          <div>
+            <div class="breadcrumb">
+              <a href="fechamento.html"><i class="fa-solid fa-file-chart-column"></i> Fechamento</a>
+              <i class="fa-solid fa-chevron-right" style="font-size:10px"></i>
+              <span style="color:var(--text-white)">Resultado Final</span>
+            </div>
+            <h1 style="font-size:26px; color:var(--text-white); margin-bottom:4px;">Resultado Final
+            </h1>
+            <p style="color:var(--text-muted); font-size:14px;">
+              Resultado operacional líquido e não operacional consolidado
+            </p>
+          </div>
+          <div class="page-header-actions">
+            <!-- Toggle Período dos Cards -->
+            <div class="moeda-toggle-group" title="Selecionar período dos cards">
+              <button class="moeda-btn active" data-kpi-periodo="atual" id="btn-kpi-atual">
+                Mês Corrente
+              </button>
+              <button class="moeda-btn" data-kpi-periodo="anterior" id="btn-kpi-anterior">
+                Mês Anterior
+              </button>
+            </div>
+            <!-- Botão Ajustes Manuais -->
+            <button class="btn btn-secondary" id="btn-open-edit-fechamento" onclick="openModalFechamento()"
+              style="background: rgba(239,68,68,.15); color: #f87171; border: 1px solid rgba(239,68,68,.3);">
+              <i class="fa-solid fa-pen-to-square"></i> Ajustes Manuais
+            </button>
+            <!-- Toggle Moeda -->
+            <div class="moeda-toggle-group" title="Selecionar moeda de visualização">
+              <button class="moeda-btn active" data-moeda="BRL" id="btn-moeda-brl">
+                <i class="fa-solid fa-brazilian-real-sign"></i> Real
+              </button>
+              <button class="moeda-btn" data-moeda="USD" id="btn-moeda-usd">
+                <i class="fa-solid fa-dollar-sign"></i> Dólar
+              </button>
+            </div>
+            <!-- Toggle Calendário -->
+            <button class="btn btn-toggle-cal" id="btn-toggle-cal">
+              <i class="fa-solid fa-seedling"></i>
+              <span id="label-cal">Safra Agrícola</span>
+            </button>
+            <button class="btn btn-secondary" id="btn-open-params-modal"
+              onclick="document.getElementById('modal-params').classList.remove('hidden')">
+              <i class="fa-solid fa-gear"></i>
+            </button>
+            <button class="btn btn-secondary" id="btn-refresh">
+              <i class="fa-solid fa-rotate"></i> Atualizar
+            </button>
+          </div>
+        </header>
+
+        <!-- KPI Cards (5) -->
+        <section class="kpi-grid-5">
+          <div class="kpi-card">
+            <div class="kpi-icon" style="background:rgba(239,68,68,.12);color:#f87171;">
+              <i class="fa-solid fa-circle-dollar-to-slot"></i>
+            </div>
+            <div class="kpi-data">
+              <h3>Despesa Total (R$)</h3>
+              <h2 id="kpi-custo-total">—</h2>
+              <span class="kpi-sub" id="kpi-custo-total-sub">Período selecionado</span>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon icon-orange">
+              <i class="fa-solid fa-dollar-sign"></i>
+            </div>
+            <div class="kpi-data">
+              <h3>Despesa Total (USD)</h3>
+              <h2 id="kpi-custo-usd">—</h2>
+              <span class="kpi-sub" id="kpi-custo-usd-sub">Cotação parametrizada</span>
+            </div>
+          </div>
+          <div id="dynamic-kpis" style="display:contents;">
+            <!-- Dynamic KPIs will be injected here -->
+          </div>
+        </section>
+
+        <!-- Params modal moved to bottom -->
+
+        <!-- Filtros -->
+        <section class="filters-card filters-collapsed" id="filtros-section">
+          <div class="filters-header" id="filtros-toggle-header">
+            <h2><i class="fa-solid fa-chevron-down toggle-icon"></i> Filtros de Análise</h2>
+            <div class="filters-actions" style="display:flex;gap:8px;">
+              <button class="btn btn-secondary btn-sm" id="btn-clear-filters">
+                <i class="fa-solid fa-eraser"></i> Limpar
+              </button>
+              <button class="btn btn-primary btn-sm" id="btn-apply-filters">
+                <i class="fa-solid fa-check"></i> Aplicar
+              </button>
+            </div>
+          </div>
+          <div class="filters-grid">
+            <div class="filter-group">
+              <label for="f-empresa"><i class="fa-solid fa-building"></i> Empresa (Filial)</label>
+              <select id="f-empresa" class="form-control">
+                <option value="todas">Todas</option>
+                <option value="028501">028501</option>
+                <option value="028503">028503</option>
+              </select>
+            </div>
+
+            <div class="filter-group">
+              <label for="f-fazenda"><i class="fa-solid fa-tractor"></i> Fazenda</label>
+              <input type="text" id="f-fazenda" class="form-control" placeholder="Nome da fazenda...">
+            </div>
+            <div class="filter-group">
+              <label for="f-produto"><i class="fa-solid fa-box"></i> Produto</label>
+              <input type="text" id="f-produto" class="form-control" placeholder="Nome do produto...">
+            </div>
+          </div>
+        </section>
+
+        <!-- Tabela Anual (Meses Horizontais) — Resumo por Tipo de Insumo -->
+        <section class="anual-section" id="anual-section">
+          <div class="loading-overlay" id="loading-anual">
+            <div class="spinner"></div>
+            <p>Carregando resumo anual…</p>
+          </div>
+          <div class="anual-header" id="anual-toggle-header" style="cursor: pointer;">
+            <h2>
+              <i class="fa-solid fa-chevron-down toggle-icon" id="anual-chevron"
+                style="transform: rotate(0deg); transition: transform 0.2s; margin-right: 8px; font-size: 16px;"></i>
+              <i class="fa-solid fa-calendar-days" style="color:#f87171"></i>
+              Resumo Anual — <span id="label-periodo">Safra 2025/26</span>
+            </h2>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;" onclick="event.stopPropagation()">
+              <div class="empresa-tabs" style="display:none;">
+                <button class="empresa-tab active" data-emp="TOTAL" id="tab-total">Consolidado</button>
+              </div>
+            </div>
+          </div>
+          <div class="anual-body" id="anual-body" style="display: block;">
+            <div class="anual-table-wrap">
+              <table class="anual-table" id="anual-table">
+                <thead id="anual-thead">
+                  <!-- Preenchido por app_financeiro.js -->
+                </thead>
+                <tbody id="anual-tbody">
+                  <!-- Preenchido por app_financeiro.js -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="cube-section" id="cube-section">
+          <div class="loading-overlay" id="loading-cube">
+            <div class="spinner"></div>
+            <p>Carregando dados do Oracle…</p>
+          </div>
+          <div class="cube-header">
+            <h2><i class="fa-solid fa-cubes" style="color:#f87171"></i> Despesas Financeiras e Administrativas —
+              Drill-down</h2>
+            <div class="cube-actions">
+              <button class="btn btn-secondary btn-sm" id="btn-expand-all">
+                <i class="fa-solid fa-square-plus"></i> Expandir
+              </button>
+              <button class="btn btn-secondary btn-sm" id="btn-collapse-all">
+                <i class="fa-solid fa-square-minus"></i> Recolher
+              </button>
+            </div>
+          </div>
+          <div class="cube-table-wrap">
+            <table class="cube-table" id="cube-table">
+              <thead>
+                <tr>
+                  <th style="min-width:280px">Hierarquia (Grupo → Subgrupo → Item)</th>
+                  <th>Ano/Mês</th>
+                  <th>Empresa</th>
+                  <th class="text-right">Total BRL</th>
+                  <th class="text-right">Total USD</th>
+                </tr>
+              </thead>
+              <tbody id="cube-body">
+                <!-- Preenchido por app_financeiro.js -->
+              </tbody>
+              <tfoot>
+                <tr class="grand-total-row" id="cube-gd-total">
+                  <td colspan="4">Total Geral</td>
+                  <td class="text-right" id="tot-cambio">—</td>
+                  <td class="text-right" id="tot-pec-aba">R$ 0,00</td>
+                  <td class="text-right" id="tot-pec-agp">R$ 0,00</td>
+                  <td class="text-right" id="tot-soja-agp">R$ 0,00</td>
+                  <td class="text-right col-consolidado" id="tot-consolidado">R$ 0,00</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </section>
+
+      </main>
+    </div><!-- /.content-wrapper -->
+  </div>
+
+  <!-- Modal de Fechamento -->
+  <div class="modal-overlay" id="modal-fechar">
+    <div class="modal-box">
+      <div class="modal-icon"><i class="fa-solid fa-lock"></i></div>
+      <div class="modal-title">Confirmar Fechamento do Mês</div>
+      <div class="modal-body">
+        Você está prestes a <strong>fechar e gravar</strong> as despesas financeiras do período:
+      </div>
+      <div class="modal-preview" id="modal-preview">
+        <div class="modal-preview-item">
+          <label>Mês / Ano</label>
+          <span id="modal-mes-ano">—</span>
+        </div>
+        <div class="modal-preview-item">
+          <label>Empresa</label>
+          <span id="modal-empresa">TOTAL</span>
+        </div>
+        <div class="modal-preview-item">
+          <label>Despesa Total (R$)</label>
+          <span id="modal-custo">—</span>
+        </div>
+        <div class="modal-preview-item">
+          <label>PTAX Médio (R$/US$)</label>
+          <span id="modal-ptax">—</span>
+        </div>
+        <div class="modal-preview-item">
+          <label>Defensivos</label>
+          <span id="modal-defensivo">—</span>
+        </div>
+        <div class="modal-preview-item">
+          <label>Fertilizantes</label>
+          <span id="modal-fertilizante">—</span>
+        </div>
+      </div>
+      <div class="modal-body" style="font-size:12px;color:#64748b;">
+        ⚠️ Esta operação pode ser refeita — o fechamento será substituído se executado novamente.
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" id="btn-cancel-fechar">
+          <i class="fa-solid fa-xmark"></i> Cancelar
+        </button>
+        <button class="btn btn-success" id="btn-confirm-fechar">
+          <i class="fa-solid fa-lock"></i> Confirmar Fechamento
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Confirmar Exclusão -->
+  <div class="modal-overlay" id="modal-excluir" style="z-index: 110;">
+    <div class="modal-box">
+      <div class="modal-icon" style="background: rgba(239,68,68,.15); color: #f87171;"><i class="fa-solid fa-trash"></i>
+      </div>
+      <div class="modal-title">Confirmar Exclusão</div>
+      <div class="modal-body">
+        Você tem certeza que deseja excluir este registro?
+      </div>
+      <div class="modal-actions" style="margin-top: 20px;">
+        <button class="btn btn-secondary" id="btn-cancel-excluir">
+          <i class="fa-solid fa-xmark"></i> Cancelar
+        </button>
+        <button class="btn btn-primary" id="btn-confirm-excluir" style="background: #ef4444; border-color: #ef4444;">
+          <i class="fa-solid fa-trash"></i> Excluir
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de Ajustes Manuais -->
+  <div class="modal-overlay" id="modal-fechamento-bg" style="display: none;">
+    <div class="modal-box" style="max-width: 1100px; width: 95%; max-height: 90vh; overflow-y: auto;">
+      <div class="modal-header"
+        style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; margin-bottom: 16px;">
+        <h2 class="modal-title" style="margin: 0; text-align: left; display: flex; align-items: center; gap: 8px;">
+          <i class="fa-solid fa-pen-to-square" style="color: #f87171;"></i> Ajustes Manuais — RESULTADO FINAL
+        </h2>
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-primary btn-sm" id="btn-new-fechamento"
+            style="padding: 4px 10px; background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.3);"
+            onclick="openNewFechamentoForm()">
+            <i class="fa-solid fa-plus"></i> Incluir Novo
+          </button>
+          <button class="toggle-btn" id="btn-close-edit-fechamento-modal" onclick="closeModalFechamento()" style="margin: 0; padding: 4px 8px;">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- LISTA DE FECHAMENTOS -->
+      <div id="edit-fechamento-list-view">
+        <div style="display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap;">
+          <div class="filter-group" style="flex: 1; min-width: 130px;">
+            <input type="month" id="filter-modal-periodo" class="form-control" title="Filtrar por Mês/Ano">
+          </div>
+          <div class="filter-group" style="flex: 1; min-width: 130px;">
+            <select id="filter-modal-filial" class="form-control" title="Filtrar por Filial">
+              <option value="">Todas as Filiais</option>
+              <option value="028501">028501</option>
+              <option value="028503">028503</option>
+            </select>
+          </div>
+          <div class="filter-group" style="flex: 1; min-width: 130px;">
+            <select id="filter-modal-negocio" class="form-control" title="Filtrar por Negócio">
+              <option value="">Todos os Negócios</option>
+              <option value="PECUARIA">Pecuária</option>
+              <option value="AGRICULTURA">Agricultura</option>
+            </select>
+          </div>
+        </div>
+        <div class="table-wrapper" style="max-height: 400px; overflow-y: auto;">
+          <table class="anual-table" style="width: 100%; font-size: 13px;">
+            <thead>
+              <tr>
+                <th>Mês/Ano</th>
+                <th>Grupo</th>
+                <th>Subgrupo</th>
+                <th>Item</th>
+                <th class="text-right">Valor BRL</th>
+                <th class="text-right">Câmbio</th>
+                <th class="text-center">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="edit-fechamento-list-body">
+              <!-- Inserido dinamicamente -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- FORMULÁRIO DE EDIÇÃO -->
+      <div id="edit-fechamento-form-view" style="display: none;">
+        <form id="form-edit-fechamento" onsubmit="event.preventDefault();">
+          <input type="hidden" id="edit-fi-id">
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
+            <div class="filter-group">
+              <label>Período (Mês/Ano)</label>
+              <input type="month" id="edit-fi-periodo" class="form-control" required>
+            </div>
+            <div class="filter-group">
+              <label>Grupo de Despesa</label>
+              <select id="edit-fi-grupo" class="form-control" required>
+                <option value="OPERAÇÕES DE IMOBILIZADO">Operações de Imobilizado</option>
+                <option value="DEPRECIAÇÕES">Depreciações</option>
+                <option value="OUTROS">Outros</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
+            <div class="filter-group">
+              <label>Subgrupo</label>
+              <input type="text" id="edit-fi-subgrupo" class="form-control"
+                placeholder="Ex: Depreciação de benfeitorias">
+            </div>
+            <div class="filter-group">
+              <label>Item (Nomenclatura da Linha)</label>
+              <input type="text" id="edit-fi-item" class="form-control" required
+                placeholder="Ex: 1 - Indenizações Recebidas">
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px;">
+            <div class="filter-group">
+              <label>Valor Total (R$)</label>
+              <input type="number" step="0.01" id="edit-fi-custo-brl" class="form-control" required>
+            </div>
+            <div class="filter-group">
+              <label>PTAX (R$/US$)</label>
+              <input type="number" step="0.0001" id="edit-fi-ptax" class="form-control" placeholder="Ex: 5.7432">
+            </div>
+            <div style="margin-bottom: 16px;">
+              <div class="filter-group">
+                <label>Observações</label>
+                <input type="text" id="edit-fi-obs" class="form-control" placeholder="Observações opcionais...">
+              </div>
+            </div>
+
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+              <button type="button" class="btn btn-secondary" id="btn-cancel-edit-form" onclick="closeFechamentoForm()">Cancelar</button>
+              <button type="button" class="btn btn-success" id="btn-save-edit-form" onclick="saveFechamentoForm()">
+                <i class="fa-solid fa-floppy-disk"></i> Salvar
+              </button>
+            </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Params -->
+  <div class="modal-container hidden" id="modal-params">
+    <div class="modal-content"
+      style="max-width: 500px; padding:24px; background:var(--bg-card); border-radius:12px; border:1px solid rgba(255,255,255,0.1); width: 100%;">
+      <h2 style="margin-top:0; color:#cbd5e1; font-size:18px;"><i class="fa-solid fa-sliders"
+          style="margin-right:8px; color:#3b82f6;"></i> Parâmetros de Precificação</h2>
+      <div class="params-fields" style="margin-top:20px; display:flex; flex-direction:column; gap:16px;">
+        <div class="param-item" style="display:flex; flex-direction:column; gap:6px;">
+          <label style="font-size:12px; color:#94a3b8; font-weight:600;">Código Safra (ZA5_SAFRA)</label>
+          <input type="text" id="param-za5-safra" placeholder="Ex: 20251" maxlength="6" class="form-control"
+            style="width:100%;">
+        </div>
+        <div class="param-item" style="display:flex; flex-direction:column; gap:6px;">
+          <label style="font-size:12px; color:#94a3b8; font-weight:600;">Filial Preço (ZA5_FILIAL)</label>
+          <input type="text" id="param-za5-filial" placeholder="Ex: 0285" maxlength="6" class="form-control"
+            style="width:100%;">
+        </div>
+        <div class="param-item" style="display:flex; flex-direction:column; gap:6px;">
+          <label style="font-size:12px; color:#94a3b8; font-weight:600;">Descrição</label>
+          <input type="text" id="param-descricao" placeholder="Ex: Safra 2024/25" class="form-control"
+            style="width:100%;">
+        </div>
+        <div style="border-top: 1px solid rgba(255,255,255,0.1); margin-top: 8px; padding-top: 16px;">
+          <h3 style="margin-top:0; color:#cbd5e1; font-size:14px; margin-bottom: 12px;">Digitação de Valores Fixos (Por Mês)</h3>
+          <div class="param-item" style="display:flex; flex-direction:column; gap:6px; margin-bottom: 12px;">
+            <label style="font-size:12px; color:#94a3b8; font-weight:600;">Período (Mês/Ano)</label>
+            <input type="month" id="param-periodo" class="form-control" style="width:100%;">
+          </div>
+          <div class="param-item" style="display:flex; flex-direction:column; gap:6px; margin-bottom: 8px;">
+            <label style="font-size:12px; color:#94a3b8; font-weight:600;">2 - Indenizações Recebidas (Seguros)</label>
+            <input type="number" step="0.01" id="param-val1" class="form-control" placeholder="R$ 0,00" style="width:100%;">
+          </div>
+          <div class="param-item" style="display:flex; flex-direction:column; gap:6px; margin-bottom: 8px;">
+            <label style="font-size:12px; color:#94a3b8; font-weight:600;">1 - Depreciação de benfeitorias/instalações</label>
+            <input type="number" step="0.01" id="param-val2" class="form-control" placeholder="R$ 0,00" style="width:100%;">
+          </div>
+          <div class="param-item" style="display:flex; flex-direction:column; gap:6px; margin-bottom: 8px;">
+            <label style="font-size:12px; color:#94a3b8; font-weight:600;">2 - Depreciação de Maquinas/Imp e Veiculos</label>
+            <input type="number" step="0.01" id="param-val3" class="form-control" placeholder="R$ 0,00" style="width:100%;">
+          </div>
+          <div class="param-item" style="display:flex; flex-direction:column; gap:6px;">
+            <label style="font-size:12px; color:#94a3b8; font-weight:600;">3 - Demais Depreciações</label>
+            <input type="number" step="0.01" id="param-val4" class="form-control" placeholder="R$ 0,00" style="width:100%;">
+          </div>
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top: 10px;">
+          <span class="param-save-ok" id="param-save-ok"
+            style="display:none;color:#10b981;font-size:14px;font-weight:600;"><i class="fa-solid fa-check"></i>
+            Salvo!</span>
+          <div style="display:flex; gap:10px; flex:1; justify-content:flex-end;">
+            <button class="btn btn-secondary"
+              onclick="document.getElementById('modal-params').classList.add('hidden')">Cancelar</button>
+            <button class="btn btn-primary" id="btn-save-params" onclick="saveParametrosModal()">
+              <i class="fa-solid fa-floppy-disk"></i> Salvar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="auth-check.js"></script>
+  <script src="app_resultado.js"></script>
+</body>
+
+</html>

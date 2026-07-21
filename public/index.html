@@ -9,60 +9,180 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="stylesheet" href="style.css">
   <style>
+    /* Premium Background with Dynamic Styling */
+    .dashboard-container {
+      position: relative;
+      overflow: hidden;
+      background: #0f111a;
+    }
+    
+    .bg-overlay {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: linear-gradient(135deg, rgba(15, 17, 26, 0.95) 0%, rgba(15, 17, 26, 0.8) 100%),
+                  url('https://images.unsplash.com/photo-1500382017468-9049fed747ef?ixlib=rb-4.0.3&auto=format&fit=crop&w=2000&q=80') center/cover no-repeat;
+      z-index: 0;
+      animation: ambientDrift 60s linear infinite alternate;
+    }
+
+    @keyframes ambientDrift {
+      0% { background-position: 0% 0%; }
+      100% { background-position: 100% 100%; }
+    }
+
+    .content-wrapper {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+
     .welcome-container {
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      min-height: 80vh;
+      min-height: 85vh;
       text-align: center;
       padding: 20px;
     }
+
+    /* Glassmorphism Card */
     .welcome-card {
-      background: var(--card-bg, rgba(18,22,34,0.9));
-      border: 1px solid var(--border-color, rgba(79,156,249,0.18));
-      border-radius: 24px;
-      padding: 60px 40px;
-      max-width: 600px;
-      box-shadow: 0 10px 40px rgba(0,0,0,0.5);
-      backdrop-filter: blur(10px);
+      background: rgba(18, 22, 34, 0.65);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 32px;
+      padding: 60px 50px;
+      max-width: 700px;
+      box-shadow: 0 30px 60px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.1);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      transform: translateY(20px);
+      opacity: 0;
+      animation: floatUp 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
     }
+
+    @keyframes floatUp {
+      to { transform: translateY(0); opacity: 1; }
+    }
+
     .welcome-logo {
-      font-size: 64px;
-      background: linear-gradient(135deg, #4f9cf9, #8b5cf6);
+      font-size: 72px;
+      background: linear-gradient(135deg, #10b981, #3b82f6);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       margin-bottom: 24px;
-      filter: drop-shadow(0 0 20px rgba(79, 156, 249, 0.3));
+      filter: drop-shadow(0 0 30px rgba(16, 185, 129, 0.4));
+      display: inline-block;
+      animation: pulseGlow 3s ease-in-out infinite alternate;
     }
+
+    @keyframes pulseGlow {
+      from { filter: drop-shadow(0 0 20px rgba(16, 185, 129, 0.3)); }
+      to { filter: drop-shadow(0 0 40px rgba(59, 130, 246, 0.5)); }
+    }
+
     .welcome-card h1 {
       font-family: 'Outfit', sans-serif;
-      font-size: 32px;
+      font-size: 42px;
       font-weight: 800;
-      color: #e8eaf0;
-      margin-bottom: 12px;
+      color: #ffffff;
+      margin-bottom: 16px;
+      letter-spacing: -0.5px;
     }
+
+    .welcome-card h1 span {
+      background: linear-gradient(135deg, #4ade80, #60a5fa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
     .welcome-card p {
-      color: #7a85a0;
-      font-size: 15px;
-      line-height: 1.6;
+      color: #94a3b8;
+      font-size: 16px;
+      line-height: 1.7;
       margin-bottom: 30px;
+      font-weight: 300;
     }
+
+    /* Modules Preview Grid */
+    .modules-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+      margin-top: 30px;
+      text-align: left;
+    }
+
+    .module-item {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      padding: 16px;
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      transition: all 0.3s ease;
+    }
+
+    .module-item:hover {
+      background: rgba(255, 255, 255, 0.08);
+      transform: translateY(-2px);
+      border-color: rgba(255, 255, 255, 0.15);
+    }
+
+    .module-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+    }
+
+    .m-agro { background: rgba(16, 185, 129, 0.1); color: #10b981; }
+    .m-fin { background: rgba(59, 130, 246, 0.1); color: #3b82f6; }
+
+    .module-info h3 {
+      font-size: 15px;
+      color: #e2e8f0;
+      margin-bottom: 4px;
+      font-weight: 600;
+    }
+
+    .module-info p {
+      font-size: 12px;
+      color: #64748b;
+      margin-bottom: 0;
+    }
+
     .welcome-badge {
-      display: inline-block;
-      padding: 6px 16px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 20px;
       background: rgba(245, 158, 11, 0.1);
       border: 1px solid rgba(245, 158, 11, 0.25);
       color: #f59e0b;
       border-radius: 20px;
-      font-size: 12px;
+      font-size: 13px;
       font-weight: 600;
-      margin-bottom: 20px;
+      margin-bottom: 24px;
+      box-shadow: 0 4px 12px rgba(245, 158, 11, 0.15);
+    }
+
+    /* Loading state for permissions check */
+    #welcome-content {
+      opacity: 0;
+      transition: opacity 0.5s ease;
     }
   </style>
 </head>
 <body>
   <div class="dashboard-container">
+    <div class="bg-overlay"></div>
     <aside class="sidebar" id="sidebar">
       <div class="brand">
         <i class="fa-solid fa-chart-line logo-icon"></i>
@@ -75,19 +195,53 @@
     <div class="content-wrapper">
       <main class="main-content">
         <div class="welcome-container">
-          <div class="welcome-card">
+          <div class="welcome-card" id="welcome-content">
             <div class="welcome-logo">
-              <i class="fa-solid fa-chart-line"></i>
+              <i class="fa-solid fa-leaf"></i>
             </div>
-            <div class="welcome-badge">
+            
+            <div id="no-permissions-alert" class="welcome-badge" style="display: none;">
               <i class="fa-solid fa-triangle-exclamation"></i> Sem permissões ativas
             </div>
-            <h1>Painel Gerencial Diretoria Futurazy</h1>
-            <p>
-              Olá! Você foi autenticado com sucesso no sistema. <br>
-              No momento, seu usuário não possui nenhuma permissão vinculada aos painéis disponíveis.
-              Por favor, solicite a liberação de acesso ao administrador de segurança do sistema.
-            </p>
+
+            <h1>Painel Gerencial <span>Diretoria Futurazy</span></h1>
+            
+            <div id="welcome-text-authorized">
+              <p>
+                Bem-vindo ao centro de inteligência da <strong>Futurazy</strong>.<br>
+                Acompanhe em tempo real a performance da <strong>Soja</strong> e <strong>Pecuária</strong> através dos painéis analíticos disponíveis no menu lateral.
+              </p>
+              
+              <div class="modules-grid">
+                <div class="module-item">
+                  <div class="module-icon m-agro">
+                    <i class="fa-solid fa-tractor"></i>
+                  </div>
+                  <div class="module-info">
+                    <h3>Análise Trato Direto</h3>
+                    <p>Métricas operacionais e produtividade</p>
+                  </div>
+                </div>
+                <div class="module-item">
+                  <div class="module-icon m-fin">
+                    <i class="fa-solid fa-file-chart-column"></i>
+                  </div>
+                  <div class="module-info">
+                    <h3>Fechamento DRE</h3>
+                    <p>Acompanhamento financeiro e custos</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div id="welcome-text-unauthorized" style="display: none;">
+              <p>
+                Olá! Você foi autenticado com sucesso no sistema.<br><br>
+                No momento, seu usuário não possui nenhuma permissão vinculada aos painéis disponíveis.
+                Por favor, solicite a liberação de acesso ao administrador de segurança do sistema.
+              </p>
+            </div>
+            
           </div>
         </div>
       </main>
@@ -95,5 +249,33 @@
   </div>
 
   <script src="auth-check.js"></script>
+  <script>
+    // Script para mostrar o estado correto da tela de boas vindas
+    // O auth-check.js carrega as permissões. Assim que as permissões são carregadas,
+    // ele atualiza a UI. Vamos verificar a existência de permissões.
+    
+    document.addEventListener('DOMContentLoaded', () => {
+      // Espera um pouco para o auth-check.js fazer o fetch
+      setTimeout(() => {
+        const noPerms = document.getElementById('no-permissions-alert');
+        const authText = document.getElementById('welcome-text-authorized');
+        const unauthText = document.getElementById('welcome-text-unauthorized');
+        const welcomeContent = document.getElementById('welcome-content');
+        
+        // Verifica se há paineis autorizados no localStorage / session que o auth-check costuma preencher
+        // Como o auth-check.js pode ser assíncrono, checamos pelo menu.
+        const navMenu = document.getElementById('nav-menu');
+        
+        if (navMenu && navMenu.children.length === 0) {
+          // Sem itens no menu (sem permissões)
+          noPerms.style.display = 'inline-flex';
+          authText.style.display = 'none';
+          unauthText.style.display = 'block';
+        }
+        
+        welcomeContent.style.opacity = 1;
+      }, 800); // 800ms deve ser suficiente para o auth-check processar
+    });
+  </script>
 </body>
 </html>

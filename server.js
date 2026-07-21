@@ -4385,6 +4385,9 @@ async function startServer() {
     const certPath = path.join(__dirname, 'certs', 'server.crt');
     const keyPath = path.join(__dirname, 'certs', 'server.key');
 
+    // Registrar novas rotas
+    require('./routes_resultado')(app, db);
+
     if (fs.existsSync(certPath) && fs.existsSync(keyPath)) {
       const httpsOptions = {
         cert: fs.readFileSync(certPath),

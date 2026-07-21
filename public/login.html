@@ -266,6 +266,13 @@
   </div>
 
   <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const savedUser = localStorage.getItem('last_user');
+      const savedPass = localStorage.getItem('last_pass');
+      if (savedUser) document.getElementById('usuario').value = savedUser;
+      if (savedPass) document.getElementById('senha').value = savedPass;
+    });
+
     // Toggle mostrar/ocultar senha
     document.getElementById('toggle-pass').addEventListener('click', () => {
       const input = document.getElementById('senha');
@@ -318,28 +325,26 @@
           };
 
           let destino = 'index.html';
-          if (paineis.length > 0 && painelMap[paineis[0]]) {
-            destino = painelMap[paineis[0]];
+
+          // TRUQUE INFALÍVEL: Gravar no LocalStorage para contornar bloqueios do Chrome em HTTPS Local
+          localStorage.setItem('last_user', usuario);
+          localStorage.setItem('last_pass', senha);
+
+          // TRUQUE PARA O NAVEGADOR SALVAR A SENHA
+          // Para navegadores modernos
+          if (window.PasswordCredential && navigator.credentials) {
+            const cred = new PasswordCredential({
+              id: usuario,
+              password: senha,
+              name: usuario
+            });
+            navigator.credentials.store(cred).catch(e => console.log('Credential store error:', e));
           }
-
-          // TRUQUE PARA O NAVEGADOR OFERECER SALVAR A SENHA
-          // Submetemos o formulário de verdade num iframe invisível para o browser
-          // detectar a submissão, e logo em seguida fazemos o redirecionamento.
-          const iframe = document.createElement('iframe');
-          iframe.name = 'stealth_iframe';
-          iframe.style.display = 'none';
-          document.body.appendChild(iframe);
-
-          const form = document.getElementById('login-form');
-          form.target = 'stealth_iframe';
-          form.action = '/login.html'; // action inofensivo
-          form.method = 'POST';
-          form.submit();
 
           // Aguarda um pequeno instante para o browser capturar o evento e redireciona
           setTimeout(() => {
             window.location.href = '/' + destino;
-          }, 100);
+          }, 200);
         } else {
           errorText.textContent = data.error || 'Usuário ou senha incorretos.';
           errorDiv.classList.add('show');
