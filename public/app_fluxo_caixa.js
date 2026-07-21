@@ -237,8 +237,6 @@ function somarMeses(plItems, meses) {
 // Render — Cabeçalho da tabela
 // ────────────────────────────────────────────────────────────
 function renderHeader(meses) {
-  const colToggleBtn = `<button class="btn-expand-cols" id="btn-toggle-cols" title="Expandir/recolher colunas">${state.colsExpanded ? '◀' : '▶'}</button>`;
-
   // Linha 1: grupos de mês
   let row1 = `<tr>
     <th rowspan="2" style="text-align:left;min-width:230px;vertical-align:middle;background:var(--bg-card);position:sticky;left:0;z-index:20;">Mês/Ano</th>`;
@@ -246,9 +244,7 @@ function renderHeader(meses) {
   meses.forEach((m, i) => {
     const detail = state.colsExpanded ? 'colspan="5"' : 'colspan="2"';
     const sep = i === 0 ? '' : ' th-mes-separator';
-    row1 += `<th ${detail} class="th-mes-grupo${sep}">${formatMesLabel(m)} ${colToggleBtn}</th>`;
-    // só mostrar o botão uma vez
-    if (i === 0) { /* already done */ }
+    row1 += `<th ${detail} class="th-mes-grupo${sep}">${formatMesLabel(m)}</th>`;
   });
 
   // Coluna Acumulado
@@ -489,8 +485,7 @@ function renderAll() {
   if (thead) thead.innerHTML = renderHeader(meses);
   if (tbody) tbody.innerHTML = renderGrid(pivot, meses, state.saldoInicial);
 
-  // Rebind toggle de colunas
-  document.getElementById('btn-toggle-cols')?.addEventListener('click', toggleColunas);
+
 }
 
 function toggleColunas() {
@@ -655,6 +650,11 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-refresh')?.addEventListener('click', loadAll);
 
   // Expandir / Recolher todas as linhas
+  document.getElementById('chk-toggle-cols')?.addEventListener('change', e => {
+    state.colsExpanded = e.target.checked;
+    renderAll();
+  });
+
   document.getElementById('btn-expand-all')?.addEventListener('click', () => {
     document.querySelectorAll('#fc-tbody .lvl-0').forEach(row => {
       const plKey = row.dataset.pl;
